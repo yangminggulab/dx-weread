@@ -1,9 +1,10 @@
+import { DASHBOARD_HTML } from './dashboard.js';
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
-const DASHBOARD_ASSET_PATH = "/tasks/index.html";
 const CLOUD_WEREAD_MESSAGE = "云端版暂不支持直接抓取微信读书 Cookie，请先在本地版同步后再把数据上传到云端。";
 
 function json(data, status = 200) {
@@ -11,15 +12,6 @@ function json(data, status = 200) {
     status,
     headers: { "Content-Type": "application/json", ...CORS_HEADERS },
   });
-}
-
-async function serveAsset(env, request, assetPath = null) {
-  if (!env.ASSETS || typeof env.ASSETS.fetch !== "function") {
-    return null;
-  }
-
-  const targetUrl = new URL(assetPath || request.url, request.url);
-  return env.ASSETS.fetch(new Request(targetUrl.toString(), request));
 }
 
 async function loadData(kv) {
@@ -42,26 +34,27 @@ export default {
       return new Response(null, { headers: CORS_HEADERS });
     }
 
-    if ((path === "/" || path === "/index.html" || path === "/dashboard.html") && request.method === "GET") {
-      const asset = await serveAsset(env, request, DASHBOARD_ASSET_PATH);
-      if (asset) return asset;
-      return new Response("Dashboard asset not found.", { status: 500 });
+    // Serve dashboard
+    if (path === "/" || path === "/index.html" || path === "/dashboard.html") {
+      return new Response(DASHBOARD_HTML, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
     }
 
-    // GET /tasks/api/data
+    // GET /api/data
     if (path === "/api/data" && request.method === "GET") {
       const data = await loadData(env.TASKS_KV);
       return json(data);
     }
 
-    // POST /tasks/api/data
+    // POST /api/data
     if (path === "/api/data" && request.method === "POST") {
       const body = await request.json();
       await saveData(env.TASKS_KV, body);
       return json({ ok: true });
     }
 
-    // POST /tasks/api/tasks/add
+    // POST /api/tasks/add
     if (path === "/api/tasks/add" && request.method === "POST") {
       const body = await request.json();
       const data = await loadData(env.TASKS_KV);
@@ -86,7 +79,7 @@ export default {
       return json({ ok: true, task });
     }
 
-    // POST /tasks/api/tasks/update
+    // POST /api/tasks/update
     if (path === "/api/tasks/update" && request.method === "POST") {
       const body = await request.json();
       const data = await loadData(env.TASKS_KV);
@@ -97,7 +90,7 @@ export default {
       return json({ ok: true, task: data.tasks[idx] });
     }
 
-    // POST /tasks/api/tasks/delete
+    // POST /api/tasks/delete
     if (path === "/api/tasks/delete" && request.method === "POST") {
       const body = await request.json();
       const data = await loadData(env.TASKS_KV);
@@ -107,28 +100,14 @@ export default {
     }
 
     if (path === "/api/weread/status" && request.method === "GET") {
-      return json({
-        syncAvailable: false,
-        cloudMode: true,
-        message: CLOUD_WEREAD_MESSAGE,
-      });
+      return json({ syncAvailable: false, cloudMode: true, message: CLOUD_WEREAD_MESSAGE });
     }
 
     if (
       (path === "/api/weread/sync" || path === "/api/weread/extension-sync" || path === "/api/weread/import-cookie")
       && request.method === "POST"
     ) {
-      return json({
-        error: CLOUD_WEREAD_MESSAGE,
-        cloudMode: true,
-      }, 501);
-    }
-
-    if (request.method === "GET" || request.method === "HEAD") {
-      const asset = await serveAsset(env, request);
-      if (asset && asset.status !== 404) {
-        return asset;
-      }
+      return json({ error: CLOUD_WEREAD_MESSAGE, cloudMode: true }, 501);
     }
 
     return json({ error: "not found" }, 404);

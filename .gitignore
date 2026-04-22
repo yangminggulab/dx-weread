@@ -13,6 +13,10 @@ data.json
 .weread_data.json
 .weread_notes.json
 
+# Generated build files
+src/dashboard.js
+public/
+
 # Chrome extension local package/private key
 chrome-extension/weread-sync.crx
 chrome-extension/weread-sync.pem
