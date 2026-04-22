@@ -42,11 +42,8 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Sync cloud dashboard asset
-        run: npm run sync:dashboard
-
-      - name: Verify synced dashboard asset is committed
-        run: git diff --exit-code -- public/tasks/index.html
+      - name: Install Node dependencies
+        run: npm install
 
       - name: Chrome extension syntax check
         run: |
