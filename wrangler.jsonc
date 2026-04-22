@@ -1,0 +1,17 @@
+{
+  "name": "yangminggu-tasks",
+  "main": "src/index.js",
+  "compatibility_date": "2024-01-01",
+  "kv_namespaces": [
+    {
+      "binding": "TASKS_KV",
+      "id": "082d72b578e3497ca27e6a37b8e65baf"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "yangminggu.com/tasks*",
+      "zone_name": "yangminggu.com"
+    }
+  ]
+}
