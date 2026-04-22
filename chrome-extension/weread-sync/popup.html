@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WeRead Sync Helper</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f5f0;
+      --card: #ffffff;
+      --border: #e0d9cc;
+      --accent: #2d6a4f;
+      --accent-dark: #1e4d38;
+      --text: #1c1c1c;
+      --muted: #777;
+      --ok-bg: #f0f4f1;
+      --ok-text: #2d6a4f;
+      --err-bg: #fef2f2;
+      --err-text: #dc4949;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      width: 340px;
+      background: linear-gradient(180deg, #faf8f3 0%, var(--bg) 100%);
+      color: var(--text);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+    }
+    .wrap { padding: 16px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 8px 24px rgba(31, 31, 31, 0.06);
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .meta {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: #fdf6ec;
+      border: 1px solid #f0d9a8;
+      border-radius: 12px;
+      font-size: 12px;
+      color: #7a5c1a;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: transform 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      transform: none;
+    }
+    .primary {
+      flex: 1;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+    }
+    .primary:hover { background: var(--accent-dark); }
+    .ghost {
+      background: #fff;
+      color: #555;
+      border: 1px solid var(--border);
+    }
+    .status {
+      margin-top: 12px;
+      min-height: 42px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
+    .status.idle {
+      background: #fff;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+    }
+    .status.ok {
+      background: var(--ok-bg);
+      color: var(--ok-text);
+    }
+    .status.err {
+      background: var(--err-bg);
+      color: var(--err-text);
+    }
+    .footer {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #999;
+    }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      background: #f6f4ef;
+      padding: 1px 4px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>微信读书同步助手</h1>
+      <p>已支持后台自动同步。打开微信读书页面后，扩展会自动抓取登录态并推送到本地任务管理 App。</p>
+
+      <div class="meta">
+        需要本地服务先运行：
+        <span class="mono">http://127.0.0.1:8080</span><br />
+        后台会在打开微信读书时自动同步，并每 30 分钟重试一次。
+      </div>
+
+      <div class="actions">
+        <button id="syncBtn" class="primary">立即同步</button>
+        <button id="openBtn" class="ghost">打开应用</button>
+      </div>
+
+      <div id="status" class="status idle">准备就绪。请先在当前 Chrome 登录微信读书。</div>
+      <div class="footer">
+        <span id="version">扩展版本加载中…</span><br />
+        自动同步成功后会尝试刷新已打开的本地应用页面。
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

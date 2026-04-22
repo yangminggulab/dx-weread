@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "WeRead Sync Helper",
+  "version": "0.4.0",
+  "description": "把微信读书当前登录态同步到本地任务管理 App。",
+  "action": {
+    "default_title": "WeRead Sync Helper",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "alarms",
+    "cookies",
+    "tabs",
+    "webRequest",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://weread.qq.com/*",
+    "https://*.weread.qq.com/*",
+    "https://qq.com/*",
+    "https://*.qq.com/*",
+    "http://127.0.0.1:8080/*",
+    "http://localhost:8080/*"
+  ]
+}

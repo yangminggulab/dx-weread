@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Project Library</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            paper: '#f7f5f0',
+            sage: { 50:'#f0f4f1', 100:'#dce8df', 600:'#3a7d52', 700:'#2d6a4f', 800:'#1e4d38' },
+            warm: { 100:'#f2ede4', 200:'#e8e0d4', 300:'#d8cfc0' }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #f7f5f0; color: #1c1c1c; margin: 0; }
+    .serif { font-family: 'Noto Serif SC', Georgia, 'Songti SC', serif; }
+    .task-row:hover { background: #faf9f6; }
+    .kcard { transition: transform .15s ease, box-shadow .15s ease; }
+    .kcard:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.09); }
+    input:focus, select:focus, textarea:focus { outline: 2px solid #2d6a4f !important; outline-offset: -1px; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-thumb { background: #d4cfc4; border-radius: 4px; }
+    @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
+    @keyframes slideUp { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+    @keyframes slideIn { from { opacity:0; transform:translateX(16px) } to { opacity:1; transform:translateX(0) } }
+    .anim-fade   { animation: fadeIn  .18s ease }
+    .anim-up     { animation: slideUp .18s ease }
+    .anim-right  { animation: slideIn .2s  ease }
+    .line-clamp-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useMemo, useRef, useEffect, useCallback } = React;
+
+/* ═══════════════════════════════════════════════════════════
+   MOCK DATA
+═══════════════════════════════════════════════════════════ */
+
+
+const INIT_TASKS = [
+  { id:1, title:'阅读《深度工作》第三章',        taskType:'weekly',   status:'in_progress',  priority:'high',   category:'study',    deadline:'2024-04-25', tags:['阅读','效率'],   projectId:1, notes:'重点关注时间管理章节', currentPage:87,  totalPage:320, createdAt:'2024-04-15' },
+  { id:2, title:'整理专利申请文档 · 图像识别算法', taskType:'weekly',   status:'in_progress',  priority:'high',   category:'research', deadline:'2024-04-23', tags:['专利','论文'],   projectId:2, notes:'参考上次格式模板',     currentPage:null,totalPage:null,createdAt:'2024-04-16' },
+  { id:3, title:'剪辑本周学习总结视频',           taskType:'weekly',   status:'in_progress',  priority:'medium', category:'life',     deadline:'2024-04-27', tags:['视频','输出'],   projectId:3, notes:'素材已在文件夹',       currentPage:null,totalPage:null,createdAt:'2024-04-14' },
+  { id:4, title:'整理机器学习笔记 · 第二章',      taskType:'weekly',   status:'completed',    priority:'medium', category:'note',     deadline:'2024-04-20', tags:['笔记','ML'],     projectId:1, notes:'已完成',               currentPage:null,totalPage:null,createdAt:'2024-04-10' },
+  { id:5, title:'调研 LLM 微调技术路线',          taskType:'weekly',   status:'in_progress',  priority:'high',   category:'research', deadline:'2024-04-30', tags:['LLM','研究'],    projectId:2, notes:'重点看 LoRA 和 QLoRA', currentPage:null,totalPage:null,createdAt:'2024-04-12' },
+  { id:6, title:'读完《置身事内》',               taskType:'longterm', status:'in_progress',  priority:'low',    category:'study',    deadline:'2024-05-05', tags:['阅读','经济'],   projectId:null,notes:'已读到第4章',           currentPage:112, totalPage:380, createdAt:'2024-04-08' },
+  { id:7, title:'完成机器学习系统课程',           taskType:'longterm', status:'in_progress',  priority:'high',   category:'study',    deadline:'2024-12-31', tags:['ML','学习'],     projectId:1, notes:'已完成前5章',           currentPage:5,   totalPage:18,  createdAt:'2024-04-01' },
+  { id:8, title:'写博客：如何用 Notion 管理学习', taskType:'weekly',   status:'in_progress',  priority:'medium', category:'note',     deadline:'2024-05-10', tags:['写作','Notion'], projectId:3, notes:'提纲已写好',            currentPage:null,totalPage:null,createdAt:'2024-04-17' },
+  { id:9, title:'出版个人学习方法论电子书',        taskType:'longterm', status:'in_progress',  priority:'medium', category:'research', deadline:'2025-06-01', tags:['写作','输出'],   projectId:null,notes:'先从博客积累素材',       currentPage:0,   totalPage:50,  createdAt:'2024-04-17' },
+  { id:10,title:'更新简历 · 添加最新项目经验',    taskType:'weekly',   status:'in_progress',  priority:'low',    category:'life',     deadline:'2024-05-15', tags:['求职','简历'],   projectId:null,notes:'',                     currentPage:null,totalPage:null,createdAt:'2024-04-17' },
+  { id:11,title:'晨间阅读 30 分钟',               taskType:'daily',    status:'in_progress',  priority:'medium', category:'study',    deadline:'',           tags:[],               projectId:1,   notes:'',                     currentPage:null,totalPage:null,createdAt:'2024-04-19' },
+  { id:12,title:'复习昨日笔记',                   taskType:'daily',    status:'in_progress',  priority:'medium', category:'note',     deadline:'',           tags:[],               projectId:null,notes:'',                     currentPage:null,totalPage:null,createdAt:'2024-04-19' },
+  { id:13,title:'锻炼 20 分钟',                   taskType:'daily',    status:'in_progress',  priority:'low',    category:'life',     deadline:'',           tags:[],               projectId:null,notes:'',                     currentPage:null,totalPage:null,createdAt:'2024-04-19' },
+];
+
+const INIT_BOOKS = [
+  { id:1, title:'深度工作',       author:'卡尔·纽波特',   status:'reading',  currentPage:87,  totalPage:320, accent:'#2d6a4f', startDate:'2024-04-10', notes:'第三章讲时间管理，很有启发' },
+  { id:2, title:'置身事内',       author:'兰小欢',         status:'reading',  currentPage:112, totalPage:380, accent:'#4a4a6a', startDate:'2024-04-08', notes:'中国经济视角，读起来很流畅' },
+  { id:3, title:'思考，快与慢',   author:'丹尼尔·卡尼曼', status:'want',     currentPage:0,   totalPage:480, accent:'#6a4a2a', startDate:'',           notes:'' },
+  { id:4, title:'人类简史',       author:'尤瓦尔·赫拉利', status:'finished', currentPage:443, totalPage:443, accent:'#3a6a5a', startDate:'2024-03-01', notes:'视角宏大，强烈推荐' },
+  { id:5, title:'算法导论',       author:'科尔曼等',       status:'reading',  currentPage:203, totalPage:1292,accent:'#5a3a6a', startDate:'2024-02-15', notes:'慢慢啃，每天两页' },
+];
+
+const INIT_NOTES = [
+  { id:1, title:'LLM 微调技术总结',          tags:['LLM','技术'],    updatedAt:'2024-04-18', projectId:2, summary:'整理了 LoRA、QLoRA、Adapter 三种微调方式的对比，重点分析显存占用和效果差异。LoRA 在低资源场景下表现最佳...' },
+  { id:2, title:'《深度工作》读书笔记',       tags:['阅读','效率'],   updatedAt:'2024-04-17', projectId:1, summary:'深度工作 = 在无干扰状态下专注于认知要求高的任务。关键是建立深度工作仪式，固定时间、地点、规则，形成心流触发器...' },
+  { id:3, title:'ML 公式推导 · 梯度下降',    tags:['ML','数学'],     updatedAt:'2024-04-16', projectId:1, summary:'SGD vs Adam vs AdaGrad 的推导过程，以及在不同场景下的选择建议。Adam 在大多数情况下是最稳健的选择...' },
+  { id:4, title:'专利撰写规范备忘',           tags:['专利','文档'],   updatedAt:'2024-04-15', projectId:2, summary:'权利要求书格式要求、说明书附图规范、摘要字数限制（300字以内）。独立权利要求应当清楚、简要地限定要求保护的范围...' },
+  { id:5, title:'博客选题库',                tags:['写作','输出'],   updatedAt:'2024-04-14', projectId:3, summary:'已收集 20+ 选题，按技术/生活/思考分类。优先写有实际案例的主题，避免纯理论文章，读者转化率更高...' },
+];
+
+const INIT_UPDATES = [
+  { id:1, type:'complete', text:'完成「整理机器学习笔记 · 第二章」',         time:'2小时前' },
+  { id:2, type:'note',     text:'更新笔记「LLM 微调技术总结」',               time:'3小时前' },
+  { id:3, type:'add',      text:'新增任务「写博客：如何用 Notion 管理学习」', time:'昨天'   },
+  { id:4, type:'project',  text:'项目「机器学习系统学习」进度更新至 45%',     time:'昨天'   },
+  { id:5, type:'start',    text:'开始处理「调研 LLM 微调技术路线」',          time:'2天前'  },
+];
+
+/* ═══════════════════════════════════════════════════════════
+   CONSTANTS & HELPERS
+═══════════════════════════════════════════════════════════ */
+
+
+const BOOK_ACCENTS = ['#2d6a4f', '#4a4a6a', '#6a4a2a', '#3a6a5a', '#5a3a6a'];
+const pickBookAccent = (seed='') => {
+  const score = Array.from(seed).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  return BOOK_ACCENTS[score % BOOK_ACCENTS.length];
+};
+const extractNotePreview = (summary='') =>
+  summary
+    .split('\n')
+    .map(line => line.replace(/^[📌💭]\s*/, '').trim())
+    .find(Boolean) || '已同步到笔记与文档';
+const isWereadBook = book => Boolean(book && (book.source === 'weread' || book._bookId));
+const isWereadNote = note => Boolean(note && (note.source === 'weread' || note.tags?.includes('微信读书')));
+const nextLocalId = (ref, usedIds) => {
+  while (usedIds.has(ref.current)) ref.current += 1;
+  const id = ref.current;
+  usedIds.add(id);
+  ref.current += 1;
+  return id;
+};
+const pickDisplayTime = (item, primaryKey, fallbackKey='syncedAt') => {
+  if (item?.[primaryKey]) return item[primaryKey];
+  if (item?.[fallbackKey]) return `同步于 ${String(item[fallbackKey]).replace('T', ' ').slice(0,16)}`;
+  return '时间未知';
+};
+const getWereadProgressPercent = (book) => {
+  const pct = Number(book?.progressPercent);
+  if (Number.isFinite(pct)) return Math.max(0, Math.min(100, Math.round(pct)));
+  const current = Number(book?.chapterIndex || book?.currentPage || 0);
+  const total = Number(book?.chapterCount || book?.totalPage || 0);
+  if (total > 0) return Math.max(0, Math.min(100, Math.round(current / total * 100)));
+  return 0;
+};
+const getWereadPageText = (book) => {
+  const current = Number(book?.estimatedCurrentPage || 0);
+  const total = Number(book?.estimatedTotalPage || 0);
+  if (current > 0 && total > 0) return `约 ${current} / ${total} 页`;
+  if (total > 0) return `约 ${total} 页`;
+  const chapter = Number(book?.chapterIndex || book?.currentPage || 0);
+  if (chapter > 0) return `阅读位置 ${chapter}`;
+  return '';
+};
+const getWereadProgressText = (book) => {
+  const pct = getWereadProgressPercent(book);
+  return pct > 0 ? `阅读进度 ${pct}%` : '';
+};
+const getWereadShelfMetaText = (book) => {
+  const pageText = getWereadPageText(book);
+  const progressText = getWereadProgressText(book);
+  if (pageText && progressText) return `${pageText} · ${progressText}`;
+  return pageText || progressText || '已同步阅读进度';
+};
+const getFullNoteText = (summary='') =>
+  String(summary || '')
+    .split('\n')
+    .map(line => line.trimEnd())
+    .filter(Boolean)
+    .join('\n\n') || '暂无同步内容';
+
+
+const STATUS = {
+  in_progress:  { label:'进行中', pill:'bg-[#fff7ed] text-[#b45309] border border-[#fed7aa]',  dot:'#d97706' },
+  completed:    { label:'已完成', pill:'bg-[#f0f4f1] text-[#3a7d52]',                          dot:'#3a7d52' },
+};
+const PRIORITY = {
+  high:   { label:'高', cls:'bg-[#fef2f2] text-[#dc4949]' },
+  medium: { label:'中', cls:'bg-[#fffbeb] text-[#b45309]' },
+  low:    { label:'低', cls:'bg-[#f2f2ef] text-[#999]'    },
+};
+const CATEGORY = {
+  study:    { label:'学习', cls:'bg-[#eff5fb] text-[#2c6fad]' },
+  research: { label:'研究', cls:'bg-[#f5f0fb] text-[#6b3fa0]' },
+  note:     { label:'笔记', cls:'bg-[#fdf6ec] text-[#8a5a1a]' },
+  life:     { label:'生活', cls:'bg-[#f0f8f4] text-[#2d7a4f]' },
+};
+
+const isNear = d => { if (!d) return false; const n = (new Date(d)-new Date())/(864e5); return n>=0&&n<=3; };
+const isOver = (d,s) => s!=='completed' && d && new Date(d)<new Date();
+
+const Pill = ({text,cls,extra=''}) => (
+  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls} ${extra}`}>{text}</span>
+);
+
+const SectionHead = ({title, sub, right}) => (
+  <div className="flex items-end justify-between mb-5">
+    <div>
+      <h2 className="serif text-[17px] font-semibold tracking-wide text-[#1c1c1c]">{title}</h2>
+      {sub && <p className="text-xs text-[#aaa] mt-0.5">{sub}</p>}
+    </div>
+    {right}
+  </div>
+);
+
+/* ═══════════════════════════════════════════════════════════
+   ADD / EDIT TASK MODAL
+═══════════════════════════════════════════════════════════ */
+
+const EMPTY = { title:'', taskType:'daily', status:'in_progress', priority:'medium', category:'study', deadline:'', tags:[], notes:'', projectId:null, currentPage:null, totalPage:null };
+
+function TaskModal({ task, books, onSave, onClose }) {
+  const [f, setF] = useState(task ? { ...task } : EMPTY);
+  const set = (k,v) => setF(p=>({...p,[k]:v}));
+
+  const inp  = "w-full px-3 py-2 bg-white border border-[#e0d9cc] rounded-lg text-sm text-[#1c1c1c]";
+  const lbl  = "block text-xs font-medium text-[#666] mb-1.5";
+  const btnSel = (a) => `px-2 py-1 rounded-md text-xs border transition-colors cursor-pointer ${a ? 'bg-[#2d6a4f] text-white border-[#2d6a4f]' : 'bg-white text-[#666] border-[#e0d9cc] hover:border-[#aaa]'}`;
+
+  return (
+    <div className="anim-fade fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="anim-up bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e4dc]">
+          <h3 className="serif font-semibold text-base">{task ? '编辑任务' : '新增任务'}</h3>
+          <button onClick={onClose} className="text-[#bbb] hover:text-[#666] text-2xl leading-none font-light">×</button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className={lbl}>任务名称 *</label>
+            <input className={inp} placeholder="这件事叫什么..." value={f.title} onChange={e=>set('title',e.target.value)} />
+          </div>
+
+          <div>
+            <label className={lbl}>类型</label>
+            <div className="flex gap-1.5">
+              {[['daily','☀️ 每日任务'],['weekly','📅 本周任务'],['longterm','🎯 长期计划']].map(([v,l])=>(
+                <button key={v} className={btnSel(f.taskType===v)} onClick={()=>set('taskType',v)}>{l}</button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className={lbl}>状态</label>
+            <div className="flex gap-1.5">
+              {Object.entries(STATUS).map(([k,v]) => (
+                <button key={k} className={btnSel(f.status===k)} onClick={()=>set('status',k)}>{v.label}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={lbl}>优先级</label>
+              <div className="flex gap-1.5">
+                {Object.entries(PRIORITY).map(([k,v]) => (
+                  <button key={k} className={btnSel(f.priority===k)} onClick={()=>set('priority',k)}>{v.label}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className={lbl}>分类</label>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(CATEGORY).map(([k,v]) => (
+                  <button key={k} className={btnSel(f.category===k)} onClick={()=>set('category',k)}>{v.label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#e8e4dc]">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[#888] hover:text-[#444] rounded-lg hover:bg-[#f7f5f0] transition-colors">取消</button>
+          <button onClick={()=>{ if (!f.title.trim()) return; onSave(f); }}
+            className="px-5 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg transition-colors font-medium">
+            {task ? '保存修改' : '创建任务'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TASK DETAIL PANEL
+═══════════════════════════════════════════════════════════ */
+
+function TaskDetail({ task, books, onEdit, onDelete, onClose }) {
+  const proj = books.find(b=>b.id===task.projectId);
+  const near = isNear(task.deadline);
+  const over = isOver(task.deadline, task.status);
+  return (
+    <div className="anim-fade fixed inset-0 bg-black/25 z-50 flex justify-end" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="anim-right bg-white h-full w-80 shadow-2xl flex flex-col border-l border-[#e8e4dc]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#e8e4dc]">
+          <Pill text={STATUS[task.status].label} cls={STATUS[task.status].pill} />
+          <div className="flex items-center gap-3">
+            <button onClick={onEdit}   className="text-xs text-[#2d6a4f] hover:underline">编辑</button>
+            <button onClick={onDelete} className="text-xs text-red-400 hover:underline">删除</button>
+            <button onClick={onClose}  className="text-[#bbb] hover:text-[#666] text-2xl font-light leading-none ml-1">×</button>
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          <h3 className="serif text-base font-semibold text-[#1c1c1c] leading-snug mb-5">{task.title}</h3>
+          <div className="space-y-3 text-sm">
+            <DR label="优先级"><Pill text={PRIORITY[task.priority].label} cls={PRIORITY[task.priority].cls} /></DR>
+            <DR label="分类"><Pill text={CATEGORY[task.category].label} cls={CATEGORY[task.category].cls} /></DR>
+            {task.deadline && (
+              <DR label="截止日期">
+                <span className={`text-sm ${over?'text-red-500 font-medium':near?'text-amber-600 font-medium':'text-[#555]'}`}>
+                  {task.deadline}{over?' · 已逾期':near?' · 即将到期':''}
+                </span>
+              </DR>
+            )}
+            {proj && <DR label="关联书目"><span className="text-sm text-[#2d6a4f]">{proj.title}</span></DR>}
+            {task.tags.length>0 && (
+              <DR label="标签">
+                <div className="flex flex-wrap gap-1">
+                  {task.tags.map(t=><span key={t} className="text-xs bg-[#f2f2ef] text-[#777] px-2 py-0.5 rounded-full">{t}</span>)}
+                </div>
+              </DR>
+            )}
+          </div>
+          {task.notes && (
+            <div className="mt-5 pt-5 border-t border-[#f0ece4]">
+              <div className="text-xs text-[#bbb] uppercase tracking-wider mb-2">备注</div>
+              <p className="text-sm text-[#555] leading-relaxed">{task.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DR({ label, children }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="text-xs text-[#bbb] w-14 shrink-0 pt-0.5">{label}</span>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROJECT MODAL
+═══════════════════════════════════════════════════════════ */
+
+const ACCENTS = ['#2d6a4f','#4a4a6a','#6a4a2a','#3a6a5a','#6a3a3a','#3a4a6a'];
+const EMPTY_BOOK = { title:'', currentPage:0, totalPage:0 };
+
+function BookModal({ book, onSave, onClose }) {
+  const [f, setF] = useState(book ? { title:book.title, currentPage:book.currentPage, totalPage:book.totalPage } : EMPTY_BOOK);
+  const set = (k,v) => setF(p=>({...p,[k]:v}));
+  const inp = "w-full px-3 py-2 bg-white border border-[#e0d9cc] rounded-lg text-sm";
+  const lbl = "block text-xs font-medium text-[#666] mb-1.5";
+  const pct = f.totalPage > 0 ? Math.round(f.currentPage / f.totalPage * 100) : 0;
+
+  return (
+    <div className="anim-fade fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="anim-up bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-y-auto max-h-[90vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e4dc]">
+          <h3 className="serif font-semibold text-base">{book?'编辑书目':'加入书架'}</h3>
+          <button onClick={onClose} className="text-[#bbb] hover:text-[#666] text-2xl font-light leading-none">×</button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className={lbl}>书名 *</label>
+            <input className={inp} placeholder="书名..." value={f.title} onChange={e=>set('title',e.target.value)} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={lbl}>当前页数</label>
+              <input type="number" min={0} className={inp} placeholder="0" value={f.currentPage} onChange={e=>set('currentPage',+e.target.value)} />
+            </div>
+            <div>
+              <label className={lbl}>总页数</label>
+              <input type="number" min={1} className={inp} placeholder="300" value={f.totalPage} onChange={e=>set('totalPage',+e.target.value)} />
+            </div>
+          </div>
+          {f.totalPage > 0 && (
+            <div>
+              <div className="flex justify-between text-xs text-[#bbb] mb-1.5">
+                <span>阅读进度</span><span>{pct}%</span>
+              </div>
+              <div className="h-1.5 bg-[#f0ece4] rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-[#2d6a4f] transition-all" style={{width:`${pct}%`}} />
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#e8e4dc]">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[#888] hover:text-[#444] rounded-lg hover:bg-[#f7f5f0] transition-colors">取消</button>
+          <button onClick={()=>{ if(!f.title.trim()) return; onSave(f); }}
+            className="px-5 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg transition-colors font-medium">
+            {book?'保存修改':'加入书架'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   NOTE MODAL
+═══════════════════════════════════════════════════════════ */
+
+const EMPTY_NOTE = { title:'', tags:'', projectId:'', summary:'' };
+
+function NoteModal({ note, books, onSave, onClose }) {
+  const [f, setF] = useState(note ? { ...note, tags: note.tags.join(', '), projectId: note.projectId||'' } : EMPTY_NOTE);
+  const set = (k,v) => setF(p=>({...p,[k]:v}));
+  const inp = "w-full px-3 py-2 bg-white border border-[#e0d9cc] rounded-lg text-sm";
+  const lbl = "block text-xs font-medium text-[#666] mb-1.5";
+
+  return (
+    <div className="anim-fade fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="anim-up bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-y-auto max-h-[90vh]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e4dc]">
+          <h3 className="serif font-semibold text-base">{note?'编辑笔记':'新增笔记'}</h3>
+          <button onClick={onClose} className="text-[#bbb] hover:text-[#666] text-2xl font-light leading-none">×</button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className={lbl}>标题 *</label>
+            <input className={inp} placeholder="笔记标题..." value={f.title} onChange={e=>set('title',e.target.value)} />
+          </div>
+          <div>
+            <label className={lbl}>关联书目</label>
+            <select className={inp+" cursor-pointer"} value={f.projectId} onChange={e=>set('projectId',e.target.value ? +e.target.value : '')}>
+              <option value="">不关联</option>
+              {books.map(b=><option key={b.id} value={b.id}>{b.title}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={lbl}>标签（逗号分隔）</label>
+            <input className={inp} placeholder="技术, 阅读, ..." value={f.tags} onChange={e=>set('tags',e.target.value)} />
+          </div>
+          <div>
+            <label className={lbl}>内容</label>
+            <textarea className={inp+" resize-none"} rows={6} placeholder="写下你的笔记..." value={f.summary} onChange={e=>set('summary',e.target.value)} />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#e8e4dc]">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[#888] hover:text-[#444] rounded-lg hover:bg-[#f7f5f0] transition-colors">取消</button>
+          <button onClick={()=>{ if(!f.title.trim()) return; onSave({...f, tags: f.tags.split(',').map(t=>t.trim()).filter(Boolean), projectId: f.projectId||null}); }}
+            className="px-5 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg transition-colors font-medium">
+            {note?'保存修改':'创建笔记'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   HEADER
+═══════════════════════════════════════════════════════════ */
+
+function WeReadModal({ onSync, onClose }) {
+  const [cookie, setCookie] = useState(() => localStorage.getItem('wr_cookie') || '');
+  const [hasSavedCookie, setHasSavedCookie] = useState(false);
+  const [savedCookiePath, setSavedCookiePath] = useState('.weread_cookie.json');
+  const [savedDataPath, setSavedDataPath] = useState('.weread_data.json');
+  const [savedNotesPath, setSavedNotesPath] = useState('.weread_notes.json');
+  const [extensionDir, setExtensionDir] = useState('chrome-extension/weread-sync');
+  const [status, setStatus] = useState('idle'); // idle | loading | ok | err
+  const [msg, setMsg] = useState('');
+
+  const runSync = async (payload) => {
+    const res = await fetch('/api/weread/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload || {}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '同步失败');
+    if (data.savedCookie) setHasSavedCookie(true);
+    if (data.cookiePath) setSavedCookiePath(data.cookiePath);
+    if (data.dataPath) setSavedDataPath(data.dataPath);
+    if (data.notesPath) setSavedNotesPath(data.notesPath);
+    onSync(data);
+    setStatus('ok');
+    setMsg(
+      data.usedSavedCookie
+        ? `同步成功：${data.books.length} 本书，${data.notes.length} 份笔记（已使用 ${data.cookiePath || savedCookiePath}，书架写入 ${data.dataPath || savedDataPath}，笔记写入 ${data.notesPath || savedNotesPath}）`
+        : `同步成功：${data.books.length} 本书，${data.notes.length} 份笔记（Cookie 保存到 ${data.cookiePath || savedCookiePath}，书架写入 ${data.dataPath || savedDataPath}，笔记写入 ${data.notesPath || savedNotesPath}）`
+    );
+  };
+
+  useEffect(() => {
+    fetch('/api/weread/status')
+      .then(r => r.json())
+      .then(data => {
+        setHasSavedCookie(Boolean(data.hasCookie));
+        if (data.cookiePath) setSavedCookiePath(data.cookiePath);
+        if (data.dataPath) setSavedDataPath(data.dataPath);
+        if (data.notesPath) setSavedNotesPath(data.notesPath);
+        if (data.extensionDir) setExtensionDir(data.extensionDir);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSync = async () => {
+    const ck = cookie.trim();
+    if (!ck && !hasSavedCookie) return;
+    if (ck) localStorage.setItem('wr_cookie', ck);
+    setStatus('loading');
+    setMsg('');
+    try {
+      if (ck) {
+        localStorage.removeItem('wr_cookie');
+        setCookie('');
+      }
+      await runSync(ck ? { cookie: ck } : {});
+    } catch (e) {
+      setStatus('err');
+      setMsg(e.message);
+    }
+  };
+
+  return (
+    <div className="anim-fade fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="anim-up bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e4dc]">
+          <div>
+            <h3 className="serif font-semibold text-base">同步微信读书</h3>
+            <p className="text-xs text-[#aaa] mt-0.5">需要微信读书网页版 Cookie</p>
+          </div>
+          <button onClick={onClose} className="text-[#bbb] hover:text-[#666] text-2xl font-light leading-none">×</button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <div className="bg-[#fdf6ec] border border-[#f0d9a8] rounded-xl p-4 text-xs text-[#7a5c1a] space-y-1.5 leading-relaxed">
+            <div className="font-medium mb-2">如何获取 Cookie：</div>
+            <div>1. 浏览器打开 <span className="font-mono bg-white px-1 rounded">weread.qq.com</span> 并登录</div>
+            <div>2. 按 F12 → Network 面板 → 刷新页面</div>
+            <div>3. 点任意请求 → Headers → 复制 <span className="font-mono bg-white px-1 rounded">Cookie</span> 的值</div>
+            <div>4. 粘贴到下方，Cookie 有效期约 1-2 周</div>
+          </div>
+          <div className="bg-white border border-[#e0d9cc] rounded-xl p-4 text-xs text-[#666] space-y-2.5">
+            <div className="font-medium text-[#444]">推荐自动化方案</div>
+            <div>已经为你准备了 Chrome 扩展项目，不走系统钥匙串读取。</div>
+            <div>扩展目录：<span className="font-mono bg-[#f7f5f0] px-1 rounded">{extensionDir}</span></div>
+            <div>加载后，在微信读书页面点扩展图标，就能把当前登录态直接同步到本地应用。</div>
+          </div>
+          {hasSavedCookie && (
+            <div className="bg-[#f0f4f1] border border-[#dce8df] rounded-xl p-4 text-xs text-[#2d6a4f] leading-relaxed">
+              已检测到项目本地 Cookie：
+              <span className="font-mono bg-white px-1 rounded ml-1">{savedCookiePath}</span>
+              。可以直接点同步；重新粘贴新 Cookie 会覆盖它。
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-[#666] mb-1.5">Cookie{hasSavedCookie ? '（可留空）' : ''}</label>
+            <textarea
+              className="w-full px-3 py-2 bg-white border border-[#e0d9cc] rounded-lg text-xs font-mono resize-none focus:outline-none focus:border-[#2d6a4f]"
+              rows={4}
+              placeholder={hasSavedCookie ? '留空则使用本地已保存 Cookie；也可以粘贴新的来覆盖' : 'wr_skey=...; wr_vid=...'}
+              value={cookie}
+              onChange={e=>setCookie(e.target.value)} />
+            <div className="text-[11px] text-[#aaa] mt-1.5">
+              Cookie 会保存到 <span className="font-mono">{savedCookiePath}</span>；微信读书同步内容会单独保存到 <span className="font-mono">{savedDataPath}</span>。
+            </div>
+          </div>
+          {msg && (
+            <div className={`text-xs px-3 py-2 rounded-lg ${status==='ok'?'bg-[#f0f4f1] text-[#2d6a4f]':'bg-[#fef2f2] text-[#dc4949]'}`}>{msg}</div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#e8e4dc]">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[#888] hover:text-[#444] rounded-lg hover:bg-[#f7f5f0] transition-colors">取消</button>
+          <button onClick={handleSync} disabled={status==='loading' || (!cookie.trim() && !hasSavedCookie)}
+            className="px-5 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] disabled:opacity-50 text-white rounded-lg transition-colors font-medium flex items-center gap-2">
+            {status==='loading' && <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
+            {status==='loading' ? '同步中...' : hasSavedCookie && !cookie.trim() ? '使用已保存 Cookie 同步' : '一键同步'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Header({ onAdd, onWeRead }) {
+  return (
+    <header className="sticky top-0 z-40 bg-[#f7f5f0]/96 backdrop-blur-sm border-b border-[#e8e4dc]">
+      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-[#2d6a4f] flex items-center justify-center">
+            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+          </div>
+          <span className="serif font-semibold text-[15px] tracking-wide text-[#1c1c1c]">My Project Library</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button onClick={onWeRead} className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#f0f4f1] border border-[#e0d9cc] hover:border-[#2d6a4f] text-[#555] rounded-lg text-[13px] transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0f01-15.357-2m15.357 2H15"/></svg>
+            微信读书
+          </button>
+          <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg text-[13px] font-medium transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
+            新增任务
+          </button>
+          <div className="w-7 h-7 rounded-full bg-[#2d6a4f] flex items-center justify-center text-white text-xs font-semibold ml-1">我</div>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TODAY FOCUS
+═══════════════════════════════════════════════════════════ */
+
+function TodayFocus({ tasks, onClick }) {
+  const focus = useMemo(() =>
+    tasks.filter(t => t.taskType === 'daily' && t.status !== 'completed').slice(0, 3)
+  , [tasks]);
+
+  const dateStr = new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'});
+
+  return (
+    <section>
+      <SectionHead
+        title="今日聚焦"
+        sub={`${dateStr} · ${focus.length} 项待处理`}
+      />
+      {focus.length===0 ? (
+        <div className="bg-white rounded-2xl border border-[#e8e4dc] p-10 text-center text-[#ccc] text-sm">今日无待处理任务，好好休息 ☕</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {focus.map((task,i)=>{
+            const near=isNear(task.deadline), over=isOver(task.deadline,task.status);
+            return (
+              <div key={task.id} onClick={()=>onClick(task)}
+                className="bg-white rounded-xl border border-[#e8e4dc] p-5 cursor-pointer hover:shadow-md hover:border-[#c8c0b4] transition-all group">
+                <div className="flex items-start justify-between mb-3">
+                  <span className="serif text-[11px] text-[#ccc] font-medium">#{i+1}</span>
+                  <div className="flex gap-1">
+                    <Pill text={PRIORITY[task.priority].label} cls={PRIORITY[task.priority].cls} />
+                    <Pill text={CATEGORY[task.category].label} cls={CATEGORY[task.category].cls} />
+                  </div>
+                </div>
+                <p className="serif text-sm font-medium text-[#1c1c1c] leading-relaxed mb-4 group-hover:text-[#2d6a4f] transition-colors">{task.title}</p>
+                <div className="flex items-center justify-between">
+                  <Pill text={STATUS[task.status].label} cls={STATUS[task.status].pill} extra="text-xs" />
+                  {task.deadline && (
+                    <span className={`text-xs ${over?'text-red-500':near?'text-amber-600':'text-[#ccc]'}`}>
+                      {over?'⚠ ':near?'· ':''}{task.deadline.slice(5)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PLAN SECTION
+═══════════════════════════════════════════════════════════ */
+
+function PlanSection({ tasks, onToggle, onTask, onAdd }) {
+  const pri = {high:0, medium:1, low:2};
+  const byTime = arr => [...arr].sort((a,b) => {
+    const pd = pri[a.priority] - pri[b.priority];
+    if (pd !== 0) return pd;
+    return (b.createdAt||'') > (a.createdAt||'') ? 1 : -1;
+  });
+  const daily    = byTime(tasks.filter(t => t.taskType === 'daily'    && t.status !== 'completed'));
+  const weekly   = byTime(tasks.filter(t => t.taskType === 'weekly'   && t.status !== 'completed'));
+  const longterm = byTime(tasks.filter(t => t.taskType === 'longterm' && t.status !== 'completed'));
+  const dailyDone  = tasks.filter(t => t.taskType === 'daily'  && t.status === 'completed').length;
+  const dailyTotal = tasks.filter(t => t.taskType === 'daily').length;
+  const weekDone = tasks.filter(t => t.taskType === 'weekly'   && t.status === 'completed').length;
+  const weekTotal= tasks.filter(t => t.taskType === 'weekly').length;
+
+  const PlanCard = ({ task }) => {
+    const near = isNear(task.deadline), over = isOver(task.deadline, task.status);
+    const hasPg = task.currentPage != null && task.totalPage;
+    const pgPct = hasPg ? Math.round(task.currentPage / task.totalPage * 100) : 0;
+    return (
+      <div onClick={() => onTask(task)}
+        className={`group flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer hover:shadow-sm
+          ${task.status==='completed' ? 'opacity-50 bg-[#faf9f6] border-[#f0ece4]' : 'bg-white border-[#e8e4dc] hover:border-[#c8c0b4]'}`}>
+        <div onClick={e=>{e.stopPropagation(); onToggle(task.id);}}
+          className={`mt-0.5 w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors cursor-pointer
+            ${task.status==='completed' ? 'bg-[#2d6a4f] border-[#2d6a4f]' : 'border-[#d4cfc4] hover:border-[#2d6a4f]'}`}>
+          {task.status==='completed' && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className={`serif text-sm font-medium leading-snug ${task.status==='completed' ? 'line-through text-[#bbb]' : 'text-[#1c1c1c]'}`}>
+            {task.title}
+          </div>
+          {hasPg && task.status !== 'completed' && (
+            <div className="mt-2">
+              <div className="flex justify-between text-xs text-[#bbb] mb-1">
+                <span>第 {task.currentPage} 页</span>
+                <span>{pgPct}%  /  共 {task.totalPage} 页</span>
+              </div>
+              <div className="h-1 bg-[#f0ece4] rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-[#2d6a4f] transition-all" style={{width:`${pgPct}%`}} />
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <Pill text={PRIORITY[task.priority].label} cls={PRIORITY[task.priority].cls+' text-xs'} />
+            <Pill text={CATEGORY[task.category].label} cls={CATEGORY[task.category].cls+' text-xs'} />
+            {task.deadline && (
+              <span className={`text-xs ${over?'text-red-500':near?'text-amber-600':'text-[#ccc]'}`}>
+                {over?'⚠ ':near?'· ':''}{task.deadline.slice(5)}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const [expanded, setExpanded] = useState({ daily: false, weekly: false, longterm: false });
+  const toggle = key => setExpanded(e => ({ ...e, [key]: !e[key] }));
+
+  const PlanCol = ({ colKey, title, tasks: colTasks, emptyText, extra }) => {
+    const isOpen = expanded[colKey];
+    const visible = isOpen ? colTasks : colTasks.slice(0, 3);
+    const hasMore = colTasks.length > 3;
+    return (
+      <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden">
+        <div onClick={() => hasMore && toggle(colKey)}
+          className={`px-4 py-3 border-b border-[#e8e4dc] flex items-center justify-between ${hasMore ? 'cursor-pointer hover:bg-[#faf9f6]' : ''} transition-colors`}>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold serif text-[#1c1c1c]">{title}</span>
+            {extra}
+          </div>
+          {hasMore && (
+            <svg className={`w-3.5 h-3.5 text-[#bbb] transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
+            </svg>
+          )}
+        </div>
+        <div className="p-3 space-y-2">
+          {colTasks.length === 0
+            ? <div className="text-center text-[#ccc] text-sm py-8">{emptyText}</div>
+            : visible.map(t => <PlanCard key={t.id} task={t} />)
+          }
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <section>
+      <SectionHead
+        title="计划管理"
+        sub=""
+        right={
+          <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg text-xs font-medium transition-colors">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
+            新增任务
+          </button>
+        }
+      />
+      <div className="grid md:grid-cols-3 gap-4 items-start">
+        <PlanCol colKey="daily" title="☀️ 每日任务" tasks={daily} emptyText="今日任务全部完成 ✓"
+          extra={<><span className="text-xs text-[#bbb]">{dailyDone}/{dailyTotal} 完成</span>{dailyTotal>0&&<div className="flex items-center gap-1.5 ml-1"><div className="w-14 h-1.5 bg-[#f0ece4] rounded-full overflow-hidden"><div className="h-full bg-[#f59e0b] rounded-full transition-all" style={{width:`${Math.round(dailyDone/dailyTotal*100)}%`}}/></div><span className="text-xs text-[#b45309] font-medium">{Math.round(dailyDone/dailyTotal*100)}%</span></div>}</>}
+        />
+        <PlanCol colKey="weekly" title="📅 本周任务" tasks={weekly} emptyText="本周任务已全部完成 🎉"
+          extra={<><span className="text-xs text-[#bbb]">{weekDone}/{weekTotal} 完成</span>{weekTotal>0&&<div className="flex items-center gap-1.5 ml-1"><div className="w-14 h-1.5 bg-[#f0ece4] rounded-full overflow-hidden"><div className="h-full bg-[#2d6a4f] rounded-full transition-all" style={{width:`${Math.round(weekDone/weekTotal*100)}%`}}/></div><span className="text-xs text-[#2d6a4f] font-medium">{Math.round(weekDone/weekTotal*100)}%</span></div>}</>}
+        />
+        <PlanCol colKey="longterm" title="🎯 长期计划" tasks={longterm} emptyText="暂无长期计划"
+          extra={<span className="text-xs text-[#bbb]">{longterm.filter(t=>t.status==='in_progress').length} 进行中</span>}
+        />
+      </div>
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROJECTS
+═══════════════════════════════════════════════════════════ */
+
+function Books({ books, onAdd, onEdit, onDelete }) {
+  return (
+    <section>
+      <SectionHead
+        title="学习书架"
+        sub={`${books.length} 本`}
+        right={
+          <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg text-xs font-medium transition-colors">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
+            加入书架
+          </button>
+        }
+      />
+      {books.length === 0
+        ? <div className="bg-white rounded-xl border border-[#e8e4dc] p-10 text-center text-[#ccc] text-sm">书架空空，点击右上角添加</div>
+        : <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {books.map(b=>{
+              const pct = b.totalPage > 0 ? Math.round(b.currentPage / b.totalPage * 100) : 0;
+              return (
+                <div key={b.id} className="bg-white rounded-xl border border-[#e8e4dc] p-4 hover:shadow-md hover:border-[#c8c0b4] transition-all group flex flex-col gap-2">
+                  <div className="flex items-start justify-between">
+                    <h3 className="serif text-sm font-semibold text-[#1c1c1c] leading-snug group-hover:text-[#2d6a4f] transition-colors flex-1 pr-2">{b.title}</h3>
+                    <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={()=>onEdit(b)} className="p-1 text-[#d4cfc4] hover:text-[#2d6a4f] rounded">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                      </button>
+                      <button onClick={()=>onDelete(b.id)} className="p-1 text-[#d4cfc4] hover:text-red-400 rounded">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-auto">
+                    <div className="flex justify-between text-xs text-[#bbb] mb-1">
+                      <span>{b.currentPage} / {b.totalPage} 页</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-[#f0ece4] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-[#2d6a4f] transition-all" style={{width:`${pct}%`}} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+      }
+    </section>
+  );
+}
+
+function WeReadShelf({ books }) {
+  const recentBooks = [...books]
+    .sort((a, b) => (b.readTimestamp || 0) - (a.readTimestamp || 0))
+    .slice(0, 3);
+  return (
+    <section>
+      <SectionHead
+        title="微信读书书架"
+        sub={books.length ? `已同步 ${books.length} 本 · 仅展示最近翻看 3 本` : '同步后会在这里显示最近翻看的书'}
+      />
+      {recentBooks.length === 0
+        ? <div className="bg-white rounded-xl border border-[#e8e4dc] p-10 text-center text-[#ccc] text-sm">还没有同步到微信读书书架</div>
+        : <div className="grid md:grid-cols-3 gap-3">
+            {recentBooks.map((b, idx) => {
+              const pct = getWereadProgressPercent(b);
+              return (
+                <div key={`wr-book-${b.id}-${idx}`} className="bg-white rounded-xl border border-[#e8e4dc] p-4 flex flex-col gap-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] tracking-[0.18em] uppercase text-[#b7aa8a] mb-2">最近翻看 {idx + 1}</div>
+                      <h3 className="serif text-sm font-semibold text-[#1c1c1c] leading-snug">{b.title}</h3>
+                    </div>
+                    <span className="shrink-0 text-[10px] bg-[#f0f4f1] text-[#2d6a4f] px-2 py-0.5 rounded-full">微信读书</span>
+                  </div>
+                  <div className="text-xs text-[#8f887d] leading-relaxed">{b.author || '作者信息暂未同步'}</div>
+                  <div className="text-xs text-[#8f887d]">{getWereadShelfMetaText(b)}</div>
+                  <div className="mt-auto">
+                    <div className="h-1.5 bg-[#f0ece4] rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-[#2d6a4f] transition-all" style={{width:`${pct}%`}} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+      }
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   WEREAD NOTES
+═══════════════════════════════════════════════════════════ */
+
+function WeReadNotes({ notes }) {
+  const orderedNotes = React.useMemo(
+    () => [...notes].sort((a, b) => (b.sourceUpdatedTimestamp || 0) - (a.sourceUpdatedTimestamp || 0)),
+    [notes]
+  );
+  const [sel, setSel] = React.useState(orderedNotes[0] || null);
+
+  React.useEffect(() => {
+    if (!orderedNotes.length) { setSel(null); return; }
+    if (!sel || !orderedNotes.some(n => n.id === sel.id)) setSel(orderedNotes[0]);
+  }, [orderedNotes]);
+
+  return (
+    <section>
+      <SectionHead
+        title="微信读书笔记"
+        sub={orderedNotes.length ? `已同步 ${orderedNotes.length} 条划线与评论` : '同步后的划线和评论会显示在这里'}
+      />
+      <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden flex" style={{height:320}}>
+        <div className="w-52 shrink-0 border-r border-[#e8e4dc] overflow-y-auto">
+          {orderedNotes.length === 0
+            ? <div className="p-4 text-xs text-[#ccc] text-center mt-8">还没有同步笔记</div>
+            : orderedNotes.map(n => (
+              <div key={n.id} onClick={() => setSel(n)}
+                className={`px-4 py-3 cursor-pointer border-b border-[#f5f2eb] last:border-0 transition-colors ${sel?.id === n.id ? 'bg-[#f0f4f1]' : 'hover:bg-[#faf9f6]'}`}>
+                <div className={`text-sm font-medium leading-snug mb-1.5 ${sel?.id === n.id ? 'text-[#2d6a4f] serif' : 'text-[#1c1c1c]'}`}>{n.title}</div>
+                {n.bookTitle && <div className="text-xs text-[#8f887d] mb-1 truncate">{n.bookTitle}</div>}
+                <div className="flex gap-1 flex-wrap mb-1">
+                  {(n.tags || []).map(t => <span key={t} className="text-xs bg-[#f2f2ef] text-[#999] px-1.5 py-0.5 rounded-full">{t}</span>)}
+                </div>
+                <div className="text-xs text-[#ccc]">{pickDisplayTime(n, 'sourceUpdatedAt')}</div>
+              </div>
+            ))
+          }
+        </div>
+        <div className="flex-1 p-5 overflow-y-auto">
+          {sel && orderedNotes.find(n => n.id === sel.id) ? (
+            <>
+              <div className="flex items-start justify-between mb-3">
+                <h4 className="serif font-semibold text-base text-[#1c1c1c] leading-snug flex-1 pr-3">{sel.title}</h4>
+                <span className="shrink-0 text-[10px] bg-[#f0f4f1] text-[#2d6a4f] px-2 py-0.5 rounded-full">微信读书</span>
+              </div>
+              {sel.bookTitle && <div className="text-xs text-[#8f887d] mb-3">{sel.bookTitle}</div>}
+              <div className="flex gap-1 mb-4 flex-wrap">
+                {(sel.tags || []).map(t => <Pill key={t} text={t} cls="bg-[#f2f2ef] text-[#777]" />)}
+              </div>
+              <p className="text-sm text-[#555] leading-[1.8] whitespace-pre-wrap">{getFullNoteText(sel.summary)}</p>
+              <div className="text-xs text-[#ccc] mt-5">记录时间：{pickDisplayTime(sel, 'sourceUpdatedAt')}</div>
+            </>
+          ) : <div className="text-[#ddd] text-sm mt-8 text-center">选择一条笔记查看内容</div>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROGRESS
+═══════════════════════════════════════════════════════════ */
+
+function Progress({ tasks, books }) {
+  const total  = tasks.length;
+  const done   = tasks.filter(t=>t.status==='completed').length;
+  const reading = books.filter(b=>b.status==='reading').length;
+  const wip    = tasks.filter(t=>t.status==='in_progress').length;
+
+  const stats = [
+    { label:'在读书籍', v:reading, max:books.length, color:'#2d6a4f' },
+    { label:'已完成任务', v:done,   max:total,            color:'#3a7d52' },
+    { label:'活跃任务',   v:wip,    max:total,            color:'#b45309' },
+  ];
+  return (
+    <section>
+      <SectionHead title="进度总览" />
+      <div className="grid grid-cols-3 gap-3">
+        {stats.map((s,i)=>(
+          <div key={i} className="bg-white rounded-xl border border-[#e8e4dc] p-4">
+            <div className="text-xs text-[#bbb] mb-2">{s.label}</div>
+            <div className="flex items-end justify-between mb-2.5">
+              <span className="text-2xl font-semibold" style={{color:s.color}}>{s.v}</span>
+              <span className="text-xs text-[#ccc] mb-0.5">/ {s.max}</span>
+            </div>
+            <div className="h-1.5 bg-[#f0ece4] rounded-full overflow-hidden">
+              <div className="h-full rounded-full transition-all" style={{width:`${s.max?Math.round(s.v/s.max*100):0}%`,background:s.color}} />
+            </div>
+            <div className="text-xs text-[#ccc] mt-1.5">{s.max?Math.round(s.v/s.max*100):0}%</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RECENT UPDATES
+═══════════════════════════════════════════════════════════ */
+
+function Recent({ updates }) {
+  const icon  = { complete:'✓', note:'✎', add:'+', project:'◈', start:'▷', weread:'读' };
+  const color = { complete:'#3a7d52', note:'#6b3fa0', add:'#2c6fad', project:'#2d6a4f', start:'#b45309', weread:'#2d6a4f' };
+  return (
+    <section>
+      <SectionHead title="最近动态" />
+      <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden">
+        {updates.slice(0,6).map((u,i)=>(
+          <div key={u.id} className={`flex items-start gap-3 px-5 py-3 ${i<updates.length-1?'border-b border-[#f5f2eb]':''}`}>
+            <div className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] shrink-0 font-medium"
+              style={{background:color[u.type]+'18', color:color[u.type]}}>
+              {icon[u.type]}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] text-[#555]">{u.text}</div>
+              {u.preview && <div className="text-xs text-[#999] mt-1 line-clamp-2">{u.preview}</div>}
+            </div>
+            <span className="text-xs text-[#ccc] shrink-0">{u.time}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WereadRecent({ notes, updates }) {
+  const icon  = { complete:'✓', note:'✎', add:'+', project:'◈', start:'▷', weread:'读' };
+  const color = { complete:'#3a7d52', note:'#6b3fa0', add:'#2c6fad', project:'#2d6a4f', start:'#b45309', weread:'#2d6a4f' };
+  const noteEntries = React.useMemo(
+    () => [...notes]
+      .sort((a, b) => (b.sourceUpdatedTimestamp || 0) - (a.sourceUpdatedTimestamp || 0))
+      .map(n => ({
+        id: `wr-note-${n.id}`,
+        type: 'weread',
+        text: n.title,
+        preview: extractNotePreview(n.summary),
+        time: n.sourceUpdatedAt || n.updatedAt || '以前',
+      })),
+    [notes]
+  );
+  const [offset, setOffset] = React.useState(0);
+
+  React.useEffect(() => {
+    setOffset(0);
+  }, [noteEntries.length]);
+
+  React.useEffect(() => {
+    if (noteEntries.length <= 1) return;
+    const timer = setInterval(() => {
+      setOffset(prev => (prev + 1) % noteEntries.length);
+    }, 3500);
+    return () => clearInterval(timer);
+  }, [noteEntries.length]);
+
+  const displayEntries = React.useMemo(() => {
+    if (!noteEntries.length) return updates.slice(0, 6);
+    const size = Math.min(4, noteEntries.length);
+    return Array.from({ length: size }, (_, idx) => noteEntries[(offset + idx) % noteEntries.length]);
+  }, [noteEntries, offset, updates]);
+
+  return (
+    <section>
+      <SectionHead title="最近动态" sub={noteEntries.length ? '轮播微信读书旧笔记' : ''} />
+      <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden">
+        {displayEntries.slice(0,6).map((u,i)=>(
+          <div key={u.id} className={`flex items-start gap-3 px-5 py-3 ${i<displayEntries.length-1?'border-b border-[#f5f2eb]':''}`}>
+            <div className="w-5 h-5 rounded-full flex items-center justify-center text-[11px] shrink-0 font-medium"
+              style={{background:color[u.type]+'18', color:color[u.type]}}>
+              {icon[u.type]}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] text-[#555]">{u.text}</div>
+              {u.preview && <div className="text-xs text-[#999] mt-1 line-clamp-2">{u.preview}</div>}
+            </div>
+            <span className="text-xs text-[#ccc] shrink-0">{u.time}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   APP
+═══════════════════════════════════════════════════════════ */
+
+function App() {
+  const [ready,    setReady]   = useState(false);
+  const [tasks,    setTasks]   = useState(INIT_TASKS);
+  const [books,    setBooks]   = useState(INIT_BOOKS);
+  const [notes,    setNotes]   = useState(INIT_NOTES);
+  const [updates,  setUpdates] = useState(INIT_UPDATES);
+  const [modal,        setModal]        = useState(null);
+  const [detail,       setDetail]       = useState(null);
+  const [projectModal, setProjectModal] = useState(null);
+  const [noteModal,    setNoteModal]    = useState(null);
+  const [showWeRead,   setShowWeRead]   = useState(false);
+  const uid  = useRef(1);
+  const puid = useRef(1);
+  const nuid = useRef(1);
+  const learningBooks = useMemo(() => books.filter(b => !isWereadBook(b)), [books]);
+  const wereadBooks = useMemo(() => books.filter(b => isWereadBook(b)), [books]);
+  const wereadNotes = useMemo(() => notes.filter(n => isWereadNote(n)), [notes]);
+  const applyServerPayload = useCallback((d) => {
+    const hasSrv = d.tasks || d.books || d.notes;
+    if (!hasSrv) return false;
+    const t = (d.tasks || INIT_TASKS).map(x => x.status === 'not_started' ? { ...x, status:'in_progress' } : x);
+    const b = d.books || INIT_BOOKS;
+    const n = d.notes || INIT_NOTES;
+    const u = d.updates || INIT_UPDATES;
+    setTasks(t);
+    setBooks(b);
+    setNotes(n);
+    setUpdates(u);
+    uid.current  = Math.max(0, ...t.map(x=>x.id)) + 1;
+    puid.current = Math.max(0, ...b.map(x=>x.id)) + 1;
+    nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;
+    return true;
+  }, []);
+  const refreshFromServer = useCallback(() =>
+    fetch('/api/data')
+      .then(r => r.json())
+      .then(d => applyServerPayload(d))
+      .catch(() => false)
+  , [applyServerPayload]);
+
+  // 启动时从服务器加载数据（服务器没有则从 localStorage 迁移）
+  useEffect(() => {
+    const ls = k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
+    fetch('/api/data')
+      .then(r => r.json())
+      .then(d => {
+        const hasSrv = d.tasks || d.books || d.notes;
+        const t = ((hasSrv ? d.tasks : ls('mpl_tasks')) || INIT_TASKS).map(x => x.status === 'not_started' ? {...x, status:'in_progress'} : x);
+        const b = (hasSrv ? d.books   : ls('mpl_books'))   || INIT_BOOKS;
+        const n = (hasSrv ? d.notes   : ls('mpl_notes'))   || INIT_NOTES;
+        const u = (hasSrv ? d.updates : ls('mpl_updates')) || INIT_UPDATES;
+        setTasks(t);
+        setBooks(b);
+        setNotes(n);
+        setUpdates(u);
+        uid.current  = Math.max(0, ...t.map(x=>x.id)) + 1;
+        puid.current = Math.max(0, ...b.map(x=>x.id)) + 1;
+        nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;
+      })
+      .catch(() => {})
+      .finally(() => setReady(true));
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    const onFocus = () => { refreshFromServer(); };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshFromServer();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [ready]);
+
+  // 数据变化时自动保存到服务器（防抖 800ms）
+  useEffect(() => {
+    if (!ready) return;
+    const t = setTimeout(() => {
+      fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tasks, books, notes, updates }),
+      }).catch(() => {});
+    }, 800);
+    return () => clearTimeout(t);
+  }, [ready, tasks, books, notes, updates]);
+
+  const log = (type, text) =>
+    setUpdates(u => [{ id: Date.now(), type, text, time:'刚刚' }, ...u].slice(0, 8));
+
+  const handleSave = (form) => {
+    if (modal === 'add') {
+      const t = { ...form, id: uid.current++, createdAt: new Date().toISOString().slice(0,10) };
+      setTasks(prev => [...prev, t]);
+      log('add', `新增任务「${t.title}」`);
+    } else {
+      setTasks(prev => prev.map(x => x.id === modal.id ? { ...x, ...form } : x));
+      log('note', `更新任务「${form.title}」`);
+    }
+    setModal(null);
+  };
+
+  const handleDelete = (id) => {
+    const t = tasks.find(x=>x.id===id);
+    setTasks(prev => prev.filter(x=>x.id!==id));
+    setDetail(null);
+    if (t) log('note', `删除了「${t.title}」`);
+  };
+
+  const handleSaveBook = (form) => {
+    if (projectModal === 'add') {
+      const b = { ...form, id: puid.current++ };
+      setBooks(prev => [b, ...prev]);
+      log('project', `加入书架「${b.title}」`);
+    } else {
+      setBooks(prev => prev.map(x => x.id === projectModal.id ? { ...x, ...form } : x));
+      log('project', `更新「${form.title}」进度`);
+    }
+    setProjectModal(null);
+  };
+
+  const handleDeleteBook = (id) => {
+    const b = books.find(x=>x.id===id);
+    setBooks(prev => prev.filter(x=>x.id!==id));
+    if (b) log('project', `移除「${b.title}」`);
+  };
+
+  const handleSaveNote = (form) => {
+    const today = new Date().toISOString().slice(0,10);
+    if (noteModal === 'add') {
+      const n = { ...form, id: nuid.current++, updatedAt: today };
+      setNotes(prev => [n, ...prev]);
+      log('note', `新增笔记「${n.title}」`);
+    } else {
+      setNotes(prev => prev.map(x => x.id === noteModal.id ? { ...x, ...form, updatedAt: today } : x));
+      log('note', `更新笔记「${form.title}」`);
+    }
+    setNoteModal(null);
+  };
+
+  const handleDeleteNote = (id) => {
+    const n = notes.find(x=>x.id===id);
+    setNotes(prev => prev.filter(x=>x.id!==id));
+    if (n) log('note', `删除笔记「${n.title}」`);
+  };
+
+  const handleWeReadSync = ({ books: wrBooks, notes: wrNotes }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const syncedAt = new Date().toISOString();
+    setBooks(prev => {
+      const userBooks = prev.filter(b => !isWereadBook(b));
+      const existingWeread = prev.filter(b => isWereadBook(b));
+      const usedIds = new Set(userBooks.map(b => b.id));
+      const mergedWeread = wrBooks.map(wb => {
+        const existing = existingWeread.find(b => (wb._bookId && b._bookId === wb._bookId) || b.title === wb.title);
+        const id = existing?.id ?? nextLocalId(puid, usedIds);
+        usedIds.add(id);
+        return {
+          ...existing,
+          ...wb,
+          id,
+          source: 'weread',
+          author: wb.author || existing?.author || '',
+          status: existing?.status || 'reading',
+          accent: existing?.accent || pickBookAccent(wb.title),
+          startDate: existing?.startDate || today,
+          notes: existing?.notes || '',
+          currentPage: wb.currentPage,
+          totalPage: wb.totalPage || existing?.totalPage || 1,
+          readAt: wb.readAt || existing?.readAt || '',
+          readTimestamp: wb.readTimestamp || existing?.readTimestamp || 0,
+          progressPercent: wb.progressPercent ?? existing?.progressPercent ?? 0,
+          chapterIndex: wb.chapterIndex ?? existing?.chapterIndex ?? wb.currentPage ?? 0,
+          chapterCount: wb.chapterCount ?? existing?.chapterCount ?? wb.totalPage ?? 0,
+          estimatedCurrentPage: wb.estimatedCurrentPage ?? existing?.estimatedCurrentPage ?? 0,
+          estimatedTotalPage: wb.estimatedTotalPage ?? existing?.estimatedTotalPage ?? 0,
+          pageSource: wb.pageSource || existing?.pageSource || '',
+          isbn: wb.isbn || existing?.isbn || '',
+          totalWords: wb.totalWords ?? existing?.totalWords ?? 0,
+        };
+      });
+      return [...userBooks, ...mergedWeread];
+    });
+    setNotes(prev => {
+      const userNotes = prev.filter(n => !isWereadNote(n));
+      const existingWeread = prev.filter(n => isWereadNote(n));
+      const usedIds = new Set(userNotes.map(n => n.id));
+      const touched = wrNotes.map(wn => {
+        const existing = existingWeread.find(n =>
+          (wn.sourceItemId && n.sourceItemId === wn.sourceItemId)
+          || (
+            wn._bookId
+            && n._bookId === wn._bookId
+            && n.title === wn.title
+            && n.summary === wn.summary
+          )
+        );
+        const id = existing?.id ?? nextLocalId(nuid, usedIds);
+        usedIds.add(id);
+        return {
+          ...existing,
+          ...wn,
+          id,
+          source: 'weread',
+          updatedAt: today,
+          syncedAt,
+          sourceUpdatedAt: wn.sourceUpdatedAt || existing?.sourceUpdatedAt || '',
+          sourceUpdatedTimestamp: wn.sourceUpdatedTimestamp || existing?.sourceUpdatedTimestamp || 0,
+          projectId: null,
+        };
+      });
+      return [...userNotes, ...touched];
+    });
+    setUpdates(prev => {
+      const wereadUpdates = wrNotes.slice(0, 4).map((wn, idx) => ({
+        id: Date.now() + idx,
+        type: 'weread',
+        text: wn.title,
+        preview: extractNotePreview(wn.summary),
+        time: '刚刚',
+      }));
+      if (wereadUpdates.length > 0) {
+        return [...wereadUpdates, ...prev].slice(0, 8);
+      }
+      return [{ id: Date.now(), type: 'project', text: `微信读书同步：${wrBooks.length} 本书`, time: '刚刚' }, ...prev].slice(0, 8);
+    });
+  };
+
+  const handleToggle = (id) => {
+    setTasks(prev => prev.map(x => {
+      if (x.id!==id) return x;
+      const next = x.status==='completed' ? 'in_progress' : 'completed';
+      if (next==='completed') log('complete', `完成「${x.title}」`);
+      return { ...x, status: next };
+    }));
+  };
+
+  if (!ready) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-[#bbb] text-sm">加载中...</div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen">
+      <Header onAdd={()=>setModal('add')} onWeRead={()=>setShowWeRead(true)} />
+
+      <main className="max-w-6xl mx-auto px-6 py-8 space-y-10 pb-20">
+        <TodayFocus tasks={tasks} onClick={setDetail} />
+        <PlanSection tasks={tasks} onToggle={handleToggle} onTask={setDetail} onAdd={()=>setModal('add')} />
+        <Books books={learningBooks} onAdd={()=>setProjectModal('add')} onEdit={b=>setProjectModal(b)} onDelete={handleDeleteBook} />
+        <WeReadShelf books={wereadBooks} />
+        {/* Bottom 2-col */}
+        <div className="grid md:grid-cols-5 gap-6">
+          <div className="md:col-span-3 space-y-6">
+            <WeReadNotes notes={wereadNotes} />
+          </div>
+          <div className="md:col-span-2 space-y-6">
+            <Progress tasks={tasks} books={learningBooks} />
+            <WereadRecent notes={wereadNotes} updates={updates} />
+          </div>
+        </div>
+      </main>
+
+      {/* Modals */}
+      {showWeRead && (
+        <WeReadModal onSync={handleWeReadSync} onClose={()=>setShowWeRead(false)} />
+      )}
+      {modal && (
+        <TaskModal task={modal==='add'?null:modal} books={learningBooks} onSave={handleSave} onClose={()=>setModal(null)} />
+      )}
+      {projectModal && (
+        <BookModal book={projectModal==='add'?null:projectModal} onSave={handleSaveBook} onClose={()=>setProjectModal(null)} />
+      )}
+      {noteModal && (
+        <NoteModal note={noteModal==='add'?null:noteModal} books={learningBooks} onSave={handleSaveNote} onClose={()=>setNoteModal(null)} />
+      )}
+      {detail && (
+        <TaskDetail task={detail} books={learningBooks}
+          onEdit={()=>{ setModal(detail); setDetail(null); }}
+          onDelete={()=>handleDelete(detail.id)}
+          onClose={()=>setDetail(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

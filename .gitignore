@@ -1,0 +1,18 @@
+.DS_Store
+.backups/
+.claude/
+.idea/
+.venv/
+__pycache__/
+*.pyc
+
+# Local app data
+data.json
+.weread_bridge.json
+.weread_cookie.json
+.weread_data.json
+.weread_notes.json
+
+# Chrome extension local package/private key
+chrome-extension/weread-sync.crx
+chrome-extension/weread-sync.pem
