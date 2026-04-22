@@ -42,7 +42,14 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Sync cloud dashboard asset
+        run: npm run sync:dashboard
+
+      - name: Verify synced dashboard asset is committed
+        run: git diff --exit-code -- public/tasks/index.html
+
       - name: Chrome extension syntax check
         run: |
           node --check chrome-extension/weread-sync/background.js
           node --check chrome-extension/weread-sync/popup.js
+          npm run check:worker

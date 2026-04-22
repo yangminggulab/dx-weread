@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev"
+    "sync:dashboard": "mkdir -p public/tasks && cp dashboard.html public/tasks/index.html",
+    "deploy": "npm run sync:dashboard && wrangler deploy",
+    "dev": "npm run sync:dashboard && wrangler dev",
+    "check:worker": "node --check src/index.js"
   },
   "devDependencies": {
     "wrangler": "^3.0.0"

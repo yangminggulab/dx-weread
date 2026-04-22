@@ -114,6 +114,41 @@ TASK_APP_HOST=0.0.0.0 TASK_APP_PORT=8080 python3 server.py
 - 用 GitHub 保存代码版本和功能演进
 - 用 GitHub Actions 做基础检查，避免改坏服务端或扩展脚本
 
+## Cloudflare Worker 版本
+
+仓库里已经有一套给 `yangminggu.com/tasks` 用的 Worker 代码：
+
+- Worker 入口：`src/index.js`
+- Worker 配置：`wrangler.jsonc`
+- 线上页面静态资源：`public/tasks/index.html`
+
+本地改完 [dashboard.html](/Users/liubike/Desktop/任务管理App/dashboard.html) 后，可以用下面这条命令把云端用的页面副本同步好：
+
+```bash
+npm run sync:dashboard
+```
+
+现在这套 Worker 会：
+
+- 直接服务 `https://yangminggu.com/tasks`
+- 用 KV 保存 `tasks / books / notes / updates`
+- 把前端请求自动走到 `/tasks/api/*`
+- 在云端页面里提示“微信读书同步先走本地版”
+
+## 把本地数据推到云端
+
+已经准备好一个一次性上传脚本：
+
+- `scripts/push_cloud_data.py`
+
+用法：
+
+```bash
+python3 scripts/push_cloud_data.py https://yangminggu.com/tasks
+```
+
+它会读取你本地当前的合并数据，然后 POST 到云端 Worker 的 `/api/data`，把任务、书架、笔记和动态一起推上去。
+
 等你后面决定要正式上线，再接下面其中一种部署路线会更顺：
 
 - 传统云服务器或轻量应用服务器，直接跑 `python3 server.py`
