@@ -1,4 +1,4 @@
-import { DASHBOARD_HTML } from './dashboard.js';
+import DASHBOARD_HTML from '../dashboard.html';
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
