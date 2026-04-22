@@ -1,5 +1,5 @@
 {
-  "name": "yangminggu-tasks",
+  "name": "dx-weread",
   "main": "src/index.js",
   "compatibility_date": "2024-01-01",
   "kv_namespaces": [
