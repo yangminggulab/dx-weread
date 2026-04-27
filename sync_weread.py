@@ -7,11 +7,37 @@ Optional env var:  CLOUD_BASE_URL (default: https://yangminggu.com/tasks)
 import os, sys, json, requests
 from datetime import datetime
 
+# 自动加载 .env（本地运行时）
+_here = os.path.dirname(os.path.abspath(__file__))
+_env  = os.path.join(_here, ".env")
+if os.path.exists(_env):
+    with open(_env) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _, _v = _line.partition("=")
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 WEREAD_WEB_BASE  = "https://weread.qq.com"
 WEREAD_MOB_BASE  = "https://i.weread.qq.com"
 CLOUD_BASE_URL   = os.environ.get("CLOUD_BASE_URL", "https://yangminggu.com/tasks").rstrip("/")
 API_TOKEN        = os.environ.get("API_TOKEN", "")
-WEREAD_COOKIE    = os.environ.get("WEREAD_COOKIE", "")
+
+# WEREAD_COOKIE: 优先环境变量，其次本地保存的 cookie 文件
+def _load_cookie():
+    c = os.environ.get("WEREAD_COOKIE", "")
+    if c:
+        return c
+    path = os.path.join(_here, ".weread_cookie.json")
+    if os.path.exists(path):
+        try:
+            payload = json.load(open(path))
+            return payload.get("cookie", "") if isinstance(payload, dict) else str(payload)
+        except Exception:
+            pass
+    return ""
+
+WEREAD_COOKIE = _load_cookie()
 
 BOOK_ACCENTS = ["#2d6a4f", "#4a4a6a", "#6a4a2a", "#3a6a5a", "#5a3a6a"]
 
@@ -60,18 +86,7 @@ def sync():
     print(f"   {len(books_raw)} books on shelf")
 
     # 2. 今日阅读时长
-    today_str = datetime.now().strftime("%Y%m%d")
-    today_read_map = {}
-    try:
-        rd = wr_get("/web/book/read", {"synckey": 0, "date": today_str})
-        for item in (rd.get("readTimes") or rd.get("items") or []):
-            bid  = str(item.get("bookId") or "")
-            mins = int(item.get("readingTime") or item.get("duration") or 0) // 60
-            if bid and mins > 0:
-                today_read_map[bid] = mins
-        print(f"   Today reading: {sum(today_read_map.values())} min across {len(today_read_map)} books")
-    except Exception as e:
-        print(f"   ⚠️  Could not fetch today reading: {e}")
+    today_read_map = {}  # 今日阅读时长暂不支持（API 已下线）
 
     # 3. 组装书目
     books = []
@@ -134,7 +149,7 @@ def sync():
     return len(books)
 
 if __name__ == "__main__":
-    missing = [v for v in ("WEREAD_COOKIE", "API_TOKEN") if not os.environ.get(v)]
+    missing = [v for v, val in [("WEREAD_COOKIE", WEREAD_COOKIE), ("API_TOKEN", API_TOKEN)] if not val]
     if missing:
         print(f"❌ Missing env vars: {', '.join(missing)}")
         sys.exit(1)
