@@ -169,6 +169,22 @@ export default {
     // POST /api/diary — requires auth，独立 KV key
     if (path === "/api/diary" && request.method === "POST") {
       const body = await request.json();
+      const incoming = body?.today ?? {};
+      // 同一天有内容时，不允许空内容覆盖
+      const raw = await env.TASKS_KV.get("diary_data");
+      if (raw) {
+        try {
+          const stored = JSON.parse(raw);
+          const storedToday = stored?.today ?? {};
+          if (
+            storedToday.date === incoming.date &&
+            storedToday.content?.trim() &&
+            !incoming.content?.trim()
+          ) {
+            return json({ ok: true, skipped: true });
+          }
+        } catch {}
+      }
       await env.TASKS_KV.put("diary_data", JSON.stringify(body));
       return json({ ok: true });
     }
