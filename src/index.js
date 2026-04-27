@@ -25,7 +25,53 @@ async function saveData(kv, data) {
   await kv.put("app_data", JSON.stringify(data));
 }
 
+function isAuthorized(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  const token = auth.replace("Bearer ", "").trim();
+  return token === env.API_TOKEN;
+}
+
+async function dailyReset(kv) {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Shanghai" }));
+  const today = now.toISOString().slice(0, 10);
+
+  // 检查今天是否已执行过
+  const lastRun = await kv.get("daily_reset_date");
+  if (lastRun === today) return { skipped: true, reason: "already ran today" };
+
+  // 1. 归档日记
+  const diaryRaw = await kv.get("diary_data");
+  const diary = diaryRaw ? JSON.parse(diaryRaw) : { today: { date: "", content: "" }, archive: [] };
+  const todayEntry = diary.today || {};
+  if (todayEntry.content && (!todayEntry.date || todayEntry.date !== today)) {
+    // Use the stored date if available, otherwise use yesterday's date
+    const archiveDate = todayEntry.date || (() => {
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return yesterday.toISOString().slice(0, 10);
+    })();
+    diary.archive = [{ ...todayEntry, date: archiveDate }, ...(diary.archive || [])];
+    diary.today = { date: today, content: "" };
+    await kv.put("diary_data", JSON.stringify(diary));
+  }
+
+  // 2. 清除已完成任务
+  const data = await loadData(kv);
+  const before = data.tasks.length;
+  data.tasks = data.tasks.filter(t => t.status !== "completed");
+  await saveData(kv, data);
+
+  // 记录执行日期
+  await kv.put("daily_reset_date", today);
+
+  return { ok: true, date: today, archivedDiary: !!todayEntry.content, removedTasks: before - data.tasks.length };
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(dailyReset(env.TASKS_KV));
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/^\/tasks(?=\/|$)/, "") || "/";
@@ -41,13 +87,19 @@ export default {
       });
     }
 
-    // GET /api/data
+    // Write API routes require authorization; GET /api/data is public (read-only)
+    const isWriteApi = path.startsWith("/api/") && request.method !== "GET" && request.method !== "OPTIONS";
+    if (isWriteApi && !isAuthorized(request, env)) {
+      return json({ error: "Unauthorized" }, 401);
+    }
+
+    // GET /api/data — public read
     if (path === "/api/data" && request.method === "GET") {
       const data = await loadData(env.TASKS_KV);
       return json(data);
     }
 
-    // POST /api/data
+    // POST /api/data — requires auth (checked above)
     if (path === "/api/data" && request.method === "POST") {
       const body = await request.json();
       await saveData(env.TASKS_KV, body);
@@ -96,6 +148,28 @@ export default {
       const data = await loadData(env.TASKS_KV);
       data.tasks = data.tasks.filter((t) => t.id !== body.id);
       await saveData(env.TASKS_KV, data);
+      return json({ ok: true });
+    }
+
+    // GET /api/diary — public read，独立 KV key
+    if (path === "/api/diary" && request.method === "GET") {
+      const raw = await env.TASKS_KV.get("diary_data");
+      if (!raw) return json({ today: { date: "", content: "" }, archive: [] });
+      try {
+        const parsed = JSON.parse(raw);
+        // ?today=1 只返回今日，不含归档（减少流量）
+        if (url.searchParams.get("today") === "1") {
+          return json({ today: parsed.today || { date: "", content: "" }, archive: [] });
+        }
+        return json(parsed);
+      }
+      catch { return json({ today: { date: "", content: "" }, archive: [] }); }
+    }
+
+    // POST /api/diary — requires auth，独立 KV key
+    if (path === "/api/diary" && request.method === "POST") {
+      const body = await request.json();
+      await env.TASKS_KV.put("diary_data", JSON.stringify(body));
       return json({ ok: true });
     }
 
