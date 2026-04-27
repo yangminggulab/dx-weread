@@ -1,0 +1,26 @@
+name: Sync WeChat Reading
+
+on:
+  schedule:
+    - cron: '0 1,7,13,19 * * *'   # 每天 CST 09:00 / 15:00 / 21:00 / 03:00 各跑一次
+  workflow_dispatch:                # 支持手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Sync WeRead → Cloud
+        env:
+          WEREAD_COOKIE: ${{ secrets.WEREAD_COOKIE }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          CLOUD_BASE_URL: https://yangminggu.com/tasks
+        run: python sync_weread.py
