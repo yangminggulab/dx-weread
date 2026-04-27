@@ -8,16 +8,355 @@ from datetime import datetime
 import hashlib
 import math
 import secrets
+import threading
 import time
 import requests, os, json
 
 app = Flask(__name__, static_folder=os.path.dirname(__file__))
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data.json")
+
+# ── 云端自动推送配置 ──────────────────────────────────────
+_ENV_FILE = os.path.join(os.path.dirname(__file__), ".env")
+
+def _load_env_file():
+    """从 .env 文件加载环境变量（不覆盖已有的）"""
+    if not os.path.exists(_ENV_FILE):
+        return
+    with open(_ENV_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+
+_load_env_file()
+
+CLOUD_BASE_URL = os.environ.get("CLOUD_BASE_URL", "https://yangminggu.com/tasks")
+CLOUD_API_TOKEN = os.environ.get("API_TOKEN", "")
+
+def _push_to_cloud_async(label: str = "auto"):
+    """在后台线程里把本地数据推送到 Cloudflare Worker，同步接口不阻塞。"""
+    def _do():
+        if not CLOUD_API_TOKEN:
+            print(f"[cloud-push] 跳过：未设置 API_TOKEN（{label}）")
+            return
+        try:
+            data = load_app_data()
+            endpoint = CLOUD_BASE_URL.rstrip("/") + "/api/data"
+            resp = requests.post(
+                endpoint,
+                json=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {CLOUD_API_TOKEN}",
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            print(f"[cloud-push] ✅ 推送成功（{label}）tasks={len(data.get('tasks', []))} books={len(data.get('books', []))}")
+        except Exception as exc:
+            print(f"[cloud-push] ⚠️  推送失败（{label}）: {exc}")
+
+    threading.Thread(target=_do, daemon=True).start()
+
+# ── 任务数据云端合并（不含日记） ─────────────────────────
+def _merge_cloud_into_local(local: dict, cloud: dict) -> dict:
+    """把云端 tasks/books/notes/updates 合并进本地，不处理日记（日记单独管理）。"""
+    result = dict(local)
+    for key in ("tasks", "books", "notes", "updates"):
+        local_items = [x for x in (local.get(key) or []) if isinstance(x, dict)]
+        cloud_items = [x for x in (cloud.get(key) or []) if isinstance(x, dict)]
+        local_by_id = {x["id"]: x for x in local_items if x.get("id") is not None}
+        cloud_by_id = {x["id"]: x for x in cloud_items if x.get("id") is not None}
+
+        if key == "tasks":
+            # tasks 以云端为准：云端不存在的任务（已被重置删除）本地也不保留
+            merged = dict(cloud_by_id)
+            for iid, local_item in local_by_id.items():
+                if iid not in merged:
+                    continue  # 云端已删除，丢弃本地副本
+                local_ts = str(local_item.get("updatedAt") or local_item.get("createdAt") or "")
+                cloud_ts = str(merged[iid].get("updatedAt") or merged[iid].get("createdAt") or "")
+                if local_ts and local_ts > cloud_ts:
+                    merged[iid] = local_item  # 本地版本更新，保留本地
+        else:
+            merged = dict(local_by_id)
+            for item in cloud_items:
+                iid = item.get("id")
+                if iid is None:
+                    continue
+                if iid not in merged:
+                    merged[iid] = item
+                else:
+                    local_ts = str(merged[iid].get("updatedAt") or merged[iid].get("createdAt") or "")
+                    cloud_ts = str(item.get("updatedAt") or item.get("createdAt") or "")
+                    if cloud_ts and cloud_ts > local_ts:
+                        merged[iid] = item
+
+        result[key] = list(merged.values())
+    return result
+
+# ── 日记独立文件 ──────────────────────────────────────────
+DIARY_FILE = os.path.join(os.path.dirname(__file__), "diary.json")
+
+def empty_diary():
+    return {"today": {"date": "", "content": ""}, "archive": []}
+
+def _normalize_diary(diary):
+    if not isinstance(diary, dict):
+        return empty_diary()
+    today   = diary.get("today")   if isinstance(diary.get("today"),   dict) else {}
+    archive = [e for e in (diary.get("archive") or []) if isinstance(e, dict) and e.get("date")]
+    return {"today": today, "archive": archive}
+
+def load_diary_file():
+    return _normalize_diary(load_json_file(DIARY_FILE, empty_diary()))
+
+def write_diary_file(diary):
+    backup_file(DIARY_FILE, "diary")
+    write_json_file(DIARY_FILE, _normalize_diary(diary))
+
+def effective_diary_date():
+    """日记的"今天"以凌晨5点为分界线，5点前仍属昨天"""
+    from datetime import timedelta
+    now = datetime.now()
+    if now.hour < 5:
+        return (now - timedelta(days=1)).date().isoformat()
+    return now.date().isoformat()
+
+def archive_diary_if_needed(diary=None):
+    """检查并归档过期的今日日记，归档条数永不删除"""
+    today_str = effective_diary_date()
+    if diary is None:
+        diary = load_diary_file()
+    diary   = _normalize_diary(diary)
+    today   = diary["today"]
+    archive = diary["archive"]
+
+    existing_date = today.get("date", "")
+    if existing_date and existing_date != today_str:
+        if today.get("content", "").strip():
+            archive = sorted([*archive, today], key=lambda x: x.get("date", ""))
+        today = {"date": today_str, "content": ""}
+    elif not existing_date:
+        today = {"date": today_str, "content": ""}
+
+    return {"today": today, "archive": archive}
+
+def _clean_diary_content(text: str) -> str:
+    """去除重复内容（--- 分隔的镜像复制）和 video tag 乱码"""
+    import re as _re
+    if not text:
+        return ""
+    # 去掉 video tag
+    text = _re.sub(r'Your browser does not support the (video|audio) tag\.?', '', text, flags=_re.IGNORECASE)
+    text = _re.sub(r'\d{1,2}:\d{2}\s*', '', text)
+    # --- 分隔的重复：取第一段
+    if '\n\n---\n' in text:
+        text = text.split('\n\n---\n')[0]
+    return text.strip()
+
+def _merge_diary(local_diary: dict, cloud_diary: dict) -> dict:
+    """合并两份日记，归档按日期去重，内容先清理再比长"""
+    local_diary  = _normalize_diary(local_diary)
+    cloud_diary  = _normalize_diary(cloud_diary)
+
+    local_today  = local_diary["today"]
+    cloud_today  = cloud_diary["today"]
+    local_clean  = _clean_diary_content(str(local_today.get("content", "")))
+    cloud_clean  = _clean_diary_content(str(cloud_today.get("content", "")))
+    if len(cloud_clean) > len(local_clean):
+        merged_today = {**cloud_today, "content": cloud_clean}
+    else:
+        merged_today = {**local_today, "content": local_clean} if local_clean else {**cloud_today, "content": cloud_clean}
+
+    archive_map = {}
+    for e in local_diary["archive"]:
+        if e.get("date"):
+            archive_map[e["date"]] = {**e, "content": _clean_diary_content(e.get("content", ""))}
+
+    for entry in cloud_diary["archive"]:
+        d = entry.get("date")
+        if not d:
+            continue
+        cloud_content = _clean_diary_content(entry.get("content", ""))
+        if d not in archive_map:
+            archive_map[d] = {**entry, "content": cloud_content}
+        elif len(cloud_content) > len(archive_map[d].get("content", "")):
+            archive_map[d] = {**entry, "content": cloud_content}
+
+    # 过滤掉清理后内容为空的条目
+    valid = {d: e for d, e in archive_map.items() if e.get("content", "").strip()}
+
+    return {
+        "today":   merged_today,
+        "archive": sorted(valid.values(), key=lambda x: x.get("date", "")),
+    }
+
+# ── 云端拉取（任务 + 日记分开处理） ──────────────────────
+def _pull_from_cloud(label: str = "scheduled"):
+    if not CLOUD_API_TOKEN:
+        print(f"[cloud-pull] 跳过：未设置 API_TOKEN（{label}）")
+        return
+    try:
+        headers = {"Authorization": f"Bearer {CLOUD_API_TOKEN}"}
+        base    = CLOUD_BASE_URL.rstrip("/")
+
+        # 1. 拉任务数据
+        r_data = requests.get(f"{base}/api/data", headers=headers, timeout=15)
+        r_data.raise_for_status()
+        cloud_data = r_data.json()
+        if isinstance(cloud_data, dict):
+            local_data = load_app_data()
+            merged     = _merge_cloud_into_local(local_data, cloud_data)
+            base_data  = load_base_app_data()
+            base_data["tasks"] = [t for t in merged.get("tasks", []) if isinstance(t, dict)]
+            write_base_app_data(base_data)
+            print(f"[cloud-pull] ✅ 任务合并完成（{label}）tasks={len(base_data['tasks'])}")
+
+        # 2. 拉日记数据（独立文件）
+        r_diary = requests.get(f"{base}/api/diary", headers=headers, timeout=15)
+        r_diary.raise_for_status()
+        cloud_diary = r_diary.json()
+        if isinstance(cloud_diary, dict):
+            local_diary  = load_diary_file()
+            merged_diary = _merge_diary(local_diary, cloud_diary)
+            write_diary_file(merged_diary)
+            print(f"[cloud-pull] ✅ 日记合并完成（{label}）archive={len(merged_diary['archive'])}天")
+
+    except Exception as exc:
+        print(f"[cloud-pull] ⚠️  拉取失败（{label}）: {exc}")
+
+def _pull_from_cloud_async(label: str = "scheduled"):
+    threading.Thread(target=lambda: _pull_from_cloud(label), daemon=True).start()
+
+def _cloud_pull_scheduler(interval_minutes: int = 15):
+    time.sleep(10)
+    _pull_from_cloud("startup")
+    while True:
+        time.sleep(interval_minutes * 60)
+        _pull_from_cloud(f"every-{interval_minutes}min")
+
+threading.Thread(target=_cloud_pull_scheduler, args=(15,), daemon=True).start()
+
+RESET_FLAG_FILE = os.path.join(os.path.dirname(__file__), ".daily_reset_date")
+
+def _get_last_reset_date():
+    try:
+        with open(RESET_FLAG_FILE) as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+def _set_last_reset_date(date_str):
+    with open(RESET_FLAG_FILE, "w") as f:
+        f.write(date_str)
+
+def _do_daily_reset(today, label="5am"):
+    """归档日记 + 清除已完成任务 + 推送云端"""
+    # 0. 先从云端拉日记合并
+    try:
+        _pull_from_cloud(f"{label}-pre-pull")
+        print(f"[reset] ✅ 云端数据已拉取合并 ({today})")
+    except Exception as pull_exc:
+        print(f"[reset] ⚠️  云端拉取失败，继续用本地数据: {pull_exc}")
+
+    # 1. 归档日记
+    updated_diary = archive_diary_if_needed(load_diary_file())
+    write_diary_file(updated_diary)
+    _push_diary_to_cloud_async(f"{label}-archive")
+    print(f"[reset] ✅ 日记归档完成 ({today})")
+
+    # 2. 清除已完成任务
+    base = load_base_app_data()
+    before = len(base.get("tasks", []))
+    base["tasks"] = [
+        t for t in (base.get("tasks") or [])
+        if isinstance(t, dict) and t.get("status") != "completed"
+    ]
+    after = len(base["tasks"])
+    write_base_app_data(base)
+    _push_to_cloud_async(f"{label}-clean-completed")
+    print(f"[reset] ✅ 已完成任务清除 {before - after} 条 ({today})")
+
+    _set_last_reset_date(today)
+
+def _daily_5am_reset():
+    """凌晨5点执行 + 开机补跑（如果今天还没执行过）"""
+    # 开机时检查：今天是否已执行（凌晨5点后才补跑）
+    time.sleep(15)
+    try:
+        now = datetime.now()
+        today = now.date().isoformat()
+        if now.hour >= 5 and _get_last_reset_date() != today:
+            print(f"[reset] 🔄 开机补跑日重置 ({today})")
+            _do_daily_reset(today, label="startup")
+    except Exception as exc:
+        print(f"[reset] ⚠️  开机补跑错误: {exc}")
+
+    # 常驻循环：等凌晨5点
+    while True:
+        time.sleep(30)
+        try:
+            now = datetime.now()
+            if now.hour == 5:
+                today = now.date().isoformat()
+                if _get_last_reset_date() != today:
+                    _do_daily_reset(today, label="5am")
+        except Exception as exc:
+            print(f"[reset] ⚠️  凌晨重置错误: {exc}")
+
+threading.Thread(target=_daily_5am_reset, daemon=True).start()
+
+def _weread_auto_sync_scheduler(interval_hours: int = 2):
+    """每 N 小时自动从 Chrome 读取微信读书 Cookie 并同步，无需手动操作。
+    Chrome 必须曾经登录过 weread.qq.com，不需要浏览器正在运行。"""
+    time.sleep(60)   # 启动后等 60s，等系统稳定
+    while True:
+        try:
+            cookie = load_weread_cookie_from_chrome()
+            if cookie:
+                print("[weread-auto] 🔄 自动同步微信读书...")
+                result = fetch_weread_data(cookie, load_weread_notes_data())
+                save_weread_cookie(cookie)
+                _, counts = persist_weread_result(result)
+                _push_to_cloud_async("weread-auto-sync")
+                print(f"[weread-auto] ✅ 完成：{counts}")
+        except RuntimeError as e:
+            # Cookie 不存在或 Chrome 未授权，静默跳过
+            print(f"[weread-auto] ⚠️  跳过（{e}）")
+        except Exception as e:
+            print(f"[weread-auto] ❌ 同步失败：{e}")
+        time.sleep(interval_hours * 3600)
+
+threading.Thread(target=_weread_auto_sync_scheduler, args=(2,), daemon=True).start()
+
+def _push_diary_to_cloud_async(label: str = "auto"):
+    """把本地 diary.json 推送到云端 /api/diary"""
+    def _do():
+        if not CLOUD_API_TOKEN:
+            return
+        try:
+            diary = load_diary_file()
+            resp  = requests.post(
+                CLOUD_BASE_URL.rstrip("/") + "/api/diary",
+                json=diary,
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {CLOUD_API_TOKEN}"},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            print(f"[diary-push] ✅ 推送成功（{label}）archive={len(diary.get('archive', []))}天")
+        except Exception as exc:
+            print(f"[diary-push] ⚠️  推送失败（{label}）: {exc}")
+    threading.Thread(target=_do, daemon=True).start()
+
 BACKUP_DIR = os.path.join(os.path.dirname(__file__), ".backups")
 WEREAD_COOKIE_FILE = os.path.join(os.path.dirname(__file__), ".weread_cookie.json")
 WEREAD_DATA_FILE = os.path.join(os.path.dirname(__file__), ".weread_data.json")
 WEREAD_NOTES_FILE = os.path.join(os.path.dirname(__file__), ".weread_notes.json")
 WEREAD_BRIDGE_FILE = os.path.join(os.path.dirname(__file__), ".weread_bridge.json")
+WEREAD_READ_TEMPLATE_FILE = os.path.join(os.path.dirname(__file__), ".weread_read_template.json")
 BOOK_ACCENTS = ["#2d6a4f", "#4a4a6a", "#6a4a2a", "#3a6a5a", "#5a3a6a"]
 
 HEADERS_BASE = {
@@ -29,6 +368,66 @@ HEADERS_BASE = {
 }
 WEREAD_WEB_BASE = "https://weread.qq.com"
 WEREAD_MOBILE_BASE = "https://i.weread.qq.com"
+
+# ── GitHub Actions Secret 自动更新 ──────────────────────────────────────────
+# 需在 .env 中配置：
+#   GH_PAT  = 你的 GitHub Personal Access Token（需要 repo / secrets 权限）
+#   GH_REPO = 仓库路径，格式 owner/repo（例如 dx/task-app）
+_GH_PAT  = os.environ.get("GH_PAT", "")
+_GH_REPO = os.environ.get("GH_REPO", "")
+
+def _update_github_secret(cookie: str) -> bool:
+    """将最新 Cookie 推送到 GitHub Actions Secret WEREAD_COOKIE。
+    依赖 PyNaCl（pip install PyNaCl）和环境变量 GH_PAT、GH_REPO。
+    失败时静默返回 False，不影响主流程。
+    """
+    if not _GH_PAT or not _GH_REPO:
+        return False
+    try:
+        from base64 import b64encode
+        from nacl import encoding, public as nacl_public
+
+        gh_headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {_GH_PAT}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        # 1. 获取仓库公钥
+        key_resp = requests.get(
+            f"https://api.github.com/repos/{_GH_REPO}/actions/secrets/public-key",
+            headers=gh_headers, timeout=10,
+        )
+        key_resp.raise_for_status()
+        key_data   = key_resp.json()
+        public_key = key_data["key"]
+        key_id     = key_data["key_id"]
+
+        # 2. 用 libsodium SealedBox 加密
+        pk        = nacl_public.PublicKey(public_key.encode(), encoding.Base64Encoder())
+        encrypted = nacl_public.SealedBox(pk).encrypt(cookie.encode("utf-8"))
+        enc_b64   = b64encode(encrypted).decode("utf-8")
+
+        # 3. PUT 更新 Secret
+        put_resp = requests.put(
+            f"https://api.github.com/repos/{_GH_REPO}/actions/secrets/WEREAD_COOKIE",
+            headers=gh_headers,
+            json={"encrypted_value": enc_b64, "key_id": key_id},
+            timeout=10,
+        )
+        if put_resp.status_code in (201, 204):
+            print(f"[github-secret] ✅ WEREAD_COOKIE 已更新（{_GH_REPO}）")
+            return True
+        print(f"[github-secret] ⚠️  更新失败 HTTP {put_resp.status_code}: {put_resp.text[:200]}")
+        return False
+    except Exception as e:
+        print(f"[github-secret] ❌ 更新异常: {e}")
+        return False
+
+def _update_github_secret_async(cookie: str):
+    """在后台线程中更新 GitHub Secret，不阻塞 HTTP 响应。"""
+    threading.Thread(target=_update_github_secret, args=(cookie,), daemon=True).start()
+
+# ────────────────────────────────────────────────────────────────────────────
 
 def wr_get(path, cookie, params=None, base_url=WEREAD_WEB_BASE):
     last_error = None
@@ -81,6 +480,94 @@ def save_weread_cookie(cookie):
         os.chmod(WEREAD_COOKIE_FILE, 0o600)
     except OSError:
         pass
+
+def empty_weread_read_template_data():
+    return {
+        "latest": {},
+        "captures": [],
+        "updatedAt": "",
+    }
+
+def _sanitize_json_like(value, depth=0):
+    if depth > 6:
+        return None
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return value[:50000]
+    if isinstance(value, list):
+        return [_sanitize_json_like(item, depth + 1) for item in value[:100]]
+    if isinstance(value, dict):
+        cleaned = {}
+        for raw_key, raw_value in list(value.items())[:100]:
+            key = str(raw_key)[:200]
+            cleaned[key] = _sanitize_json_like(raw_value, depth + 1)
+        return cleaned
+    return str(value)[:2000]
+
+def normalize_weread_read_capture(capture):
+    if not isinstance(capture, dict):
+        return {}
+    request_headers = capture.get("requestHeaders") if isinstance(capture.get("requestHeaders"), dict) else {}
+    body_data = capture.get("bodyData")
+    body_keys = capture.get("bodyKeys") if isinstance(capture.get("bodyKeys"), list) else []
+    hints = capture.get("hints") if isinstance(capture.get("hints"), list) else []
+    return {
+        "fingerprint": str(capture.get("fingerprint", "")).strip(),
+        "capturedAt": str(capture.get("capturedAt", "")).strip(),
+        "completedAt": str(capture.get("completedAt", "")).strip(),
+        "method": str(capture.get("method", "POST")).strip().upper() or "POST",
+        "url": str(capture.get("url", "")).strip(),
+        "path": str(capture.get("path", "")).strip(),
+        "tabUrl": str(capture.get("tabUrl", "")).strip(),
+        "documentUrl": str(capture.get("documentUrl", "")).strip(),
+        "statusCode": int(capture.get("statusCode") or 0),
+        "bodyFormat": str(capture.get("bodyFormat", "")).strip(),
+        "bodyText": str(capture.get("bodyText", "")).strip()[:50000],
+        "bodyKeys": [str(item)[:200] for item in body_keys[:50]],
+        "hints": [str(item)[:200] for item in hints[:30]],
+        "requestHeaders": _sanitize_json_like(request_headers),
+        "bodyData": _sanitize_json_like(body_data),
+    }
+
+def load_weread_read_template_data():
+    data = load_json_file(WEREAD_READ_TEMPLATE_FILE, empty_weread_read_template_data())
+    if not isinstance(data, dict):
+        return empty_weread_read_template_data()
+    latest = normalize_weread_read_capture(data.get("latest", {}))
+    captures = []
+    for item in data.get("captures", []):
+        normalized = normalize_weread_read_capture(item)
+        if normalized.get("url"):
+            captures.append(normalized)
+    return {
+        "latest": latest if latest.get("url") else (captures[0] if captures else {}),
+        "captures": captures[:12],
+        "updatedAt": str(data.get("updatedAt", "")).strip(),
+    }
+
+def save_weread_read_template_capture(capture):
+    normalized = normalize_weread_read_capture(capture)
+    if not normalized.get("url"):
+        raise ValueError("缺少读取模板的 URL")
+    existing = load_weread_read_template_data()
+    captures = [normalized]
+    seen = {normalized.get("fingerprint") or normalized.get("url")}
+    for item in existing.get("captures", []):
+        key = item.get("fingerprint") or item.get("url")
+        if key in seen:
+            continue
+        seen.add(key)
+        captures.append(item)
+        if len(captures) >= 12:
+            break
+    payload = {
+        "latest": normalized,
+        "captures": captures,
+        "updatedAt": datetime.now().isoformat(timespec="seconds"),
+    }
+    write_json_file(WEREAD_READ_TEMPLATE_FILE, payload, mode=0o600)
+    return payload
 
 def load_json_file(path, default):
     if not os.path.exists(path):
@@ -903,6 +1390,22 @@ def fetch_weread_data(cookie, existing_notes_store=None):
 
     books.sort(key=lambda item: (item.get("readTimestamp") or 0, item.get("progressPercent") or 0), reverse=True)
 
+    # 获取今日阅读时长
+    today_str = datetime.now().strftime("%Y%m%d")
+    try:
+        read_detail = wr_get("/web/book/read", cookie, {"synckey": 0, "date": today_str})
+        today_read_map = {}
+        for item in (read_detail.get("readTimes") or read_detail.get("items") or []):
+            bid = str(item.get("bookId") or "")
+            mins = coerce_int_id(item.get("readingTime") or item.get("duration") or 0) // 60
+            if bid and mins > 0:
+                today_read_map[bid] = mins
+    except Exception:
+        today_read_map = {}
+
+    for book in books:
+        book["todayReadMinutes"] = today_read_map.get(str(book.get("_bookId", "")), 0)
+
     for book in books[:6]:
         try:
             info = wr_get("/web/book/info", cookie, {"bookId": book["_bookId"]})
@@ -1114,11 +1617,18 @@ def save_data():
 def weread_status():
     migrate_embedded_special_data()
     bridge = load_weread_bridge_data()
+    read_template = load_weread_read_template_data()
+    latest_capture = read_template.get("latest", {})
     return jsonify({
         "hasCookie": bool(load_weread_cookie()),
         "cookiePath": os.path.basename(WEREAD_COOKIE_FILE),
         "dataPath": os.path.basename(WEREAD_DATA_FILE),
         "notesPath": os.path.basename(WEREAD_NOTES_FILE),
+        "readTemplatePath": os.path.basename(WEREAD_READ_TEMPLATE_FILE),
+        "hasReadTemplate": bool(latest_capture.get("url")),
+        "readTemplateCapturedAt": latest_capture.get("capturedAt", ""),
+        "readTemplateLastUrl": latest_capture.get("url", ""),
+        "readTemplateCount": len(read_template.get("captures", [])),
         "bridgePath": os.path.basename(WEREAD_BRIDGE_FILE),
         "bridgeReady": bool(bridge.get("token")),
         "bridgeEndpoint": "/api/weread/mini-sync",
@@ -1128,6 +1638,30 @@ def weread_status():
         "autoImportBrowser": "Chrome",
         "extensionDir": "chrome-extension/weread-sync",
     })
+
+@app.route("/api/weread/read-template", methods=["GET", "POST"])
+def weread_read_template():
+    if request.method == "GET":
+        return jsonify(load_weread_read_template_data())
+
+    body = request.get_json(force=True) or {}
+    capture = body.get("capture") if isinstance(body.get("capture"), dict) else {}
+    if not capture:
+        return jsonify({"error": "缺少 capture 数据"}), 400
+
+    try:
+        payload = save_weread_read_template_capture(capture)
+        latest = payload.get("latest", {})
+        return jsonify({
+            "ok": True,
+            "templatePath": os.path.basename(WEREAD_READ_TEMPLATE_FILE),
+            "capturedAt": latest.get("capturedAt", ""),
+            "url": latest.get("url", ""),
+            "captures": len(payload.get("captures", [])),
+            "message": "已保存微信读书阅读请求模板",
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
 
 @app.route("/api/weread/bridge-token", methods=["POST"])
 def weread_bridge_token():
@@ -1256,6 +1790,9 @@ def weread_extension_sync():
         save_weread_cookie(cookie)
         migrate_embedded_special_data()
         _, counts = persist_weread_result(result)
+        # 同步成功后：推送云端 + 更新 GitHub Actions Secret（均后台异步，不阻塞响应）
+        _push_to_cloud_async("extension-sync")
+        _update_github_secret_async(cookie)
         return jsonify({
             "ok": True,
             "books": counts["books"],
@@ -1294,6 +1831,7 @@ def weread_sync():
             save_weread_cookie(incoming_cookie)
 
         persist_weread_result(result)
+        _push_to_cloud_async("manual-sync")
 
         return jsonify({
             "books": result["books"],
@@ -1316,6 +1854,40 @@ def weread_sync():
         return jsonify({"error": f"微信读书接口错误: {e}"}), 502
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+# ── 日记接口 ─────────────────────────────────────────────
+@app.route("/api/diary", methods=["GET"])
+def get_diary():
+    diary = archive_diary_if_needed(load_diary_file())
+    write_diary_file(diary)   # 顺便把归档状态持久化
+    return jsonify(diary)
+
+@app.route("/api/diary", methods=["POST"])
+def save_diary():
+    incoming = request.get_json(force=True)
+    diary    = archive_diary_if_needed(incoming)
+    write_diary_file(diary)
+    return jsonify({"ok": True})
+
+@app.route("/api/sync/pull", methods=["GET", "POST"])
+def sync_pull():
+    """从云端拉取数据并与本地合并（任务 + 日记）"""
+    try:
+        _pull_from_cloud("manual")
+        return jsonify({"ok": True, "msg": "已从云端拉取并合并"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/api/diary/push", methods=["GET", "POST"])
+def diary_push():
+    """把本地 diary.json 推送到云端"""
+    if not CLOUD_API_TOKEN:
+        return jsonify({"ok": False, "error": "未配置 API_TOKEN"}), 400
+    try:
+        _push_diary_to_cloud_async("manual")
+        return jsonify({"ok": True, "msg": "日记推送任务已启动"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 if __name__ == "__main__":
     host = os.environ.get("TASK_APP_HOST", "127.0.0.1")
