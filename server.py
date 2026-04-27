@@ -1611,6 +1611,7 @@ def save_data():
         })
     elif weread_notes_data.get("meta") or not has_weread_notes_content(current_weread_notes):
         write_weread_notes_data(weread_notes_data)
+    _push_to_cloud_async("local-save")
     return jsonify({"ok": True})
 
 @app.route("/api/weread/status", methods=["GET"])
@@ -1867,6 +1868,7 @@ def save_diary():
     incoming = request.get_json(force=True)
     diary    = archive_diary_if_needed(incoming)
     write_diary_file(diary)
+    _push_diary_to_cloud_async("local-save")
     return jsonify({"ok": True})
 
 @app.route("/api/sync/pull", methods=["GET", "POST"])
