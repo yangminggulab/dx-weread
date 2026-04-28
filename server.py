@@ -697,6 +697,10 @@ def normalize_weread_note(note):
     item["sourceUpdatedAt"] = item.get("sourceUpdatedAt", "")
     item["sourceUpdatedTimestamp"] = coerce_int_id(item.get("sourceUpdatedTimestamp"))
     item["projectId"] = item.get("projectId") if item.get("projectId") not in ("", None) else None
+    # updatedAt 永远用微信读书原始时间的日期部分，不受同步日期污染
+    src_date = (item["sourceUpdatedAt"] or "")[:10]
+    if src_date:
+        item["updatedAt"] = src_date
     return item
 
 def normalize_weread_update(item):
