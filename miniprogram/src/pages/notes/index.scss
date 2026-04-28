@@ -54,10 +54,11 @@
 .notes-list {
   height: calc(100vh - 300px);
   padding: 0 24px;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .note-card {
-  margin-bottom: 20px;
 }
 
 .note-header {
