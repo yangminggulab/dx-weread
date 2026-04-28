@@ -595,7 +595,7 @@ export default function TaskPage() {
       {/* ── 任务列表 ── */}
       {tab !== 'diary' && (
         // key={tab} 使切换 tab 时 ScrollView 重新挂载，触发 CSS 进场动画
-        <ScrollView key={tab} scrollY className='task-list'
+        <ScrollView key={tab} scrollY showScrollbar={false} className='task-list'
           onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
 
           {/* 骨架屏：仅在无缓存时展示 */}
