@@ -281,6 +281,7 @@ export default function TaskPage() {
   useDidShow(() => {
     archiveLoadedRef.current = false
     loadDiaryToday()
+    loadData()
   })
 
   // 小程序切后台/关闭时立即保存日记
@@ -322,9 +323,15 @@ export default function TaskPage() {
   async function handleStatusChange(task) {
     const next = normalizeStatus(task.status) === 'completed' ? 'in_progress' : 'completed'
     // 乐观更新：先改 UI，再发请求
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: next } : t))
+    const updatedTasks = tasks.map(t => t.id === task.id ? { ...t, status: next } : t)
+    setTasks(updatedTasks)
     try {
       await updateTask({ id: task.id, status: next })
+      // 写入 cache，防止 app 重启后状态回退
+      try {
+        const cached = Taro.getStorageSync(TASKS_CACHE_KEY) || {}
+        Taro.setStorageSync(TASKS_CACHE_KEY, { ...cached, tasks: updatedTasks })
+      } catch {}
     } catch {
       // 回滚
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: task.status } : t))
