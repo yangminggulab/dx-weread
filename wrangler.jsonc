@@ -17,5 +17,8 @@
       "pattern": "yangminggu.com/tasks*",
       "zone_name": "yangminggu.com"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": ["0 21 * * *"]
+  }
 }

@@ -1757,6 +1757,7 @@ def weread_mini_sync():
             return jsonify({"error": "Cookie 已失效，请重新登录微信读书后再试"}), 401
         return jsonify({"error": f"微信读书接口错误: {e}"}), 502
     except Exception as e:
+        app.logger.exception("WeRead mini-sync failed")
         update_weread_bridge_record(
             latestPushAt=datetime.now().isoformat(timespec="seconds"),
             latestSource=source,
@@ -1812,6 +1813,7 @@ def weread_extension_sync():
             return jsonify({"error": "Cookie 已失效，请重新登录微信读书后再试"}), 401
         return jsonify({"error": f"微信读书接口错误: {e}"}), 502
     except Exception as e:
+        app.logger.exception("WeRead extension-sync failed")
         return jsonify({"error": str(e)}), 500
 
 # ── WeRead 同步接口 ───────────────────────────────────
@@ -1853,6 +1855,7 @@ def weread_sync():
             return jsonify({"error": "Cookie 已失效，请重新获取"}), 401
         return jsonify({"error": f"微信读书接口错误: {e}"}), 502
     except Exception as e:
+        app.logger.exception("WeRead manual sync failed")
         return jsonify({"error": str(e)}), 500
 
 # ── 日记接口 ─────────────────────────────────────────────

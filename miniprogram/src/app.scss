@@ -1,0 +1,49 @@
+page {
+  background-color: #f7f5f0;
+  font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
+  color: #1c1c1c;
+}
+
+// 通用卡片
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 28px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+}
+
+// 标签
+.tag {
+  display: inline-block;
+  padding: 4px 16px;
+  border-radius: 20px;
+  font-size: 22px;
+  margin-right: 10px;
+  margin-bottom: 8px;
+}
+
+// 优先级颜色
+.priority-high   { color: #c0392b; background: #fdf0ef; }
+.priority-medium { color: #d47a00; background: #fef9ec; }
+.priority-low    { color: #3a7d52; background: #eef5f1; }
+
+// 状态颜色
+.status-todo        { color: #888; background: #f2f2f2; }
+.status-in_progress { color: #1e6db8; background: #eaf2fb; }
+.status-completed   { color: #3a7d52; background: #eef5f1; }
+
+// 空状态
+.empty {
+  text-align: center;
+  padding: 80px 0;
+  color: #aaa;
+  font-size: 28px;
+}
+
+// 分割线
+.divider {
+  height: 1px;
+  background: #f0ede8;
+  margin: 16px 0;
+}

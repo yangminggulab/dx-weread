@@ -12,6 +12,7 @@ data.json
 .weread_cookie.json
 .weread_data.json
 .weread_notes.json
+.weread_read_template.json
 
 # Generated build files
 src/dashboard.js
@@ -20,3 +21,7 @@ public/
 # Chrome extension local package/private key
 chrome-extension/weread-sync.crx
 chrome-extension/weread-sync.pem
+
+# 敏感配置（含 API Token，不要提交到 git！）
+.env
+miniprogram/src/config.js
