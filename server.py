@@ -56,7 +56,7 @@ def _push_to_cloud_async(label: str = "auto"):
                 r.raise_for_status()
                 cloud_data = r.json()
                 if isinstance(cloud_data, dict):
-                    data = _merge_cloud_into_local(data, cloud_data)
+                    data = _merge_cloud_into_local(data, cloud_data, preserve_local_only_tasks=True)
             except Exception as pull_exc:
                 print(f"[cloud-push] ⚠️  拉取云端数据失败，使用本地副本（{pull_exc}）")
 
@@ -69,7 +69,7 @@ def _push_to_cloud_async(label: str = "auto"):
     threading.Thread(target=_do, daemon=True).start()
 
 # ── 任务数据云端合并（不含日记） ─────────────────────────
-def _merge_cloud_into_local(local: dict, cloud: dict) -> dict:
+def _merge_cloud_into_local(local: dict, cloud: dict, preserve_local_only_tasks: bool = False) -> dict:
     """把云端 tasks/books/notes/updates 合并进本地，不处理日记（日记单独管理）。"""
     result = dict(local)
     for key in ("tasks", "books", "notes", "updates"):
@@ -83,6 +83,8 @@ def _merge_cloud_into_local(local: dict, cloud: dict) -> dict:
             merged = dict(cloud_by_id)
             for iid, local_item in local_by_id.items():
                 if iid not in merged:
+                    if preserve_local_only_tasks and local_item.get("status") != "completed":
+                        merged[iid] = local_item
                     continue  # 云端已删除，丢弃本地副本
                 local_ts = str(local_item.get("updatedAt") or local_item.get("createdAt") or "")
                 cloud_ts = str(merged[iid].get("updatedAt") or merged[iid].get("createdAt") or "")
