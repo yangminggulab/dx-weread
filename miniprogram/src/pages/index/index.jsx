@@ -196,6 +196,7 @@ export default function TaskPage() {
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
   const archiveLoadedRef = useRef(false)
+  const loadingRef      = useRef(false)   // 防止 loadData 并发
 
   // 全屏日记阅读器（随机导航，历史栈支持返回）
   const [diaryFullscreen, setDiaryFullscreen] = useState(false)
@@ -205,6 +206,8 @@ export default function TaskPage() {
 
   // ── 数据加载（缓存已在 useState 初始值读取，这里只做后台刷新）──────────────────
   const loadData = useCallback(async () => {
+    if (loadingRef.current) return   // 已有请求在途，跳过
+    loadingRef.current = true
     try {
       const data = await getData()
       setTasks(data.tasks || [])
@@ -213,6 +216,7 @@ export default function TaskPage() {
       if (!hasCache) Taro.showToast({ title: '加载失败', icon: 'none' })
     } finally {
       setLoading(false)
+      loadingRef.current = false
     }
   }, [])
 
@@ -253,9 +257,9 @@ export default function TaskPage() {
         data.today = { date: todayStr, content: td.content || '' }
       }
 
-      archiveLoadedRef.current = true
       setDiary(data)
       persistDiaryCache(data)
+      archiveLoadedRef.current = true  // setDiary 之后才标记，防止数据未渲染就跳过
     } catch {} finally {
       setDiaryLoading(false)
     }
@@ -365,7 +369,12 @@ export default function TaskPage() {
     }
     try {
       const res = await addTask({ ...form, status: 'in_progress' })
-      setTasks(prev => [...prev, res.task])
+      const newTasks = [...tasks, res.task]
+      setTasks(newTasks)
+      try {
+        const cached = Taro.getStorageSync(TASKS_CACHE_KEY) || {}
+        Taro.setStorageSync(TASKS_CACHE_KEY, { ...cached, tasks: newTasks })
+      } catch {}
       setShowAdd(false)
       setForm(EMPTY_FORM)
     } catch {
@@ -388,11 +397,15 @@ export default function TaskPage() {
       Taro.showToast({ title: '请输入任务名称', icon: 'none' })
       return
     }
-    // 乐观更新
-    setTasks(prev => prev.map(t => t.id === editTask.id ? { ...t, ...editForm } : t))
+    const updatedTasks = tasks.map(t => t.id === editTask.id ? { ...t, ...editForm } : t)
+    setTasks(updatedTasks)
     setEditTask(null)
     try {
       await updateTask({ id: editTask.id, ...editForm })
+      try {
+        const cached = Taro.getStorageSync(TASKS_CACHE_KEY) || {}
+        Taro.setStorageSync(TASKS_CACHE_KEY, { ...cached, tasks: updatedTasks })
+      } catch {}
     } catch {
       Taro.showToast({ title: '保存失败', icon: 'error' })
       loadData()
