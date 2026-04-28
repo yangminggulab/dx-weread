@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Taro from '@tarojs/taro'
 import { View, Text, ScrollView, Input, Textarea } from '@tarojs/components'
-import { getData, saveData, getDiary } from '../../api/index'
+import { getData, addNote, deleteNote, getDiary } from '../../api/index'
 import './index.scss'
 
 const todayStr = (() => {
@@ -11,7 +11,6 @@ const todayStr = (() => {
 
 export default function NotesPage() {
   const [notes, setNotes]         = useState([])
-  const [allData, setAllData]     = useState(null)
   const [diaryEntries, setDiaryEntries] = useState([])  // today + archive 展平
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
@@ -23,7 +22,6 @@ export default function NotesPage() {
       setLoading(true)
       const [data, diary] = await Promise.all([getData(), getDiary()])
       setNotes(data.notes || [])
-      setAllData(data)
       const entries = []
       if (diary.today?.date && diary.today?.content?.trim())
         entries.push({ date: diary.today.date, content: diary.today.content })
@@ -70,21 +68,15 @@ export default function NotesPage() {
       Taro.showToast({ title: '请输入笔记标题', icon: 'none' })
       return
     }
-    const maxId = notes.reduce((m, n) => Math.max(m, n.id || 0), 0)
-    const newNote = {
-      id: maxId + 1,
+    const newNoteData = {
       title: form.title,
       summary: form.summary,
       tags: form.tags ? form.tags.split(/[,，\s]+/).filter(Boolean) : [],
-      updatedAt: todayStr,
       projectId: null
     }
-    const newNotes = [newNote, ...notes]
-    const updated = { ...allData, notes: newNotes }
     try {
-      await saveData(updated)
-      setNotes(newNotes)
-      setAllData(updated)
+      const res = await addNote(newNoteData)
+      setNotes(prev => [res.note, ...prev])
       setShowAdd(false)
       setForm({ title: '', summary: '', tags: '' })
       Taro.showToast({ title: '已保存', icon: 'success' })
@@ -99,12 +91,9 @@ export default function NotesPage() {
       content: '删除后不可恢复',
       success: async ({ confirm }) => {
         if (!confirm) return
-        const newNotes = notes.filter(n => n.id !== id)
-        const updated = { ...allData, notes: newNotes }
         try {
-          await saveData(updated)
-          setNotes(newNotes)
-          setAllData(updated)
+          await deleteNote(id)
+          setNotes(prev => prev.filter(n => n.id !== id))
         } catch {
           Taro.showToast({ title: '删除失败', icon: 'error' })
         }

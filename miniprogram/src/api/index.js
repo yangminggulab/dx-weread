@@ -52,3 +52,9 @@ export const getDiaryToday = () => request('/api/diary?today=1')
 
 // 保存日记
 export const saveDiary = (diary) => request('/api/diary', 'POST', diary)
+
+// 新增笔记（原子接口，不影响任务数据）
+export const addNote = (note) => request('/api/notes/add', 'POST', note)
+
+// 删除笔记（原子接口）
+export const deleteNote = (id) => request('/api/notes/delete', 'POST', { id })

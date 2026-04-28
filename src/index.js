@@ -151,6 +151,33 @@ export default {
       return json({ ok: true });
     }
 
+    // POST /api/notes/add
+    if (path === "/api/notes/add" && request.method === "POST") {
+      const body = await request.json();
+      const data = await loadData(env.TASKS_KV);
+      const maxId = (data.notes || []).reduce((m, n) => Math.max(m, n.id || 0), 0);
+      const note = {
+        id: maxId + 1,
+        title: body.title || "",
+        summary: body.summary || "",
+        tags: body.tags || [],
+        updatedAt: new Date().toISOString().slice(0, 10),
+        projectId: body.projectId || null,
+      };
+      data.notes = [note, ...(data.notes || [])];
+      await saveData(env.TASKS_KV, data);
+      return json({ ok: true, note });
+    }
+
+    // POST /api/notes/delete
+    if (path === "/api/notes/delete" && request.method === "POST") {
+      const body = await request.json();
+      const data = await loadData(env.TASKS_KV);
+      data.notes = (data.notes || []).filter((n) => n.id !== body.id);
+      await saveData(env.TASKS_KV, data);
+      return json({ ok: true });
+    }
+
     // GET /api/diary — public read，独立 KV key
     if (path === "/api/diary" && request.method === "GET") {
       const raw = await env.TASKS_KV.get("diary_data");
