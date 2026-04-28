@@ -1220,7 +1220,8 @@ def build_weread_sync_payload(result):
         normalize_weread_note({
             **wn,
             "source": "weread",
-            "updatedAt": today,
+            # 优先用微信读书原始划线时间，没有才用同步日期
+            "updatedAt": (wn.get("sourceUpdatedAt") or "")[:10] or today,
             "syncedAt": synced_at,
             "projectId": None,
         })
