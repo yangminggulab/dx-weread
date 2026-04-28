@@ -36,23 +36,31 @@ CLOUD_BASE_URL = os.environ.get("CLOUD_BASE_URL", "https://yangminggu.com/tasks"
 CLOUD_API_TOKEN = os.environ.get("API_TOKEN", "")
 
 def _push_to_cloud_async(label: str = "auto"):
-    """在后台线程里把本地数据推送到 Cloudflare Worker，同步接口不阻塞。"""
+    """在后台线程里把本地数据推送到 Cloudflare Worker，同步接口不阻塞。
+    任务（tasks）以云端为权威：推送前先拉云端最新任务，防止本地旧状态覆盖
+    小程序刚标记的「已完成」。"""
     def _do():
         if not CLOUD_API_TOKEN:
             print(f"[cloud-push] 跳过：未设置 API_TOKEN（{label}）")
             return
         try:
             data = load_app_data()
-            endpoint = CLOUD_BASE_URL.rstrip("/") + "/api/data"
-            resp = requests.post(
-                endpoint,
-                json=data,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {CLOUD_API_TOKEN}",
-                },
-                timeout=15,
-            )
+            base = CLOUD_BASE_URL.rstrip("/")
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {CLOUD_API_TOKEN}",
+            }
+            # 推送前先拉云端最新任务，确保不覆盖小程序的操作
+            try:
+                r = requests.get(f"{base}/api/data", headers=headers, timeout=10)
+                r.raise_for_status()
+                cloud_tasks = r.json().get("tasks")
+                if isinstance(cloud_tasks, list):
+                    data["tasks"] = cloud_tasks
+            except Exception as pull_exc:
+                print(f"[cloud-push] ⚠️  拉取云端任务失败，使用本地任务（{pull_exc}）")
+
+            resp = requests.post(f"{base}/api/data", json=data, headers=headers, timeout=15)
             resp.raise_for_status()
             print(f"[cloud-push] ✅ 推送成功（{label}）tasks={len(data.get('tasks', []))} books={len(data.get('books', []))}")
         except Exception as exc:
