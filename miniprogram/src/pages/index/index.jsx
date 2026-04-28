@@ -350,8 +350,13 @@ export default function TaskPage() {
       success: async ({ confirm }) => {
         if (!confirm) return
         // 乐观删除
-        setTasks(prev => prev.filter(t => t.id !== id))
+        const updatedTasks = tasks.filter(t => t.id !== id)
+        setTasks(updatedTasks)
         setEditTask(null)
+        try {
+          const cached = Taro.getStorageSync(TASKS_CACHE_KEY) || {}
+          Taro.setStorageSync(TASKS_CACHE_KEY, { ...cached, tasks: updatedTasks })
+        } catch {}
         try {
           await deleteTask(id)
         } catch {

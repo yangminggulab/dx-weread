@@ -50,15 +50,15 @@ def _push_to_cloud_async(label: str = "auto"):
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {CLOUD_API_TOKEN}",
             }
-            # 推送前先拉云端最新任务，确保不覆盖小程序的操作
+            # 推送前先拉云端最新数据，按更新时间合并，避免本地旧副本覆盖小程序修改
             try:
                 r = requests.get(f"{base}/api/data", headers=headers, timeout=10)
                 r.raise_for_status()
-                cloud_tasks = r.json().get("tasks")
-                if isinstance(cloud_tasks, list):
-                    data["tasks"] = cloud_tasks
+                cloud_data = r.json()
+                if isinstance(cloud_data, dict):
+                    data = _merge_cloud_into_local(data, cloud_data)
             except Exception as pull_exc:
-                print(f"[cloud-push] ⚠️  拉取云端任务失败，使用本地任务（{pull_exc}）")
+                print(f"[cloud-push] ⚠️  拉取云端数据失败，使用本地副本（{pull_exc}）")
 
             resp = requests.post(f"{base}/api/data", json=data, headers=headers, timeout=15)
             resp.raise_for_status()

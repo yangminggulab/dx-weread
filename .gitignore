@@ -5,6 +5,14 @@
 .venv/
 __pycache__/
 *.pyc
+node_modules/
+.wrangler/
+logs/
+data/
+.daily_reset_date
+diary.json
+diary.json.bak-*
+miniprogram/.swc/
 
 # Local app data
 data.json
@@ -13,6 +21,7 @@ data.json
 .weread_data.json
 .weread_notes.json
 .weread_read_template.json
+.weread_notes.json.bak-*
 
 # Generated build files
 src/dashboard.js

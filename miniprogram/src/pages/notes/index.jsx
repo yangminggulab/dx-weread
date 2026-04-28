@@ -4,10 +4,20 @@ import { View, Text, ScrollView, Input, Textarea } from '@tarojs/components'
 import { getData, addNote, deleteNote, getDiary } from '../../api/index'
 import './index.scss'
 
-const todayStr = (() => {
+function getTodayStr() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-})()
+}
+
+function pickRandomNotes(notes, count = 3) {
+  const pool = [...notes]
+  const picked = []
+  while (picked.length < count && pool.length > 0) {
+    const idx = Math.floor(Math.random() * pool.length)
+    picked.push(pool.splice(idx, 1)[0])
+  }
+  return picked
+}
 
 export default function NotesPage() {
   const [notes, setNotes]         = useState([])
@@ -16,6 +26,7 @@ export default function NotesPage() {
   const [search, setSearch]       = useState('')
   const [showAdd, setShowAdd]     = useState(false)
   const [form, setForm]           = useState({ title: '', summary: '', tags: '' })
+  const [fallbackNotes, setFallbackNotes] = useState([])
 
   const loadData = useCallback(async () => {
     try {
@@ -37,18 +48,17 @@ export default function NotesPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  const todayStr = getTodayStr()
   const todayNotes = notes.filter(n => n.updatedAt === todayStr)
-  const displayed = todayNotes.length > 0
-    ? todayNotes
-    : (() => {
-        const pool = [...notes]
-        const picked = []
-        while (picked.length < 3 && pool.length > 0) {
-          const idx = Math.floor(Math.random() * pool.length)
-          picked.push(pool.splice(idx, 1)[0])
-        }
-        return picked
-      })()
+  useEffect(() => {
+    if (todayNotes.length > 0) {
+      setFallbackNotes([])
+      return
+    }
+    setFallbackNotes(pickRandomNotes(notes))
+  }, [notes, todayStr, todayNotes.length])
+
+  const displayed = todayNotes.length > 0 ? todayNotes : fallbackNotes
 
   // 搜索时同时检索笔记和日记
   const filteredNotes = search
