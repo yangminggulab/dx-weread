@@ -38,6 +38,21 @@ TASK_APP_HOST=0.0.0.0 TASK_APP_PORT=8080 python3 server.py
 
 ## 微信读书同步方式
 
+### 触发流程
+
+首次抓取登录态和恢复同步，靠的是**本地 Chrome 扩展**；后续定时备份、云端同步和自动阅读，靠的是 **GitHub Actions**。
+
+```mermaid
+flowchart TD
+  A["在 Chrome 登录 weread.qq.com"] --> B["扩展抓取 Cookie"]
+  B --> C["POST /api/weread/extension-sync 到本地 server.py"]
+  C --> D["写入 .weread_cookie.json / .weread_data.json / .weread_notes.json"]
+  C --> E["后台推送云端数据"]
+  C --> F["后台更新 GitHub Secret: WEREAD_COOKIE"]
+  F --> G["GitHub Actions 定时任务"]
+  G --> H["同步书架 / 导出笔记 / 自动阅读"]
+```
+
 ### 方式一：Chrome 扩展自动同步
 
 扩展目录在：
