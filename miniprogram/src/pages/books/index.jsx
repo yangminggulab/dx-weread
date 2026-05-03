@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Taro from '@tarojs/taro'
+import Taro, { useDidShow } from '@tarojs/taro'
 import { View, Text, ScrollView } from '@tarojs/components'
 import { getData } from '../../api/index'
 import './index.scss'
 
-const BOOKS_CACHE_KEY = 'books_cache_v1'
+const BOOKS_CACHE_KEY = 'books_cache_v2'
 
 const TABS = [
   { key: 'reading',  label: '在读' },
@@ -39,6 +39,7 @@ export default function BooksPage() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+  useDidShow(() => { loadData() })
 
   const finished = books.filter(b => (b.progressPercent ?? 0) >= 99)
   const finishedIds = new Set(finished.map(b => b.id))
