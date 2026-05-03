@@ -139,13 +139,6 @@ function pickTodayInHistoryIdx(archive) {
   }, [])
   if (sameDay.length) return sameDay[Math.floor(Math.random() * sameDay.length)]
 
-  // 降级：同月不同年
-  const sameMonth = archive.reduce((acc, e, i) => {
-    if (e.date?.slice(5, 7) === mm && e.date?.slice(0, 4) !== yyyy) acc.push(i)
-    return acc
-  }, [])
-  if (sameMonth.length) return sameMonth[Math.floor(Math.random() * sameMonth.length)]
-
   // 完全随机
   return Math.floor(Math.random() * archive.length)
 }
@@ -293,6 +286,11 @@ export default function TaskPage() {
     loadDiaryToday()
     loadDiary()
     loadData()
+    // 每次回到 app 重新随机，避免一直显示同一条
+    const archive = diaryRef.current?.archive
+    if (archive?.length > 0) {
+      setRandomArchiveIdx(pickTodayInHistoryIdx(archive))
+    }
   })
 
   // 小程序切后台/关闭时立即保存日记
