@@ -257,6 +257,11 @@ export default function TaskPage() {
         data.today = { date: todayStr, content: td.content || '' }
       }
 
+      // 网络返回空 archive 时，保留缓存里的历史数据
+      if (!data.archive.length) {
+        const cached = readCachedDiary()
+        if (cached?.archive?.length) data.archive = cached.archive
+      }
       setDiary(data)
       persistDiaryCache(data)
       archiveLoadedRef.current = true  // setDiary 之后才标记，防止数据未渲染就跳过
@@ -267,8 +272,9 @@ export default function TaskPage() {
 
   useEffect(() => { loadData() }, [loadData])
   useEffect(() => { loadDiaryToday() }, [loadDiaryToday])
+  useEffect(() => { loadDiary() }, [loadDiary])   // 启动时后台加载完整归档
 
-  // 进入日记 tab 时懒加载归档
+  // 进入日记 tab 时补加载（如果后台还没完成）
   useEffect(() => {
     if (tab === 'diary') loadDiary()
   }, [tab, loadDiary])
@@ -285,6 +291,7 @@ export default function TaskPage() {
   useDidShow(() => {
     archiveLoadedRef.current = false
     loadDiaryToday()
+    loadDiary()
     loadData()
   })
 
@@ -298,8 +305,8 @@ export default function TaskPage() {
     }
     const normalized = normalizeDiaryPayload(diaryRef.current)
     persistDiaryCache(normalized)
-    // 只有今日内容非空才推送，避免加载未完成时用空内容覆盖云端
-    if (normalized.today?.content?.trim()) {
+    // 只有今日内容非空且 archive 已加载完才推送
+    if (normalized.today?.content?.trim() && archiveLoadedRef.current) {
       saveDiary(normalized).catch(() => {})
     }
   })
@@ -427,6 +434,7 @@ export default function TaskPage() {
         setDiarySaving(true)
         const normalized = normalizeDiaryPayload(updated)
         persistDiaryCache(normalized)
+        if (!archiveLoadedRef.current) return   // archive 未加载完，只缓存不推送
         await saveDiary(normalized)
       } catch {
         Taro.showToast({ title: '保存失败', icon: 'error' })
