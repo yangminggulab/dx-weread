@@ -1,12 +1,14 @@
 name: Sync WeChat Reading
 
 on:
-  schedule:
-    - cron: '0 1,7,13,19 * * *'   # 每天 CST 09:00 / 15:00 / 21:00 / 03:00 各跑一次
   workflow_dispatch:                # 支持手动触发
+
+permissions:
+  contents: write   # 允许提交备份 & 笔记文件
 
 jobs:
   sync:
+    if: false  # 暂时禁用，Cookie 失效待修复
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,8 +17,22 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Validate required GitHub Actions secrets
+        env:
+          WEREAD_COOKIE: ${{ secrets.WEREAD_COOKIE }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+        run: |
+          missing=()
+          [[ -n "$WEREAD_COOKIE" ]] || missing+=("WEREAD_COOKIE")
+          [[ -n "$API_TOKEN" ]] || missing+=("API_TOKEN")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error title=Missing GitHub Actions secrets::${missing[*]} not configured. Open Settings > Secrets and variables > Actions and add them."
+            echo "Tip: run 'python3 scripts/sync_github_actions_secrets.py' locally to upload both secrets from this machine."
+            exit 1
+          fi
+
       - name: Install dependencies
-        run: pip install requests
+        run: pip install -r requirements.txt
 
       - name: Sync WeRead → Cloud
         env:
@@ -24,3 +40,28 @@ jobs:
           API_TOKEN: ${{ secrets.API_TOKEN }}
           CLOUD_BASE_URL: https://yangminggu.com/tasks
         run: python sync_weread.py
+
+      # ── 书架备份 & 笔记导出（每次同步后都更新，git diff 保护无变化不提交）──
+      - name: 书架备份
+        env:
+          WEREAD_COOKIE: ${{ secrets.WEREAD_COOKIE }}
+          BACKUP_DIR: data/bookshelf
+        run: python scripts/backup_bookshelf.py
+
+      - name: 读书笔记导出
+        env:
+          WEREAD_COOKIE: ${{ secrets.WEREAD_COOKIE }}
+          NOTES_DIR: data/notes
+        run: python scripts/export_notes.py
+
+      - name: 提交备份 & 笔记到仓库
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add data/ || true
+          if git diff --staged --quiet; then
+            echo "无新数据，跳过提交"
+          else
+            git commit -m "📚 自动备份: 书架 & 笔记 ($(date '+%Y-%m-%d'))"
+            git push
+          fi
