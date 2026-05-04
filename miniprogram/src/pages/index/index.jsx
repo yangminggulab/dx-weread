@@ -286,10 +286,10 @@ export default function TaskPage() {
     loadDiaryToday()
     loadDiary()
     loadData()
-    // 每次回到 app 重新随机，避免一直显示同一条
+    // 每次回到 app 纯随机换一条，历史上的今天只在首次加载时展示
     const archive = diaryRef.current?.archive
     if (archive?.length > 0) {
-      setRandomArchiveIdx(pickTodayInHistoryIdx(archive))
+      setRandomArchiveIdx(Math.floor(Math.random() * archive.length))
     }
   })
 
