@@ -355,13 +355,14 @@
 }
 
 // 两个卡片都用绝对定位：位置固定，上面的卡片可以自由扩大而不影响下面
+// 下半卡片固定 32%，上半卡片占剩余 68%，中间 20px 间距
 .diary-section-top {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: calc(50% - 8px); // 各占一半，中间留 16px 间距
-  margin-bottom: 0; // 覆盖 .card 的 margin-bottom，防止影响绝对定位计算
+  height: calc(68% - 20px);
+  margin-bottom: 0;
   display: flex;
   flex-direction: column;
   transition: height 0.3s ease, box-shadow 0.3s ease;
@@ -372,7 +373,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: calc(50% - 8px);
+  height: 32%;
   margin-bottom: 0;
   display: flex;
   flex-direction: column;
@@ -419,11 +420,10 @@
   min-height: 200px;
 }
 
-// 聚焦时：上面卡片真实扩大（textarea 可见区域变大），下面卡片原地压暗
+// 聚焦时：上半扩大到 68%，刚好贴近下半卡片但不重叠，下半压暗
 .diary-editing {
   .diary-section-top {
-    height: 72%;
-    z-index: 2; // 仅聚焦时才压在上层
+    height: calc(68% - 4px); // 扩到下半卡片上边缘（68%）减 4px 间隙，完全不重叠
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06);
   }
   .diary-section-bottom {
