@@ -349,7 +349,8 @@
 
 .diary-content-anim {
   flex: 1;
-  position: relative;  // 作为两个卡片的绝对定位基准
+  height: 100%; // 明确高度，保证子元素 % 定位可以正确计算
+  position: relative;
   min-height: 0;
   animation: fadeIn 0.22s ease both;
 }
@@ -362,6 +363,7 @@
   right: 0;
   height: calc(67% - 8px);
   margin-bottom: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   transition: height 0.3s ease, box-shadow 0.3s ease;
