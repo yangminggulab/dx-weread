@@ -398,13 +398,12 @@
 }
 
 .diary-section-top {
-  transition: box-shadow 0.25s ease, transform 0.25s ease;
+  transition: box-shadow 0.25s ease;
 }
 
-// 聚焦写字时：上半卡片浮起，下半卡片淡出压暗，布局不动
+// 聚焦写字时：上半卡片阴影加深，下半卡片淡出压暗，布局不动
 .diary-editing {
   .diary-section-top {
-    transform: translateY(-2px);
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06);
   }
   .diary-section-bottom {
