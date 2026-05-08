@@ -412,16 +412,12 @@
 }
 
 .diary-section-bottom {
-  transition: flex 0.25s ease, opacity 0.2s ease;
-}
-
-.diary-section-bottom {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
-  transition: opacity 0.1s;
+  transition: flex 0.25s ease, opacity 0.2s ease;
   &:active { opacity: 0.8; }
 }
 
