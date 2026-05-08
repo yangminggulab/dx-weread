@@ -356,8 +356,8 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   min-height: 0;
+  // overflow: hidden 移到 diary-textarea-scroll，让 ::after 伪元素可以向下延伸
 }
 
 .diary-header {
@@ -382,6 +382,7 @@
 .diary-textarea-scroll {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .diary-textarea {
