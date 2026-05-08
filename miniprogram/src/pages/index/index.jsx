@@ -583,6 +583,7 @@ export default function TaskPage() {
                     onInput={e => handleDiaryChange(e.detail.value)}
                     onFocus={() => setDiaryFocused(true)}
                     onBlur={() => setDiaryFocused(false)}
+                    adjustPosition
                     maxlength={10000}
                   />
                 </ScrollView>

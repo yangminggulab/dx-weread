@@ -400,16 +400,31 @@
 .diary-section-top {
   position: relative;
   z-index: 1;
-  transition: box-shadow 0.25s ease, padding-bottom 0.25s ease, margin-bottom 0.25s ease;
+  transition: box-shadow 0.25s ease;
+
+  // 用伪元素做视觉延伸，完全不触碰布局，零抖动
+  &::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -16px; // 覆盖两卡片之间的 gap
+    height: 0;
+    background: #fff;
+    border-radius: 0 0 12px 12px;
+    transition: height 0.25s ease;
+    z-index: 1;
+  }
 }
 
-// 聚焦写字时：上半卡片向下延伸覆盖，下半卡片压暗，布局不动
+// 聚焦写字时：伪元素向下延伸，下半卡片压暗，布局完全不动
 .diary-editing {
   .diary-section-top {
-    padding-bottom: 80px;
-    margin-bottom: -80px;
     z-index: 2;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06);
+    &::after {
+      height: 80px;
+    }
   }
   .diary-section-bottom {
     opacity: 0.2;
@@ -423,7 +438,7 @@
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
-  transition: opacity 0.25s ease, filter 0.25s ease;
+  transition: opacity 0.25s ease;
   &:active { opacity: 0.8; }
 }
 
