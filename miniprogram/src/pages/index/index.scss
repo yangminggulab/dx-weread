@@ -361,9 +361,9 @@
   left: 0;
   right: 0;
   height: calc(50% - 8px); // 各占一半，中间留 16px 间距
+  margin-bottom: 0; // 覆盖 .card 的 margin-bottom，防止影响绝对定位计算
   display: flex;
   flex-direction: column;
-  z-index: 1;
   transition: height 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -373,6 +373,7 @@
   left: 0;
   right: 0;
   height: calc(50% - 8px);
+  margin-bottom: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -422,7 +423,7 @@
 .diary-editing {
   .diary-section-top {
     height: 72%;
-    z-index: 2;
+    z-index: 2; // 仅聚焦时才压在上层
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06);
   }
   .diary-section-bottom {
