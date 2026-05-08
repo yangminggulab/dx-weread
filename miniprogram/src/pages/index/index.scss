@@ -381,11 +381,12 @@
 
 .diary-textarea-scroll {
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
 }
 
 .diary-textarea {
   width: 100%;
+  height: 100%;
   font-size: 28px;
   color: #1c1c1c;
   line-height: 1.8;
@@ -393,7 +394,25 @@
   border: none;
   padding: 0;
   box-sizing: border-box;
-  min-height: 120px;
+  min-height: 200px;
+}
+
+// 聚焦写字时上半撑满，往期日记收起
+.diary-editing {
+  .diary-section-top {
+    flex: 1;
+  }
+  .diary-section-bottom {
+    flex: 0;
+    opacity: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transition: flex 0.25s ease, opacity 0.2s ease;
+  }
+}
+
+.diary-section-bottom {
+  transition: flex 0.25s ease, opacity 0.2s ease;
 }
 
 .diary-section-bottom {

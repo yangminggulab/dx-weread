@@ -186,10 +186,13 @@ export default function TaskPage() {
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
 
+  const [diaryFocused, setDiaryFocused] = useState(false)
+
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
-  const archiveLoadedRef = useRef(false)
-  const loadingRef      = useRef(false)   // 防止 loadData 并发
+  const archiveLoadedRef     = useRef(false)
+  const archiveInitializedRef = useRef(false)  // 首次 archive 加载后置 true，防止 reload 覆盖 useDidShow 设的随机值
+  const loadingRef           = useRef(false)   // 防止 loadData 并发
 
   // 全屏日记阅读器（随机导航，历史栈支持返回）
   const [diaryFullscreen, setDiaryFullscreen] = useState(false)
@@ -258,6 +261,11 @@ export default function TaskPage() {
       setDiary(data)
       persistDiaryCache(data)
       archiveLoadedRef.current = true  // setDiary 之后才标记，防止数据未渲染就跳过
+      // 首次加载时初始化往期日记（useDidShow 若已有 archive 会提前设好随机值并置 true）
+      if (!archiveInitializedRef.current && data.archive?.length > 0) {
+        archiveInitializedRef.current = true
+        setRandomArchiveIdx(pickTodayInHistoryIdx(data.archive))
+      }
     } catch {} finally {
       setDiaryLoading(false)
     }
@@ -272,24 +280,18 @@ export default function TaskPage() {
     if (tab === 'diary') loadDiary()
   }, [tab, loadDiary])
 
-  // 历史上的今天：archive 变化后重新随机，避免沿用旧索引
-  useEffect(() => {
-    if (diary.archive?.length > 0) {
-      setRandomArchiveIdx(pickTodayInHistoryIdx(diary.archive))
-    } else {
-      setRandomArchiveIdx(null)
-    }
-  }, [diary.archive])
-
   useDidShow(() => {
     archiveLoadedRef.current = false
     loadDiaryToday()
     loadDiary()
     loadData()
-    // 每次回到 app 纯随机换一条，历史上的今天只在首次加载时展示
+    // 每次回到 app 纯随机换一条；archive 未加载时让 loadDiary 回调负责首次初始化
     const archive = diaryRef.current?.archive
     if (archive?.length > 0) {
+      archiveInitializedRef.current = true  // 阻止 loadDiary 回调再次覆盖
       setRandomArchiveIdx(Math.floor(Math.random() * archive.length))
+    } else {
+      archiveInitializedRef.current = false
     }
   })
 
@@ -566,7 +568,7 @@ export default function TaskPage() {
             <View className='empty'><Text>加载中...</Text></View>
           ) : (
             // key={tab} 让内容在切换回来时重播淡入动画
-            <View key='diary-content' className='diary-content-anim'>
+            <View key='diary-content' className={`diary-content-anim${diaryFocused ? ' diary-editing' : ''}`}>
               {/* 上半：今日日记 */}
               <View className='diary-section-top card'>
                 <View className='diary-header'>
@@ -579,8 +581,9 @@ export default function TaskPage() {
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
-                    autoHeight
-                    maxlength={5000}
+                    onFocus={() => setDiaryFocused(true)}
+                    onBlur={() => setDiaryFocused(false)}
+                    maxlength={10000}
                   />
                 </ScrollView>
               </View>
