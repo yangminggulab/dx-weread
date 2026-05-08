@@ -354,14 +354,13 @@
   animation: fadeIn 0.22s ease both;
 }
 
-// 两个卡片都用绝对定位：位置固定，上面的卡片可以自由扩大而不影响下面
-// 下半卡片固定 32%，上半卡片占剩余 68%，中间 20px 间距
+// 两个卡片绝对定位：上 67% 下 33%，中间 16px 间距，接近黄金比例
 .diary-section-top {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: calc(68% - 20px);
+  height: calc(67% - 8px);
   margin-bottom: 0;
   display: flex;
   flex-direction: column;
@@ -373,7 +372,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 32%;
+  height: calc(33% - 8px);
   margin-bottom: 0;
   display: flex;
   flex-direction: column;
@@ -420,14 +419,15 @@
   min-height: 200px;
 }
 
-// 聚焦时：上半扩大到 68%，刚好贴近下半卡片但不重叠，下半压暗
+// 聚焦时：上半扩大到 84%，下半压暗至几乎不可见（0.12 opacity），轻微重叠无感
 .diary-editing {
   .diary-section-top {
-    height: calc(68% - 4px); // 扩到下半卡片上边缘（68%）减 4px 间隙，完全不重叠
+    height: calc(84% - 8px);
+    z-index: 2;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06);
   }
   .diary-section-bottom {
-    opacity: 0.15;
+    opacity: 0.12;
     pointer-events: none;
   }
 }
