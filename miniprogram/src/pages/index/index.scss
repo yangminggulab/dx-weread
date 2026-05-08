@@ -348,16 +348,36 @@
 }
 
 .diary-content-anim {
-  display: contents;  // 不影响 flex 布局，只包裹动画
+  flex: 1;
+  position: relative;  // 作为两个卡片的绝对定位基准
+  min-height: 0;
   animation: fadeIn 0.22s ease both;
 }
 
+// 两个卡片都用绝对定位：位置固定，上面的卡片可以自由扩大而不影响下面
 .diary-section-top {
-  flex: 1;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(50% - 8px); // 各占一半，中间留 16px 间距
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  // overflow: hidden 移到 diary-textarea-scroll，让 ::after 伪元素可以向下延伸
+  z-index: 1;
+  transition: height 0.3s ease, box-shadow 0.3s ease;
+}
+
+.diary-section-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(50% - 8px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity 0.3s ease;
+  &:active { opacity: 0.8; }
 }
 
 .diary-header {
@@ -398,49 +418,17 @@
   min-height: 200px;
 }
 
-.diary-section-top {
-  position: relative;
-  z-index: 1;
-  transition: box-shadow 0.25s ease;
-
-  // 用伪元素做视觉延伸，完全不触碰布局，零抖动
-  &::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -16px; // 覆盖两卡片之间的 gap
-    height: 0;
-    background: #fff;
-    border-radius: 0 0 12px 12px;
-    transition: height 0.25s ease;
-    z-index: 1;
-  }
-}
-
-// 聚焦写字时：伪元素向下延伸，下半卡片压暗，布局完全不动
+// 聚焦时：上面卡片真实扩大（textarea 可见区域变大），下面卡片原地压暗
 .diary-editing {
   .diary-section-top {
+    height: 72%;
     z-index: 2;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06);
-    &::after {
-      height: 80px;
-    }
   }
   .diary-section-bottom {
-    opacity: 0.2;
+    opacity: 0.15;
     pointer-events: none;
   }
-}
-
-.diary-section-bottom {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-height: 0;
-  transition: opacity 0.25s ease;
-  &:active { opacity: 0.8; }
 }
 
 .diary-random-header {
