@@ -178,6 +178,23 @@ export default {
       return json({ ok: true });
     }
 
+    // POST /api/notes/update
+    if (path === "/api/notes/update" && request.method === "POST") {
+      const body = await request.json();
+      const data = await loadData(env.TASKS_KV);
+      const idx = (data.notes || []).findIndex((n) => n.id === body.id);
+      if (idx === -1) return json({ ok: false, error: "not found" }, 404);
+      data.notes[idx] = {
+        ...data.notes[idx],
+        title: body.title ?? data.notes[idx].title,
+        summary: body.summary ?? data.notes[idx].summary,
+        tags: body.tags ?? data.notes[idx].tags,
+        updatedAt: new Date().toISOString().slice(0, 10),
+      };
+      await saveData(env.TASKS_KV, data);
+      return json({ ok: true, note: data.notes[idx] });
+    }
+
     // GET /api/diary — public read，独立 KV key
     if (path === "/api/diary" && request.method === "GET") {
       const raw = await env.TASKS_KV.get("diary_data");
@@ -197,12 +214,12 @@ export default {
     if (path === "/api/diary" && request.method === "POST") {
       const body = await request.json();
       const incoming = body?.today ?? {};
-      // 同一天有内容时，不允许空内容覆盖
       const raw = await env.TASKS_KV.get("diary_data");
       if (raw) {
         try {
           const stored = JSON.parse(raw);
           const storedToday = stored?.today ?? {};
+          // 同一天有内容时，不允许空内容覆盖
           if (
             storedToday.date === incoming.date &&
             storedToday.content?.trim() &&
@@ -210,6 +227,20 @@ export default {
           ) {
             return json({ ok: true, skipped: true });
           }
+          // archive 永远合并，不允许用少量条目覆盖多条目
+          const storedArchive = stored?.archive ?? [];
+          const incomingArchive = body?.archive ?? [];
+          const archiveMap = {};
+          for (const e of storedArchive) {
+            if (e?.date) archiveMap[e.date] = e;
+          }
+          for (const e of incomingArchive) {
+            if (!e?.date) continue;
+            if (!archiveMap[e.date] || (e.content || '').length > (archiveMap[e.date].content || '').length) {
+              archiveMap[e.date] = e;
+            }
+          }
+          body.archive = Object.values(archiveMap).sort((a, b) => a.date < b.date ? -1 : 1);
         } catch {}
       }
       await env.TASKS_KV.put("diary_data", JSON.stringify(body));

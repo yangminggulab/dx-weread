@@ -58,3 +58,6 @@ export const addNote = (note) => request('/api/notes/add', 'POST', note)
 
 // 删除笔记（原子接口）
 export const deleteNote = (id) => request('/api/notes/delete', 'POST', { id })
+
+// 更新笔记（原子接口）
+export const updateNote = (note) => request('/api/notes/update', 'POST', note)

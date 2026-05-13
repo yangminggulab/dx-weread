@@ -6,6 +6,7 @@ const APP_URLS = [
 const syncBtn = document.getElementById("syncBtn");
 const openBtn = document.getElementById("openBtn");
 const statusBox = document.getElementById("status");
+const captureStatusBox = document.getElementById("captureStatus");
 const versionBox = document.getElementById("version");
 
 if (versionBox) {
@@ -15,6 +16,11 @@ if (versionBox) {
 function setStatus(type, text) {
   statusBox.className = `status ${type}`;
   statusBox.textContent = text;
+}
+
+function setCaptureStatus(type, text) {
+  captureStatusBox.className = `status ${type}`;
+  captureStatusBox.textContent = text;
 }
 
 function sendMessage(message) {
@@ -44,20 +50,37 @@ async function refreshStatusFromBackground() {
   const state = await sendMessage({ type: "GET_SYNC_STATUS" });
   if (!state || !state.message) {
     setStatus("idle", "自动同步已启用。打开微信读书页面后，后台会自动抓 Cookie 并同步。");
+  } else {
+    const type =
+      state.status === "ok"
+        ? "ok"
+        : state.status === "err"
+          ? "err"
+          : "idle";
+
+    const suffix = state.lastSuccessAt
+      ? `\n上次成功：${state.lastSuccessAt.replace("T", " ").slice(0, 16)}`
+      : "";
+    setStatus(type, `${state.message}${suffix}`);
+  }
+
+  const captureState = await sendMessage({ type: "GET_READ_CAPTURE_STATUS" });
+  if (!captureState || !captureState.message) {
+    setCaptureStatus("idle", "打开任意微信读书 reader 页面并停留几秒后，扩展会自动捕获阅读请求模板。");
     return;
   }
 
-  const type =
-    state.status === "ok"
+  const captureType =
+    captureState.status === "ok"
       ? "ok"
-      : state.status === "err"
+      : captureState.status === "err"
         ? "err"
         : "idle";
 
-  const suffix = state.lastSuccessAt
-    ? `\n上次成功：${state.lastSuccessAt.replace("T", " ").slice(0, 16)}`
+  const captureSuffix = captureState.lastCapturedAt
+    ? `\n最近捕获：${captureState.lastCapturedAt.replace("T", " ").slice(0, 16)}`
     : "";
-  setStatus(type, `${state.message}${suffix}`);
+  setCaptureStatus(captureType, `${captureState.message}${captureSuffix}`);
 }
 
 syncBtn.addEventListener("click", async () => {
@@ -87,4 +110,5 @@ openBtn.addEventListener("click", async () => {
 
 refreshStatusFromBackground().catch(() => {
   setStatus("idle", "自动同步已启用。打开微信读书页面后，后台会自动尝试同步。");
+  setCaptureStatus("idle", "打开任意微信读书 reader 页面并停留几秒后，扩展会自动捕获阅读请求模板。");
 });

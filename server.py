@@ -3,17 +3,55 @@ WeRead + Dashboard 本地服务
 运行: python3 server.py
 访问: http://localhost:8080
 """
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, make_response
 from datetime import datetime
 import hashlib
 import math
+from pathlib import Path
 import secrets
 import threading
 import time
 import requests, os, json
 
+from scripts.github_actions_secrets import pick_github_token, resolve_github_repo, sync_repo_secrets
+
 app = Flask(__name__, static_folder=os.path.dirname(__file__))
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data.json")
+LOCAL_BRIDGE_ALLOWED_ORIGINS = {
+    "https://yangminggu.com",
+    "https://www.yangminggu.com",
+    "http://127.0.0.1:8080",
+    "http://localhost:8080",
+}
+
+
+def _apply_local_bridge_headers(response):
+    origin = request.headers.get("Origin", "")
+    if origin in LOCAL_BRIDGE_ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = (
+            request.headers.get("Access-Control-Request-Headers")
+            or "Content-Type, Authorization"
+        )
+        response.headers["Vary"] = "Origin, Access-Control-Request-Headers, Access-Control-Request-Private-Network"
+        if request.headers.get("Access-Control-Request-Private-Network") == "true":
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
+
+
+@app.before_request
+def _handle_local_bridge_preflight():
+    if request.method == "OPTIONS" and request.path.startswith("/api/"):
+        return _apply_local_bridge_headers(make_response("", 204))
+    return None
+
+
+@app.after_request
+def _after_request(response):
+    if request.path.startswith("/api/"):
+        return _apply_local_bridge_headers(response)
+    return response
 
 # ── 云端自动推送配置 ──────────────────────────────────────
 _ENV_FILE = os.path.join(os.path.dirname(__file__), ".env")
@@ -34,6 +72,40 @@ _load_env_file()
 
 CLOUD_BASE_URL = os.environ.get("CLOUD_BASE_URL", "https://yangminggu.com/tasks")
 CLOUD_API_TOKEN = os.environ.get("API_TOKEN", "")
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+WEREAD_SYNC_MODE = (os.environ.get("WEREAD_SYNC_MODE", "hybrid") or "hybrid").strip().lower()
+WEREAD_ENABLE_GITHUB_SECRET_SYNC = _env_flag(
+    "WEREAD_ENABLE_GITHUB_SECRET_SYNC",
+    default=WEREAD_SYNC_MODE != "local-only",
+)
+WEREAD_AUTO_SYNC_SOURCE = (
+    os.environ.get(
+        "WEREAD_AUTO_SYNC_SOURCE",
+        "saved-cookie" if WEREAD_SYNC_MODE == "local-only" else "chrome",
+    )
+    or "saved-cookie"
+).strip().lower()
+WEREAD_AUTO_SYNC_INTERVAL_HOURS = max(_env_float("WEREAD_AUTO_SYNC_INTERVAL_HOURS", 2.0), 0.25)
+WEREAD_AUTO_SYNC_START_DELAY_SECONDS = max(_env_float("WEREAD_AUTO_SYNC_START_DELAY_SECONDS", 60.0), 0.0)
+WEREAD_AUTO_SYNC_ON_START = _env_flag("WEREAD_AUTO_SYNC_ON_START", True)
 
 def _push_to_cloud_async(label: str = "auto"):
     """在后台线程里把本地数据推送到 Cloudflare Worker，同步接口不阻塞。
@@ -322,25 +394,27 @@ threading.Thread(target=_daily_5am_reset, daemon=True).start()
 def _weread_auto_sync_scheduler(interval_hours: int = 2):
     """每 N 小时自动从 Chrome 读取微信读书 Cookie 并同步，无需手动操作。
     Chrome 必须曾经登录过 weread.qq.com，不需要浏览器正在运行。"""
-    time.sleep(60)   # 启动后等 60s，等系统稳定
+    time.sleep(WEREAD_AUTO_SYNC_START_DELAY_SECONDS)
+    first_round = True
     while True:
+        if first_round and not WEREAD_AUTO_SYNC_ON_START:
+            first_round = False
+            time.sleep(interval_hours * 3600)
+            continue
+
         try:
-            cookie = load_weread_cookie_from_chrome()
+            cookie = _resolve_auto_sync_cookie()
             if cookie:
                 print("[weread-auto] 🔄 自动同步微信读书...")
-                result = fetch_weread_data(cookie, load_weread_notes_data())
-                save_weread_cookie(cookie)
-                _, counts = persist_weread_result(result)
-                _push_to_cloud_async("weread-auto-sync")
+                _, counts = _run_weread_sync(cookie, "weread-auto-sync")
                 print(f"[weread-auto] ✅ 完成：{counts}")
         except RuntimeError as e:
             # Cookie 不存在或 Chrome 未授权，静默跳过
             print(f"[weread-auto] ⚠️  跳过（{e}）")
         except Exception as e:
             print(f"[weread-auto] ❌ 同步失败：{e}")
+        first_round = False
         time.sleep(interval_hours * 3600)
-
-threading.Thread(target=_weread_auto_sync_scheduler, args=(2,), daemon=True).start()
 
 def _push_diary_to_cloud_async(label: str = "auto"):
     """把本地 diary.json 推送到云端 /api/diary"""
@@ -381,61 +455,48 @@ WEREAD_MOBILE_BASE = "https://i.weread.qq.com"
 
 # ── GitHub Actions Secret 自动更新 ──────────────────────────────────────────
 # 需在 .env 中配置：
-#   GH_PAT  = 你的 GitHub Personal Access Token（需要 repo / secrets 权限）
+#   GH_PAT  = 你的 GitHub Personal Access Token（或 GH_TOKEN / GITHUB_TOKEN）
 #   GH_REPO = 仓库路径，格式 owner/repo（例如 dx/task-app）
-_GH_PAT  = os.environ.get("GH_PAT", "")
-_GH_REPO = os.environ.get("GH_REPO", "")
+_GH_PAT, _GH_PAT_SOURCE = pick_github_token()
+_GH_REPO = resolve_github_repo(Path(__file__).resolve().parent)
+_GH_SECRET_SYNC_REASON = ""
+if not WEREAD_ENABLE_GITHUB_SECRET_SYNC:
+    _GH_SECRET_SYNC_REASON = "disabled"
+elif not _GH_REPO:
+    _GH_SECRET_SYNC_REASON = "missing_repo"
+elif not _GH_PAT:
+    _GH_SECRET_SYNC_REASON = "missing_token"
 
-def _update_github_secret(cookie: str) -> bool:
-    """将最新 Cookie 推送到 GitHub Actions Secret WEREAD_COOKIE。
-    依赖 PyNaCl（pip install PyNaCl）和环境变量 GH_PAT、GH_REPO。
-    失败时静默返回 False，不影响主流程。
-    """
-    if not _GH_PAT or not _GH_REPO:
+if _GH_SECRET_SYNC_REASON == "disabled":
+    if WEREAD_SYNC_MODE == "local-only":
+        print("[github-secret] 纯本地模式：已禁用 GitHub Secret 自动同步")
+    else:
+        print("[github-secret] 已禁用 GitHub Secret 自动同步")
+elif _GH_SECRET_SYNC_REASON == "missing_token":
+    print("[github-secret] 自动同步未启用：缺少有效 GitHub token（请设置 GH_PAT / GH_TOKEN）")
+elif _GH_SECRET_SYNC_REASON == "missing_repo":
+    print("[github-secret] 自动同步未启用：缺少 GH_REPO，且无法从 git remote 推断仓库")
+else:
+    print(f"[github-secret] 自动同步已启用：{_GH_REPO}（token: {_GH_PAT_SOURCE}）")
+
+def _update_github_secrets(secret_values: dict[str, str]) -> bool:
+    """将本地关键同步配置推送到 GitHub Actions Secrets。"""
+    if not WEREAD_ENABLE_GITHUB_SECRET_SYNC or not _GH_PAT or not _GH_REPO:
         return False
     try:
-        from base64 import b64encode
-        from nacl import encoding, public as nacl_public
-
-        gh_headers = {
-            "Accept": "application/vnd.github+json",
-            "Authorization": f"Bearer {_GH_PAT}",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
-        # 1. 获取仓库公钥
-        key_resp = requests.get(
-            f"https://api.github.com/repos/{_GH_REPO}/actions/secrets/public-key",
-            headers=gh_headers, timeout=10,
-        )
-        key_resp.raise_for_status()
-        key_data   = key_resp.json()
-        public_key = key_data["key"]
-        key_id     = key_data["key_id"]
-
-        # 2. 用 libsodium SealedBox 加密
-        pk        = nacl_public.PublicKey(public_key.encode(), encoding.Base64Encoder())
-        encrypted = nacl_public.SealedBox(pk).encrypt(cookie.encode("utf-8"))
-        enc_b64   = b64encode(encrypted).decode("utf-8")
-
-        # 3. PUT 更新 Secret
-        put_resp = requests.put(
-            f"https://api.github.com/repos/{_GH_REPO}/actions/secrets/WEREAD_COOKIE",
-            headers=gh_headers,
-            json={"encrypted_value": enc_b64, "key_id": key_id},
-            timeout=10,
-        )
-        if put_resp.status_code in (201, 204):
-            print(f"[github-secret] ✅ WEREAD_COOKIE 已更新（{_GH_REPO}）")
+        updated = sync_repo_secrets(_GH_REPO, _GH_PAT, secret_values)
+        if updated:
+            print(f"[github-secret] ✅ 已更新 {', '.join(updated)}（{_GH_REPO}）")
             return True
-        print(f"[github-secret] ⚠️  更新失败 HTTP {put_resp.status_code}: {put_resp.text[:200]}")
+        print("[github-secret] 跳过：没有可更新的 Secret")
         return False
     except Exception as e:
         print(f"[github-secret] ❌ 更新异常: {e}")
         return False
 
-def _update_github_secret_async(cookie: str):
+def _update_github_secret_async(secret_values: dict[str, str]):
     """在后台线程中更新 GitHub Secret，不阻塞 HTTP 响应。"""
-    threading.Thread(target=_update_github_secret, args=(cookie,), daemon=True).start()
+    threading.Thread(target=_update_github_secrets, args=(secret_values,), daemon=True).start()
 
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -1349,6 +1410,52 @@ def load_weread_cookie_from_chrome():
 
     return "; ".join(pairs)
 
+
+def _resolve_auto_sync_cookie() -> str:
+    source = WEREAD_AUTO_SYNC_SOURCE
+    if source == "saved-cookie":
+        cookie = load_weread_cookie()
+        if cookie:
+            return cookie
+        raise RuntimeError("本地未找到可用的已保存 Cookie，请先手动同步一次或粘贴 Cookie")
+
+    if source == "chrome":
+        return load_weread_cookie_from_chrome()
+
+    if source == "prefer-saved":
+        return load_weread_cookie() or load_weread_cookie_from_chrome()
+
+    if source == "prefer-chrome":
+        try:
+            return load_weread_cookie_from_chrome()
+        except RuntimeError:
+            cookie = load_weread_cookie()
+            if cookie:
+                return cookie
+            raise
+
+    cookie = load_weread_cookie()
+    if cookie:
+        return cookie
+    return load_weread_cookie_from_chrome()
+
+
+def _run_weread_sync(cookie: str, label: str, sync_github_secret: bool = False):
+    result = fetch_weread_data(cookie, load_weread_notes_data())
+    save_weread_cookie(cookie)
+    migrate_embedded_special_data()
+    _, counts = persist_weread_result(result)
+    _push_to_cloud_async(label)
+    if sync_github_secret and WEREAD_ENABLE_GITHUB_SECRET_SYNC:
+        _update_github_secret_async({
+            "WEREAD_COOKIE": cookie,
+            "API_TOKEN": CLOUD_API_TOKEN,
+        })
+    return result, counts
+
+
+threading.Thread(target=_weread_auto_sync_scheduler, args=(WEREAD_AUTO_SYNC_INTERVAL_HOURS,), daemon=True).start()
+
 def fetch_weread_data(cookie, existing_notes_store=None):
     # 1. 书架
     shelf = wr_get("/web/shelf/sync", cookie)
@@ -1652,6 +1759,15 @@ def weread_status():
         "bridgeLatestStatus": bridge.get("latestStatus", ""),
         "autoImportBrowser": "Chrome",
         "extensionDir": "chrome-extension/weread-sync",
+        "wereadSyncMode": WEREAD_SYNC_MODE,
+        "wereadAutoSyncEnabled": True,
+        "wereadAutoSyncSource": WEREAD_AUTO_SYNC_SOURCE,
+        "wereadAutoSyncIntervalHours": WEREAD_AUTO_SYNC_INTERVAL_HOURS,
+        "wereadAutoSyncOnStart": WEREAD_AUTO_SYNC_ON_START,
+        "cloudPushEnabled": bool(CLOUD_API_TOKEN),
+        "githubSecretSyncEnabled": not _GH_SECRET_SYNC_REASON,
+        "githubSecretRepo": _GH_REPO,
+        "githubSecretSyncReason": _GH_SECRET_SYNC_REASON,
     })
 
 @app.route("/api/weread/read-template", methods=["GET", "POST"])
@@ -1794,6 +1910,39 @@ def weread_import_cookie():
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 400
 
+
+@app.route("/api/weread/local-sync", methods=["POST"])
+def weread_local_sync():
+    try:
+        cookie = load_weread_cookie_from_chrome()
+        result, counts = _run_weread_sync(cookie, "local-chrome-sync", sync_github_secret=True)
+        return jsonify({
+            "ok": True,
+            "books": result["books"],
+            "notes": result["notes"],
+            "savedCookie": True,
+            "usedSavedCookie": False,
+            "cookiePath": os.path.basename(WEREAD_COOKIE_FILE),
+            "dataPath": os.path.basename(WEREAD_DATA_FILE),
+            "notesPath": os.path.basename(WEREAD_NOTES_FILE),
+            "message": f"已从 Chrome 自动读取并同步：{counts['books']} 本书，{counts['notes']} 份笔记",
+        })
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 400
+    except requests.HTTPError as e:
+        payload = getattr(e, "weread_payload", {}) if hasattr(e, "weread_payload") else {}
+        err_code = payload.get("errCode")
+        err_msg = payload.get("errMsg") or payload.get("errmsg") or ""
+        if err_code == -2012 or "登录超时" in err_msg:
+            return jsonify({"error": "Chrome 中的微信读书登录已失效，请重新登录后再试"}), 401
+        if e.response is not None and e.response.status_code in (401, 403):
+            return jsonify({"error": "Chrome 中的微信读书登录已失效，请重新登录后再试"}), 401
+        return jsonify({"error": f"微信读书接口错误: {e}"}), 502
+    except Exception as e:
+        app.logger.exception("WeRead local-sync failed")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/weread/extension-sync", methods=["POST"])
 def weread_extension_sync():
     body = request.get_json(force=True)
@@ -1802,13 +1951,7 @@ def weread_extension_sync():
         return jsonify({"error": "扩展未提供 Cookie"}), 400
 
     try:
-        result = fetch_weread_data(cookie, load_weread_notes_data())
-        save_weread_cookie(cookie)
-        migrate_embedded_special_data()
-        _, counts = persist_weread_result(result)
-        # 同步成功后：推送云端 + 更新 GitHub Actions Secret（均后台异步，不阻塞响应）
-        _push_to_cloud_async("extension-sync")
-        _update_github_secret_async(cookie)
+        _, counts = _run_weread_sync(cookie, "extension-sync", sync_github_secret=True)
         return jsonify({
             "ok": True,
             "books": counts["books"],
@@ -1842,13 +1985,7 @@ def weread_sync():
         return jsonify({"error": "缺少 Cookie，且未找到本地保存的 Cookie"}), 400
 
     try:
-        result = fetch_weread_data(cookie, load_weread_notes_data())
-
-        if incoming_cookie:
-            save_weread_cookie(incoming_cookie)
-
-        persist_weread_result(result)
-        _push_to_cloud_async("manual-sync")
+        result, _ = _run_weread_sync(cookie, "manual-sync")
 
         return jsonify({
             "books": result["books"],

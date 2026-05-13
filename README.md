@@ -38,7 +38,42 @@ TASK_APP_HOST=0.0.0.0 TASK_APP_PORT=8080 python3 server.py
 
 ## 微信读书同步方式
 
-### 触发流程
+### 纯本地自动同步（推荐）
+
+如果你的目标是“只在这台 Mac 上稳定自动同步”，最省心的方案是不依赖 Chrome 扩展，也不依赖 GitHub Actions。
+
+项目已经支持：
+
+- 首次手动粘贴一次 Cookie，或从 Chrome/扩展同步一次
+- 后台默认直接使用项目本地保存的 `.weread_cookie.json`
+- 不需要每次读取 macOS 钥匙串，所以不要求系统密码
+- 后台按固定间隔自动同步书架和笔记
+- 如果配置了 `API_TOKEN`，同步后会顺手推送到你的云端 `yangminggu.com/tasks`
+
+一键切到纯本地模式：
+
+```bash
+bash scripts/setup_local_weread_sync.sh
+```
+
+默认每 2 小时自动同步一次；如果想改成每 1 小时：
+
+```bash
+bash scripts/setup_local_weread_sync.sh 1
+```
+
+切好之后：
+
+1. 打开本地页面 `http://127.0.0.1:8080/dashboard.html`
+2. 首次任选其一：
+   - 手动粘贴 Cookie
+   - 点“从 Chrome 自动同步”
+   - 用 Chrome 扩展同步一次
+3. 之后就交给本地后台服务
+
+这个模式下，GitHub secret 自动同步会默认关闭。
+
+### 混合方案触发流程
 
 首次抓取登录态和恢复同步，靠的是**本地 Chrome 扩展**；后续定时备份、云端同步和自动阅读，靠的是 **GitHub Actions**。
 

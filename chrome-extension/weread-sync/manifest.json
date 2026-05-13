@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "WeRead Sync Helper",
-  "version": "0.4.0",
-  "description": "把微信读书当前登录态同步到本地任务管理 App。",
+  "version": "0.5.0",
+  "description": "把微信读书当前登录态和真实 reader 请求模板同步到本地任务管理 App。",
   "action": {
     "default_title": "WeRead Sync Helper",
     "default_popup": "popup.html"

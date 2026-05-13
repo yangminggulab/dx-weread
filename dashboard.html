@@ -103,12 +103,46 @@ const TASKS_ROUTE_PREFIX = '/tasks';
 const APP_BASE_PATH = /^\/tasks(\/|$)/.test(window.location.pathname) ? TASKS_ROUTE_PREFIX : '';
 const CLOUD_MODE = APP_BASE_PATH === TASKS_ROUTE_PREFIX;
 const LOCAL_DASHBOARD_URL = 'http://127.0.0.1:8080/dashboard.html';
+const LOCAL_API_ORIGINS = ['http://127.0.0.1:8080', 'http://localhost:8080'];
+const LOCAL_BRIDGE_TIMEOUT_MS = 12000;
+const CLOUD_AUTO_SYNC_KEY = 'weread_cloud_auto_sync_at';
+const CLOUD_AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
 const API_TOKEN = 'ef7a6f5bedf74c2f20c3966c38f40809679644abf07ee776048f50623362ed99';
 const apiUrl = (path='') => `${APP_BASE_PATH}${path.startsWith('/') ? path : `/${path}`}`;
 const apiFetch = (path, options={}) => {
   const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${API_TOKEN}`, ...(options.headers||{}) };
   return fetch(apiUrl(path), { ...options, headers });
 };
+const localBridgeFetch = async (path, options={}) => {
+  let lastError = null;
+  for (const origin of LOCAL_API_ORIGINS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), LOCAL_BRIDGE_TIMEOUT_MS);
+    try {
+      const headers = { ...(options.headers || {}) };
+      if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+      const res = await fetch(`${origin}${path}`, { ...options, headers, mode:'cors', signal: controller.signal });
+      clearTimeout(timer);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err = new Error(data.error || `本机同步失败（${res.status}）`);
+        err.bridgeResponse = true;
+        throw err;
+      }
+      return { ...data, localOrigin: origin };
+    } catch (err) {
+      clearTimeout(timer);
+      if (err?.bridgeResponse) throw err;
+      lastError = err;
+    }
+  }
+  throw lastError || new Error('未检测到本机同步服务');
+};
+const getLocalBridgeStatus = () => localBridgeFetch('/api/weread/status');
+const runLocalBridgeSync = () => localBridgeFetch('/api/weread/sync', {
+  method: 'POST',
+  body: JSON.stringify({}),
+});
 const pickBookAccent = (seed='') => {
   const score = Array.from(seed).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
   return BOOK_ACCENTS[score % BOOK_ACCENTS.length];
@@ -455,29 +489,88 @@ function NoteModal({ note, books, onSave, onClose }) {
    HEADER
 ═══════════════════════════════════════════════════════════ */
 
-function CloudWeReadModal({ onClose }) {
+function CloudWeReadModal({ onSync, onClose }) {
+  const [status, setStatus] = useState('checking');
+  const [msg, setMsg] = useState('');
+  const [localStatus, setLocalStatus] = useState(null);
+
+  useEffect(() => {
+    getLocalBridgeStatus()
+      .then(data => {
+        setLocalStatus(data);
+        setStatus('idle');
+        setMsg(
+          data.hasCookie
+            ? `已连接本机同步服务（${data.localOrigin}），可以直接用本机已保存 Cookie 同步。`
+            : `已连接本机同步服务（${data.localOrigin}），但本机还没有保存 Cookie。`
+        );
+      })
+      .catch(err => {
+        setStatus('offline');
+        setMsg(err.message || '未检测到本机同步服务');
+      });
+  }, []);
+
+  const handleBridgeSync = async () => {
+    setStatus('syncing');
+    setMsg('');
+    try {
+      const data = await runLocalBridgeSync();
+      onSync?.(data);
+      localStorage.setItem(CLOUD_AUTO_SYNC_KEY, String(Date.now()));
+      setLocalStatus(prev => ({ ...(prev || {}), hasCookie: true, localOrigin: data.localOrigin }));
+      setStatus('ok');
+      setMsg(`已通过本机同步：${data.books.length} 本书，${data.notes.length} 份笔记`);
+    } catch (err) {
+      setStatus('err');
+      setMsg(err.message || '同步失败');
+    }
+  };
+
   return (
     <div className="anim-fade fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="anim-up bg-white rounded-2xl shadow-2xl w-full max-w-lg">
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e4dc]">
           <div>
             <h3 className="serif font-semibold text-base">微信读书同步</h3>
-            <p className="text-xs text-[#aaa] mt-0.5">云端版暂时只负责展示和保存数据</p>
+            <p className="text-xs text-[#aaa] mt-0.5">云端版现在可以借用本机同步服务</p>
           </div>
           <button onClick={onClose} className="text-[#bbb] hover:text-[#666] text-2xl font-light leading-none">×</button>
         </div>
         <div className="px-6 py-5 space-y-4 text-sm text-[#555] leading-relaxed">
-          <div className="bg-[#fdf6ec] border border-[#f0d9a8] rounded-xl p-4 text-[#7a5c1a]">
-            云端页面现在还不能直接读取浏览器里的微信读书 Cookie，所以这里先不支持“一键同步”。
+          <div className="bg-[#eef5f1] border border-[#d8e7de] rounded-xl p-4 text-[#2d6a4f] text-xs space-y-1.5">
+            <div className="font-medium">推荐方式</div>
+            <div>直接用本机服务里已保存的微信读书 Cookie 同步，不需要专门打开 WeRead 页面。</div>
+            <div>进入 `yangminggu.com/tasks` 时，页面也会自动尝试一次本机同步。</div>
           </div>
           <div className="bg-[#f7f5f0] border border-[#e8e4dc] rounded-xl p-4 space-y-2 text-xs text-[#666]">
-            <div>建议先在本地版完成同步：</div>
+            <div>本机桥接状态：</div>
+            <div>{msg || '正在检测本机同步服务...'}</div>
+            {localStatus?.localOrigin && (
+              <div>连接地址：<span className="font-mono bg-white px-1 rounded">{localStatus.localOrigin}</span></div>
+            )}
+            {!localStatus?.hasCookie && (
+              <div>如果本机还没保存 Cookie，先去本地版粘贴一次 Cookie，或用扩展同步一次。</div>
+            )}
+          </div>
+          <div className="bg-[#f7f5f0] border border-[#e8e4dc] rounded-xl p-4 space-y-2 text-xs text-[#666]">
+            <div>需要手动处理时，本地版仍然在：</div>
             <div><span className="font-mono bg-white px-1 rounded">{LOCAL_DASHBOARD_URL}</span></div>
-            <div>本地同步完后，再把当前数据推到云端，我们已经顺手给你准备了上传脚本。</div>
+            <div>只要本机服务开着，云端版和本地版都可以共用这份已保存 Cookie。</div>
           </div>
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#e8e4dc]">
-          <button onClick={onClose} className="px-4 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg transition-colors font-medium">知道了</button>
+          <button onClick={() => window.open(LOCAL_DASHBOARD_URL, '_blank')} className="px-4 py-2 text-sm text-[#6b5431] hover:text-[#4c3b1f] rounded-lg hover:bg-[#f7f5f0] transition-colors">
+            打开本地版
+          </button>
+          <button
+            onClick={handleBridgeSync}
+            disabled={status === 'checking' || status === 'syncing' || status === 'offline' || !localStatus?.hasCookie}
+            className="px-4 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] disabled:opacity-50 text-white rounded-lg transition-colors font-medium"
+          >
+            {status === 'syncing' ? '同步中...' : '使用本机已保存 Cookie 同步'}
+          </button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-[#888] hover:text-[#444] rounded-lg hover:bg-[#f7f5f0] transition-colors">知道了</button>
         </div>
       </div>
     </div>
@@ -491,6 +584,10 @@ function LocalWeReadModal({ onSync, onClose }) {
   const [savedDataPath, setSavedDataPath] = useState('.weread_data.json');
   const [savedNotesPath, setSavedNotesPath] = useState('.weread_notes.json');
   const [extensionDir, setExtensionDir] = useState('chrome-extension/weread-sync');
+  const [syncMode, setSyncMode] = useState('hybrid');
+  const [autoSyncSource, setAutoSyncSource] = useState('saved-cookie');
+  const [autoSyncIntervalHours, setAutoSyncIntervalHours] = useState(2);
+  const [cloudPushEnabled, setCloudPushEnabled] = useState(false);
   const [status, setStatus] = useState('idle'); // idle | loading | ok | err
   const [msg, setMsg] = useState('');
 
@@ -523,9 +620,36 @@ function LocalWeReadModal({ onSync, onClose }) {
         if (data.dataPath) setSavedDataPath(data.dataPath);
         if (data.notesPath) setSavedNotesPath(data.notesPath);
         if (data.extensionDir) setExtensionDir(data.extensionDir);
+        if (data.wereadSyncMode) setSyncMode(data.wereadSyncMode);
+        if (data.wereadAutoSyncSource) setAutoSyncSource(data.wereadAutoSyncSource);
+        if (data.wereadAutoSyncIntervalHours) setAutoSyncIntervalHours(data.wereadAutoSyncIntervalHours);
+        setCloudPushEnabled(Boolean(data.cloudPushEnabled));
       })
       .catch(() => {});
   }, []);
+
+  const handleChromeSync = async () => {
+    setStatus('loading');
+    setMsg('');
+    try {
+      const res = await apiFetch('/api/weread/local-sync', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '同步失败');
+      setHasSavedCookie(true);
+      if (data.cookiePath) setSavedCookiePath(data.cookiePath);
+      if (data.dataPath) setSavedDataPath(data.dataPath);
+      if (data.notesPath) setSavedNotesPath(data.notesPath);
+      onSync(data);
+      setStatus('ok');
+      setMsg(
+        `已从 Chrome 自动读取并同步：${data.books.length} 本书，${data.notes.length} 份笔记`
+        + `（Cookie 保存到 ${data.cookiePath || savedCookiePath}，书架写入 ${data.dataPath || savedDataPath}，笔记写入 ${data.notesPath || savedNotesPath}）`
+      );
+    } catch (e) {
+      setStatus('err');
+      setMsg(e.message);
+    }
+  };
 
   const handleSync = async () => {
     const ck = cookie.trim();
@@ -556,6 +680,17 @@ function LocalWeReadModal({ onSync, onClose }) {
           <button onClick={onClose} className="text-[#bbb] hover:text-[#666] text-2xl font-light leading-none">×</button>
         </div>
         <div className="px-6 py-5 space-y-4">
+          <div className="bg-[#eef5f1] border border-[#d8e7de] rounded-xl p-4 text-xs text-[#2d6a4f] space-y-1.5 leading-relaxed">
+            <div className="font-medium mb-1">推荐：纯本地自动同步</div>
+            <div>
+              {autoSyncSource === 'saved-cookie'
+                ? <>后台会直接使用本地已保存的 Cookie 自动同步，不需要每次读取 Chrome 钥匙串。</>
+                : <>这台 Mac 上只要 Chrome 已登录 <span className="font-mono bg-white px-1 rounded">weread.qq.com</span>，就可以直接从本机读取 Cookie，不需要扩展。</>}
+            </div>
+            <div>后台会每 {autoSyncIntervalHours} 小时自动同步一次{cloudPushEnabled ? '，并顺手推送到你的云端数据' : ''}。</div>
+            <div>当前模式：<span className="font-mono bg-white px-1 rounded">{syncMode}</span></div>
+            <div>自动同步来源：<span className="font-mono bg-white px-1 rounded">{autoSyncSource}</span></div>
+          </div>
           <div className="bg-[#fdf6ec] border border-[#f0d9a8] rounded-xl p-4 text-xs text-[#7a5c1a] space-y-1.5 leading-relaxed">
             <div className="font-medium mb-2">如何获取 Cookie：</div>
             <div>1. 浏览器打开 <span className="font-mono bg-white px-1 rounded">weread.qq.com</span> 并登录</div>
@@ -565,7 +700,7 @@ function LocalWeReadModal({ onSync, onClose }) {
           </div>
           <div className="bg-white border border-[#e0d9cc] rounded-xl p-4 text-xs text-[#666] space-y-2.5">
             <div className="font-medium text-[#444]">推荐自动化方案</div>
-            <div>已经为你准备了 Chrome 扩展项目，不走系统钥匙串读取。</div>
+            <div>如果你不想授权系统读取 Chrome 钥匙串，可以先手动粘贴 Cookie，或用扩展同步一次，后续自动同步直接用本地已保存 Cookie。</div>
             <div>扩展目录：<span className="font-mono bg-[#f7f5f0] px-1 rounded">{extensionDir}</span></div>
             <div>加载后，在微信读书页面点扩展图标，就能把当前登录态直接同步到本地应用。</div>
           </div>
@@ -594,6 +729,10 @@ function LocalWeReadModal({ onSync, onClose }) {
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#e8e4dc]">
           <button onClick={onClose} className="px-4 py-2 text-sm text-[#888] hover:text-[#444] rounded-lg hover:bg-[#f7f5f0] transition-colors">取消</button>
+          <button onClick={handleChromeSync} disabled={status==='loading'}
+            className="px-5 py-2 text-sm bg-[#efe7d7] hover:bg-[#e7dcc7] disabled:opacity-50 text-[#6b5431] rounded-lg transition-colors font-medium">
+            从 Chrome 自动同步
+          </button>
           <button onClick={handleSync} disabled={status==='loading' || (!cookie.trim() && !hasSavedCookie)}
             className="px-5 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] disabled:opacity-50 text-white rounded-lg transition-colors font-medium flex items-center gap-2">
             {status==='loading' && <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
@@ -607,7 +746,7 @@ function LocalWeReadModal({ onSync, onClose }) {
 
 function WeReadModal(props) {
   if (props.cloudMode) {
-    return <CloudWeReadModal onClose={props.onClose} />;
+    return <CloudWeReadModal onSync={props.onSync} onClose={props.onClose} />;
   }
   return <LocalWeReadModal onSync={props.onSync} onClose={props.onClose} />;
 }
@@ -1279,7 +1418,7 @@ function App() {
     if (n) log('note', `删除笔记「${n.title}」`);
   };
 
-  const handleWeReadSync = ({ books: wrBooks, notes: wrNotes }) => {
+  const handleWeReadSync = useCallback(({ books: wrBooks, notes: wrNotes }) => {
     const today = new Date().toISOString().slice(0, 10);
     const syncedAt = new Date().toISOString();
     setBooks(prev => {
@@ -1359,7 +1498,32 @@ function App() {
       }
       return [{ id: Date.now(), type: 'project', text: `微信读书同步：${wrBooks.length} 本书`, time: '刚刚' }, ...prev].slice(0, 8);
     });
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!CLOUD_MODE || !ready) return;
+    let cancelled = false;
+
+    (async () => {
+      const lastAt = Number(localStorage.getItem(CLOUD_AUTO_SYNC_KEY) || 0);
+      if (Date.now() - lastAt < CLOUD_AUTO_SYNC_INTERVAL_MS) return;
+
+      try {
+        const status = await getLocalBridgeStatus();
+        if (cancelled || !status.hasCookie) return;
+        const data = await runLocalBridgeSync();
+        if (cancelled) return;
+        handleWeReadSync(data);
+        localStorage.setItem(CLOUD_AUTO_SYNC_KEY, String(Date.now()));
+      } catch (_) {
+        // 云端页自动探测失败时静默跳过，不打断正常浏览
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, handleWeReadSync]);
 
   const handleToggle = (id) => {
     setTasks(prev => prev.map(x => {

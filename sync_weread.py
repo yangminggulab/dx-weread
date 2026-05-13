@@ -1,43 +1,24 @@
 #!/usr/bin/env python3
 """
 WeChat Reading sync script for GitHub Actions.
-Required env vars: WEREAD_COOKIE, API_TOKEN
-Optional env var:  CLOUD_BASE_URL (default: https://yangminggu.com/tasks)
+Required auth: API_TOKEN plus WEREAD_COOKIE (or local .weread_cookie.json fallback)
+Optional env var: CLOUD_BASE_URL (default: https://yangminggu.com/tasks)
 """
-import os, sys, json, requests
+import os, sys, requests
 from datetime import datetime
+from pathlib import Path
 
-# 自动加载 .env（本地运行时）
-_here = os.path.dirname(os.path.abspath(__file__))
-_env  = os.path.join(_here, ".env")
-if os.path.exists(_env):
-    with open(_env) as _f:
-        for _line in _f:
-            _line = _line.strip()
-            if _line and not _line.startswith("#") and "=" in _line:
-                _k, _, _v = _line.partition("=")
-                os.environ.setdefault(_k.strip(), _v.strip())
+from scripts.weread_env import load_dotenv, load_weread_cookie
+
+ROOT_DIR = Path(__file__).resolve().parent
+load_dotenv(ROOT_DIR)
 
 WEREAD_WEB_BASE  = "https://weread.qq.com"
 WEREAD_MOB_BASE  = "https://i.weread.qq.com"
 CLOUD_BASE_URL   = os.environ.get("CLOUD_BASE_URL", "https://yangminggu.com/tasks").rstrip("/")
 API_TOKEN        = os.environ.get("API_TOKEN", "")
 
-# WEREAD_COOKIE: 优先环境变量，其次本地保存的 cookie 文件
-def _load_cookie():
-    c = os.environ.get("WEREAD_COOKIE", "")
-    if c:
-        return c
-    path = os.path.join(_here, ".weread_cookie.json")
-    if os.path.exists(path):
-        try:
-            payload = json.load(open(path))
-            return payload.get("cookie", "") if isinstance(payload, dict) else str(payload)
-        except Exception:
-            pass
-    return ""
-
-WEREAD_COOKIE = _load_cookie()
+WEREAD_COOKIE = load_weread_cookie(ROOT_DIR)
 
 BOOK_ACCENTS = ["#2d6a4f", "#4a4a6a", "#6a4a2a", "#3a6a5a", "#5a3a6a"]
 
@@ -72,6 +53,20 @@ def to_ms(ts):
     if not ts:
         return 0
     return ts * 1000 if ts < 10**10 else ts
+
+
+def print_missing_config(missing):
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        print(f"❌ Missing GitHub Actions secrets: {', '.join(missing)}")
+        print("   Add them in Settings > Secrets and variables > Actions.")
+        print("   Tip: run `python3 scripts/sync_github_actions_secrets.py` locally to upload them.")
+        return
+
+    print(f"❌ Missing auth config: {', '.join(missing)}")
+    if "API_TOKEN" in missing:
+        print("   API_TOKEN: set it in the environment or the repo-root .env file.")
+    if "WEREAD_COOKIE" in missing:
+        print("   WEREAD_COOKIE: set it in the environment or save it in .weread_cookie.json.")
 
 def sync():
     # 1. 书架
@@ -151,7 +146,7 @@ def sync():
 if __name__ == "__main__":
     missing = [v for v, val in [("WEREAD_COOKIE", WEREAD_COOKIE), ("API_TOKEN", API_TOKEN)] if not val]
     if missing:
-        print(f"❌ Missing env vars: {', '.join(missing)}")
+        print_missing_config(missing)
         sys.exit(1)
 
     try:
