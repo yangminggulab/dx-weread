@@ -2,11 +2,22 @@
 
 一个本地优先的任务管理面板，已经接入微信读书同步，支持把书架、最近阅读动态和读书笔记放进同一个 Dashboard 里。
 
+## 项目地图
+
+这个仓库现在有 3 条实际运行线，但网页源码只保留 1 份：
+
+- 本地网页：`server.py` 提供 API，`dashboard.html` 是唯一网页源码
+- 云端 Worker：`src/index.js` 直接复用 `dashboard.html`，挂到 `yangminggu.com/tasks`
+- 微信小程序：`miniprogram/` 下的 Taro 工程
+
+为了避免版本漂移，网页相关改动只改 `dashboard.html`，不要再维护第二份网页副本。
+
 ## 现在能做什么
 
 - 管理日常任务、每周任务和长期任务
 - 展示学习书架与微信读书书架
 - 从微信读书同步最近阅读、划线、高亮和评论
+- 在网页里用热力图展示每日阅读时长，并和微信读书笔记按日期对齐
 - 把微信读书笔记单独存到本地文件，和主业务数据分开
 - 用本机 `WEREAD_API_KEY` 直接调用微信读书网关同步
 - 把同步结果继续合并回现有 Dashboard 和小程序数据视图
@@ -68,6 +79,8 @@ WEREAD_API_KEY=wrk-你的key
 - 手动同步入口：`POST /api/weread/sync`
 - 状态查看入口：`GET /api/weread/status`
 - 自动同步也复用同一套 API-first 实现，不再区分“本地手动同步”和“扩展同步”
+- 每次同步都会先把微信读书数据写入本地，再把旧版本文件备份到 `.backups/`
+- 如果配置了 `API_TOKEN`，同步动作会在同一次请求里直接推送云端，不再后台异步“慢慢推”
 
 ### 推荐环境变量
 
@@ -94,11 +107,11 @@ WEREAD_AUTO_SYNC_ON_START=1
 - `data.json`
   主应用数据，比如任务、项目、笔记与文档等
 - `.weread_data.json`
-  微信读书书架、最近动态、同步时间等
+  微信读书书架、最近动态、同步时间，以及热力图需要的每日阅读统计
 - `.weread_notes.json`
   微信读书笔记明细，包括划线和评论
 - `.backups/`
-  本地数据备份
+  本地数据备份。每次覆盖 `.weread_data.json` / `.weread_notes.json` 前都会先备份一份旧文件，防止意外
 
 其中带前缀 `.` 的微信读书本地文件和备份目录已经加入 `.gitignore`，不会被推到 GitHub。
 
@@ -108,12 +121,28 @@ WEREAD_AUTO_SYNC_ON_START=1
 .
 ├── dashboard.html
 ├── server.py
+├── routes/
+│   └── api.py
+├── services/
+│   ├── cloud_sync.py
+│   ├── config.py
+│   ├── storage.py
+│   └── weread_sync.py
+├── src/
+│   └── index.js
+├── miniprogram/
+│   ├── src/
+│   ├── package.json
+│   └── project.config.json
+├── scripts/
+│   ├── build.js
+│   └── push_cloud_data.py
 ├── weread/
 │   ├── __init__.py
 │   └── service.py
 ├── requirements.txt
-└── .github/
-    └── workflows/
+├── wrangler.jsonc
+└── README.md
 ```
 
 ## GitHub 上现在建议怎么用
@@ -129,13 +158,15 @@ WEREAD_AUTO_SYNC_ON_START=1
 
 - Worker 入口：`src/index.js`
 - Worker 配置：`wrangler.jsonc`
-- 线上页面静态资源：`public/tasks/index.html`
+- 网页源码：`dashboard.html`
 
-本地改完 [dashboard.html](/Users/liubike/Desktop/任务管理App/dashboard.html) 后，可以用下面这条命令把云端用的页面副本同步好：
+这里不再维护第二份 `public/tasks/index.html` 或 `src/dashboard.js` 副本；Worker 直接引用根目录的 `dashboard.html`。部署前可以先跑：
 
 ```bash
-npm run sync:dashboard
+npm run build
 ```
+
+这条命令现在只做结构校验，确保仓库里没有重新出现网页副本。
 
 现在这套 Worker 会：
 
