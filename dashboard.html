@@ -111,10 +111,6 @@ const detectAppBasePath = () => {
 const APP_BASE_PATH = detectAppBasePath();
 const CLOUD_MODE = MULTIUSER_CLOUD_ENABLED && APP_BASE_PATH === CLOUD_ROUTE_PREFIX;
 const PERSONAL_MODE = APP_BASE_PATH === PERSONAL_ROUTE_PREFIX;
-const LOCAL_DASHBOARD_URL = 'http://127.0.0.1:8080/dashboard.html';
-const LOCAL_API_ORIGINS = ['http://127.0.0.1:8080', 'http://localhost:8080'];
-const LOCAL_BRIDGE_TIMEOUT_MS = 12000;
-const CLOUD_AUTO_SYNC_KEY = 'weread_cloud_auto_sync_at';
 const CLOUD_AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
 const PERSONAL_API_TOKEN = 'ef7a6f5bedf74c2f20c3966c38f40809679644abf07ee776048f50623362ed99';
 const CLOUD_SESSION_TOKEN_KEY = 'task_app_cloud_session_token';
@@ -151,36 +147,7 @@ const apiRequest = async (path, options={}) => {
   }
   return data;
 };
-const localBridgeFetch = async (path, options={}) => {
-  let lastError = null;
-  for (const origin of LOCAL_API_ORIGINS) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), LOCAL_BRIDGE_TIMEOUT_MS);
-    try {
-      const headers = { ...(options.headers || {}) };
-      if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
-      const res = await fetch(`${origin}${path}`, { ...options, headers, mode:'cors', signal: controller.signal });
-      clearTimeout(timer);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const err = new Error(data.error || `本机同步失败（${res.status}）`);
-        err.bridgeResponse = true;
-        throw err;
-      }
-      return { ...data, localOrigin: origin };
-    } catch (err) {
-      clearTimeout(timer);
-      if (err?.bridgeResponse) throw err;
-      lastError = err;
-    }
-  }
-  throw lastError || new Error('未检测到本机同步服务');
-};
-const getLocalBridgeStatus = () => localBridgeFetch('/api/weread/status');
-const runLocalBridgeSync = () => localBridgeFetch('/api/weread/sync', {
-  method: 'POST',
-  body: JSON.stringify({}),
-});
+
 const pickBookAccent = (seed='') => {
   const score = Array.from(seed).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
   return BOOK_ACCENTS[score % BOOK_ACCENTS.length];
@@ -241,6 +208,71 @@ const getFullNoteText = (summary='') =>
     .map(line => line.trimEnd())
     .filter(Boolean)
     .join('\n\n') || '暂无同步内容';
+const EMPTY_WEREAD_STATS = {
+  monthly: { baseTime: 0, readDays: 0, totalReadTime: 0, dayAverageReadTime: 0, compare: 0 },
+  annual: { baseTime: 0, readDays: 0, totalReadTime: 0, dayAverageReadTime: 0, compare: 0 },
+  dailyReadTimes: [],
+};
+const cloneWereadStats = (stats) => ({
+  monthly: { ...EMPTY_WEREAD_STATS.monthly, ...(stats?.monthly || {}) },
+  annual: { ...EMPTY_WEREAD_STATS.annual, ...(stats?.annual || {}) },
+  dailyReadTimes: Array.isArray(stats?.dailyReadTimes) ? stats.dailyReadTimes : [],
+});
+const formatLocalDateKey = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+const toIsoDateKey = (value) => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const match = trimmed.match(/\d{4}-\d{2}-\d{2}/);
+    if (match) return match[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return formatLocalDateKey(parsed);
+    return '';
+  }
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    const ts = value < 1e11 ? value * 1000 : value;
+    const parsed = new Date(ts);
+    if (!Number.isNaN(parsed.getTime())) return formatLocalDateKey(parsed);
+  }
+  return '';
+};
+const formatReadDuration = (seconds=0) => {
+  const safe = Math.max(0, Number(seconds) || 0);
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.round((safe % 3600) / 60);
+  if (hours > 0 && minutes > 0) return `${hours}小时 ${minutes}分钟`;
+  if (hours > 0) return `${hours}小时`;
+  return `${minutes}分钟`;
+};
+const formatCalendarDate = (dateKey='') => {
+  if (!dateKey) return '暂无日期';
+  const parsed = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return dateKey;
+  return parsed.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' });
+};
+const getWereadNoteDate = (note) =>
+  toIsoDateKey(note?.sourceUpdatedAt) || toIsoDateKey(note?.updatedAt) || '';
+const HEATMAP_COLORS = ['#f2ede4', '#d7e4db', '#a8c2b0', '#6f977e', '#2d6a4f'];
+const getHeatmapLevel = (seconds=0, maxSeconds=0, noteCount=0) => {
+  if (!seconds || !maxSeconds) return noteCount > 0 ? 1 : 0;
+  const ratio = seconds / maxSeconds;
+  if (ratio >= 0.75) return 4;
+  if (ratio >= 0.5) return 3;
+  if (ratio >= 0.25) return 2;
+  return 1;
+};
+const formatCompareText = (compare=0) => {
+  const ratio = Number(compare);
+  if (!Number.isFinite(ratio) || ratio === 0) return '和上个周期基本持平';
+  const percent = Math.abs(Math.round(ratio * 100));
+  return ratio > 0 ? `比上个周期多 ${percent}%` : `比上个周期少 ${percent}%`;
+};
 
 
 const STATUS = {
@@ -531,201 +563,6 @@ function NoteModal({ note, books, onSave, onClose }) {
    HEADER
 ═══════════════════════════════════════════════════════════ */
 
-function CloudWeReadModal({ onSync, onClose }) {
-  const [status, setStatus] = useState('checking');
-  const [msg, setMsg] = useState('');
-  const [localStatus, setLocalStatus] = useState(null);
-
-  useEffect(() => {
-    getLocalBridgeStatus()
-      .then(data => {
-        setLocalStatus(data);
-        setStatus('idle');
-        setMsg(
-          data.hasApiKey
-            ? `已连接本机同步服务（${data.localOrigin}），可以直接用本机配置的 WEREAD_API_KEY 同步。`
-            : `已连接本机同步服务（${data.localOrigin}），但本机还没有配置 WEREAD_API_KEY。`
-        );
-      })
-      .catch(err => {
-        setStatus('offline');
-        setMsg(err.message || '未检测到本机同步服务');
-      });
-  }, []);
-
-  const handleBridgeSync = async () => {
-    setStatus('syncing');
-    setMsg('');
-    try {
-      const data = await runLocalBridgeSync();
-      onSync?.(data);
-      localStorage.setItem(CLOUD_AUTO_SYNC_KEY, String(Date.now()));
-      setLocalStatus(prev => ({ ...(prev || {}), hasApiKey: true, localOrigin: data.localOrigin }));
-      setStatus('ok');
-      setMsg(`已通过本机同步：${data.books.length} 本书，${data.notes.length} 份笔记`);
-    } catch (err) {
-      setStatus('err');
-      setMsg(err.message || '同步失败');
-    }
-  };
-
-  return (
-    <div className="anim-fade fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="anim-up bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e4dc]">
-          <div>
-            <h3 className="serif font-semibold text-base">微信读书同步</h3>
-            <p className="text-xs text-[#aaa] mt-0.5">云端版现在可以借用本机同步服务</p>
-          </div>
-          <button onClick={onClose} className="text-[#bbb] hover:text-[#666] text-2xl font-light leading-none">×</button>
-        </div>
-        <div className="px-6 py-5 space-y-4 text-sm text-[#555] leading-relaxed">
-          <div className="bg-[#eef5f1] border border-[#d8e7de] rounded-xl p-4 text-[#2d6a4f] text-xs space-y-1.5">
-            <div className="font-medium">推荐方式</div>
-            <div>直接用本机服务里已配置的 <span className="font-mono bg-white px-1 rounded">WEREAD_API_KEY</span> 同步，不再依赖扩展或 Cookie。</div>
-            <div>进入 `yangminggu.com/tasks` 时，页面也会自动尝试一次本机同步。</div>
-          </div>
-          <div className="bg-[#f7f5f0] border border-[#e8e4dc] rounded-xl p-4 space-y-2 text-xs text-[#666]">
-            <div>本机桥接状态：</div>
-            <div>{msg || '正在检测本机同步服务...'}</div>
-            {localStatus?.localOrigin && (
-              <div>连接地址：<span className="font-mono bg-white px-1 rounded">{localStatus.localOrigin}</span></div>
-            )}
-            {!localStatus?.hasApiKey && (
-              <div>如果本机还没配置 API Key，先去本地版确认项目根目录 <span className="font-mono bg-white px-1 rounded">.env</span> 里已有 <span className="font-mono bg-white px-1 rounded">WEREAD_API_KEY</span>。</div>
-            )}
-          </div>
-          <div className="bg-[#f7f5f0] border border-[#e8e4dc] rounded-xl p-4 space-y-2 text-xs text-[#666]">
-            <div>需要手动处理时，本地版仍然在：</div>
-            <div><span className="font-mono bg-white px-1 rounded">{LOCAL_DASHBOARD_URL}</span></div>
-            <div>只要本机服务开着，云端版和本地版都可以共用这份本机 API 配置。</div>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#e8e4dc]">
-          <button onClick={() => window.open(LOCAL_DASHBOARD_URL, '_blank')} className="px-4 py-2 text-sm text-[#6b5431] hover:text-[#4c3b1f] rounded-lg hover:bg-[#f7f5f0] transition-colors">
-            打开本地版
-          </button>
-          <button
-            onClick={handleBridgeSync}
-            disabled={status === 'checking' || status === 'syncing' || status === 'offline' || !localStatus?.hasApiKey}
-            className="px-4 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] disabled:opacity-50 text-white rounded-lg transition-colors font-medium"
-          >
-            {status === 'syncing' ? '同步中...' : '使用本机 API Key 同步'}
-          </button>
-          <button onClick={onClose} className="px-4 py-2 text-sm text-[#888] hover:text-[#444] rounded-lg hover:bg-[#f7f5f0] transition-colors">知道了</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LocalWeReadModal({ onSync, onClose }) {
-  const [savedDataPath, setSavedDataPath] = useState('.weread_data.json');
-  const [savedNotesPath, setSavedNotesPath] = useState('.weread_notes.json');
-  const [hasApiKey, setHasApiKey] = useState(false);
-  const [syncMode, setSyncMode] = useState('api-key');
-  const [autoSyncSource, setAutoSyncSource] = useState('api-key');
-  const [autoSyncIntervalHours, setAutoSyncIntervalHours] = useState(2);
-  const [cloudPushEnabled, setCloudPushEnabled] = useState(false);
-  const [syncedAt, setSyncedAt] = useState('');
-  const [status, setStatus] = useState('idle'); // idle | loading | ok | err
-  const [msg, setMsg] = useState('');
-
-  const runSync = async () => {
-    const res = await apiFetch('/api/weread/sync', {
-      method: 'POST',
-      body: JSON.stringify({}),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || '同步失败');
-    if (data.dataPath) setSavedDataPath(data.dataPath);
-    if (data.notesPath) setSavedNotesPath(data.notesPath);
-    if (data.syncedAt) setSyncedAt(data.syncedAt);
-    onSync(data);
-    setStatus('ok');
-    setMsg(`同步成功：${data.books.length} 本书，${data.notes.length} 份笔记（书架写入 ${data.dataPath || savedDataPath}，笔记写入 ${data.notesPath || savedNotesPath}）`);
-  };
-
-  useEffect(() => {
-    apiFetch('/api/weread/status')
-      .then(r => r.json())
-      .then(data => {
-        setHasApiKey(Boolean(data.hasApiKey));
-        if (data.dataPath) setSavedDataPath(data.dataPath);
-        if (data.notesPath) setSavedNotesPath(data.notesPath);
-        if (data.wereadSyncMode) setSyncMode(data.wereadSyncMode);
-        if (data.wereadAutoSyncSource) setAutoSyncSource(data.wereadAutoSyncSource);
-        if (data.wereadAutoSyncIntervalHours) setAutoSyncIntervalHours(data.wereadAutoSyncIntervalHours);
-        if (data.syncedAt) setSyncedAt(data.syncedAt);
-        setCloudPushEnabled(Boolean(data.cloudPushEnabled));
-        if (data.message) setMsg(data.message);
-      })
-      .catch(() => {});
-  }, []);
-
-  const handleSync = async () => {
-    setStatus('loading');
-    setMsg('');
-    try {
-      await runSync();
-    } catch (e) {
-      setStatus('err');
-      setMsg(e.message);
-    }
-  };
-
-  return (
-    <div className="anim-fade fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="anim-up bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e4dc]">
-          <div>
-            <h3 className="serif font-semibold text-base">同步微信读书</h3>
-            <p className="text-xs text-[#aaa] mt-0.5">当前版本已改为本机 API Key 同步</p>
-          </div>
-          <button onClick={onClose} className="text-[#bbb] hover:text-[#666] text-2xl font-light leading-none">×</button>
-        </div>
-        <div className="px-6 py-5 space-y-4">
-          <div className="bg-[#eef5f1] border border-[#d8e7de] rounded-xl p-4 text-xs text-[#2d6a4f] space-y-1.5 leading-relaxed">
-            <div className="font-medium mb-1">当前方案：API-first</div>
-            <div>后台会直接使用你本机环境里的 <span className="font-mono bg-white px-1 rounded">WEREAD_API_KEY</span> 调微信读书网关，不再依赖浏览器扩展或 Cookie。</div>
-            <div>后台会每 {autoSyncIntervalHours} 小时自动同步一次{cloudPushEnabled ? '，并顺手推送到你的云端数据' : ''}。</div>
-            <div>当前模式：<span className="font-mono bg-white px-1 rounded">{syncMode}</span></div>
-            <div>自动同步来源：<span className="font-mono bg-white px-1 rounded">{autoSyncSource}</span></div>
-          </div>
-          <div className="bg-white border border-[#e0d9cc] rounded-xl p-4 text-xs text-[#666] space-y-2.5">
-            <div className="font-medium text-[#444]">本机配置</div>
-            <div>微信读书同步内容会单独保存到 <span className="font-mono bg-[#f7f5f0] px-1 rounded">{savedDataPath}</span> 和 <span className="font-mono bg-[#f7f5f0] px-1 rounded">{savedNotesPath}</span>。</div>
-            <div>API Key 建议只保存在本机环境或项目根目录 <span className="font-mono bg-[#f7f5f0] px-1 rounded">.env</span>，不会跟代码一起提交。</div>
-            {syncedAt ? <div>最近同步时间：<span className="font-mono bg-[#f7f5f0] px-1 rounded">{syncedAt}</span></div> : null}
-          </div>
-          {!hasApiKey && (
-            <div className="bg-[#fef2f2] border border-[#f5caca] rounded-xl p-4 text-xs text-[#9f3a3a] leading-relaxed">
-              当前没有检测到 <span className="font-mono bg-white px-1 rounded">WEREAD_API_KEY</span>。请先在项目根目录 <span className="font-mono bg-white px-1 rounded">.env</span> 或启动服务的终端环境里配置它。
-            </div>
-          )}
-          {msg && (
-            <div className={`text-xs px-3 py-2 rounded-lg ${status==='ok'?'bg-[#f0f4f1] text-[#2d6a4f]':'bg-[#fef2f2] text-[#dc4949]'}`}>{msg}</div>
-          )}
-        </div>
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#e8e4dc]">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-[#888] hover:text-[#444] rounded-lg hover:bg-[#f7f5f0] transition-colors">取消</button>
-          <button onClick={handleSync} disabled={status==='loading' || !hasApiKey}
-            className="px-5 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] disabled:opacity-50 text-white rounded-lg transition-colors font-medium flex items-center gap-2">
-            {status==='loading' && <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
-            {status==='loading' ? '同步中...' : '一键同步'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function WeReadModal(props) {
-  if (props.cloudMode) {
-    return <CloudWeReadModal onSync={props.onSync} onClose={props.onClose} />;
-  }
-  return <LocalWeReadModal onSync={props.onSync} onClose={props.onClose} />;
-}
 
 function CloudAuthGate({ onSuccess, notice='' }) {
   const [mode, setMode] = useState('login');
@@ -813,7 +650,7 @@ function CloudAuthGate({ onSuccess, notice='' }) {
             </div>
             <div className="rounded-2xl bg-[#f7f4ee] border border-[#ece4d8] p-4">
               <div className="text-sm font-medium text-[#2d6a4f]">继续保留微信读书桥接</div>
-              <div className="text-xs text-[#7a7267] mt-2 leading-6">云端页面依然能借本机服务做微信读书同步。</div>
+              <div className="text-xs text-[#7a7267] mt-2 leading-6">通过脚本定时同步微信读书，书架和热力图自动更新。</div>
             </div>
           </div>
         </section>
@@ -910,9 +747,8 @@ function CloudAuthGate({ onSuccess, notice='' }) {
   );
 }
 
-function Header({ onAdd, onWeRead, cloudMode, personalMode, user, onLogout }) {
+function Header({ onAdd, cloudMode, personalMode, user, onLogout }) {
   const editionLabel = cloudMode ? '云端版' : personalMode ? '个人版' : '本地版';
-  const hostedSyncLabel = (cloudMode || personalMode) ? '微信读书（本地同步）' : '微信读书';
   return (
     <header className="sticky top-0 z-40 bg-[#f7f5f0]/96 backdrop-blur-sm border-b border-[#e8e4dc]">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
@@ -933,10 +769,7 @@ function Header({ onAdd, onWeRead, cloudMode, personalMode, user, onLogout }) {
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
             数学笔记
           </a>
-          <button onClick={onWeRead} className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#f0f4f1] border border-[#e0d9cc] hover:border-[#2d6a4f] text-[#555] rounded-lg text-[13px] transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 1 0 1-15.357-2m15.357 2H15"/></svg>
-            {hostedSyncLabel}
-          </button>
+
           <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg text-[13px] font-medium transition-colors">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
             新增任务
@@ -1243,29 +1076,46 @@ function WeReadShelf({ books }) {
    WEREAD NOTES
 ═══════════════════════════════════════════════════════════ */
 
-function WeReadNotes({ notes }) {
+function WeReadNotes({ notes, selectedDate, onClearDate }) {
   const orderedNotes = React.useMemo(
     () => [...notes].sort((a, b) => (b.sourceUpdatedTimestamp || 0) - (a.sourceUpdatedTimestamp || 0)),
     [notes]
   );
-  const [sel, setSel] = React.useState(orderedNotes[0] || null);
+  const visibleNotes = React.useMemo(
+    () => selectedDate ? orderedNotes.filter(note => getWereadNoteDate(note) === selectedDate) : orderedNotes,
+    [orderedNotes, selectedDate]
+  );
+  const [sel, setSel] = React.useState(visibleNotes[0] || null);
 
   React.useEffect(() => {
-    if (!orderedNotes.length) { setSel(null); return; }
-    if (!sel || !orderedNotes.some(n => n.id === sel.id)) setSel(orderedNotes[0]);
-  }, [orderedNotes]);
+    if (!visibleNotes.length) { setSel(null); return; }
+    if (!sel || !visibleNotes.some(n => n.id === sel.id)) setSel(visibleNotes[0]);
+  }, [visibleNotes, sel]);
+
+  const noteSub = selectedDate
+    ? `${formatCalendarDate(selectedDate)} · ${visibleNotes.length} 条笔记`
+    : (orderedNotes.length ? `已同步 ${orderedNotes.length} 条划线与评论` : '同步后的划线和评论会显示在这里');
 
   return (
     <section>
       <SectionHead
         title="微信读书笔记"
-        sub={orderedNotes.length ? `已同步 ${orderedNotes.length} 条划线与评论` : '同步后的划线和评论会显示在这里'}
+        sub={noteSub}
+        right={selectedDate ? (
+          <button
+            type="button"
+            onClick={onClearDate}
+            className="text-xs text-[#8f887d] hover:text-[#2d6a4f] transition-colors"
+          >
+            查看全部
+          </button>
+        ) : null}
       />
       <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden flex" style={{height:320}}>
         <div className="w-52 shrink-0 border-r border-[#e8e4dc] overflow-y-auto">
-          {orderedNotes.length === 0
-            ? <div className="p-4 text-xs text-[#ccc] text-center mt-8">还没有同步笔记</div>
-            : orderedNotes.map(n => (
+          {visibleNotes.length === 0
+            ? <div className="p-4 text-xs text-[#ccc] text-center mt-8">{selectedDate ? '这一天还没有同步到微信读书笔记' : '还没有同步笔记'}</div>
+            : visibleNotes.map(n => (
               <div key={n.id} onClick={() => setSel(n)}
                 className={`px-4 py-3 cursor-pointer border-b border-[#f5f2eb] last:border-0 transition-colors ${sel?.id === n.id ? 'bg-[#f0f4f1]' : 'hover:bg-[#faf9f6]'}`}>
                 <div className={`text-sm font-medium leading-snug mb-1.5 ${sel?.id === n.id ? 'text-[#2d6a4f] serif' : 'text-[#1c1c1c]'}`}>{n.title}</div>
@@ -1279,7 +1129,7 @@ function WeReadNotes({ notes }) {
           }
         </div>
         <div className="flex-1 p-5 overflow-y-auto">
-          {sel && orderedNotes.find(n => n.id === sel.id) ? (
+          {sel && visibleNotes.find(n => n.id === sel.id) ? (
             <>
               <div className="flex items-start justify-between mb-3">
                 <h4 className="serif font-semibold text-base text-[#1c1c1c] leading-snug flex-1 pr-3">{sel.title}</h4>
@@ -1303,34 +1153,159 @@ function WeReadNotes({ notes }) {
    PROGRESS
 ═══════════════════════════════════════════════════════════ */
 
-function Progress({ tasks, books }) {
-  const total  = tasks.length;
-  const done   = tasks.filter(t=>t.status==='completed').length;
-  const reading = books.filter(b=>b.status==='reading').length;
-  const wip    = tasks.filter(t=>t.status==='in_progress').length;
+function WeReadHeatmap({ stats, notes, syncedAt, selectedDate, onSelectDate }) {
+  const wereadStats = React.useMemo(() => cloneWereadStats(stats), [stats]);
+  const noteMap = React.useMemo(() => {
+    const grouped = new Map();
+    notes.forEach(note => {
+      const dateKey = getWereadNoteDate(note);
+      if (!dateKey) return;
+      if (!grouped.has(dateKey)) grouped.set(dateKey, []);
+      grouped.get(dateKey).push(note);
+    });
+    grouped.forEach(dayNotes => {
+      dayNotes.sort((a, b) => (b.sourceUpdatedTimestamp || 0) - (a.sourceUpdatedTimestamp || 0));
+    });
+    return grouped;
+  }, [notes]);
 
-  const stats = [
-    { label:'在读书籍', v:reading, max:books.length, color:'#2d6a4f' },
-    { label:'已完成任务', v:done,   max:total,            color:'#3a7d52' },
-    { label:'活跃任务',   v:wip,    max:total,            color:'#b45309' },
-  ];
+  const heatmap = React.useMemo(() => {
+    const readMap = new Map();
+    wereadStats.dailyReadTimes.forEach(item => {
+      const dateKey = toIsoDateKey(item?.date || item?.timestamp);
+      const seconds = Math.max(0, Number(item?.seconds) || 0);
+      if (!dateKey) return;
+      readMap.set(dateKey, seconds);
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // 最近 18 周，结束于本周日（周一起始）
+    const end = new Date(today);
+    end.setDate(today.getDate() + (6 - ((today.getDay() + 6) % 7)));
+    const start = new Date(end);
+    start.setDate(end.getDate() - (18 * 7 - 1));
+
+    const days = [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      const dateKey = formatLocalDateKey(cursor);
+      const seconds = readMap.get(dateKey) || 0;
+      const dayNotes = noteMap.get(dateKey) || [];
+      days.push({
+        date: dateKey,
+        seconds,
+        noteCount: dayNotes.length,
+        notes: dayNotes,
+      });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const weeks = [];
+    for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+    const maxSeconds = days.reduce((max, item) => Math.max(max, item.seconds), 0);
+    const latestActive = [...days].reverse().find(item => item.seconds > 0 || item.noteCount > 0);
+    return { weeks, maxSeconds, latestActiveDate: latestActive?.date || '' };
+  }, [noteMap, wereadStats]);
+
+  const activeDate = selectedDate || heatmap.latestActiveDate;
+  const selectedDay = React.useMemo(() => {
+    for (const week of heatmap.weeks) {
+      const found = week.find(day => day.date === activeDate);
+      if (found) return found;
+    }
+    return null;
+  }, [activeDate, heatmap.weeks]);
+
   return (
     <section>
-      <SectionHead title="进度总览" />
-      <div className="grid grid-cols-3 gap-3">
-        {stats.map((s,i)=>(
-          <div key={i} className="bg-white rounded-xl border border-[#e8e4dc] p-4">
-            <div className="text-xs text-[#bbb] mb-2">{s.label}</div>
-            <div className="flex items-end justify-between mb-2.5">
-              <span className="text-2xl font-semibold" style={{color:s.color}}>{s.v}</span>
-              <span className="text-xs text-[#ccc] mb-0.5">/ {s.max}</span>
+      <SectionHead
+        title="阅读热力"
+        sub={`最近 18 周 · 色块越深表示读得越久，金点代表当天有微信读书笔记${syncedAt ? ` · 同步于 ${String(syncedAt).replace('T', ' ').slice(0, 16)}` : ''}`}
+      />
+      <div className="space-y-4">
+        <div className="bg-white rounded-xl border border-[#e8e4dc] p-4">
+          <div className="overflow-x-auto pb-2">
+            <div className="min-w-[280px]">
+              <div className="flex mb-2 pl-6">
+                {heatmap.weeks.map((week, idx) => {
+                  const first = week[0];
+                  const prev = idx > 0 ? heatmap.weeks[idx - 1][0] : null;
+                  const showLabel = !prev || first.date.slice(5, 7) !== prev.date.slice(5, 7);
+                  return (
+                    <div key={`month-${first.date}`} className="w-4 text-[10px] text-[#c0b7aa] text-center">
+                      {showLabel ? `${Number(first.date.slice(5, 7))}月` : ''}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                <div className="w-4 shrink-0 flex flex-col justify-between py-0.5 text-[10px] text-[#c0b7aa]">
+                  {['一', '二', '三', '四', '五', '六', '日'].map(label => (
+                    <div key={label} className="h-4 leading-4 text-center">{label}</div>
+                  ))}
+                </div>
+                <div className="flex gap-1">
+                  {heatmap.weeks.map((week, weekIdx) => (
+                    <div key={`week-${weekIdx}`} className="flex flex-col gap-1">
+                      {week.map(day => {
+                        const level = getHeatmapLevel(day.seconds, heatmap.maxSeconds, day.noteCount);
+                        const isSelected = selectedDate ? day.date === selectedDate : false;
+                        return (
+                          <button
+                            key={day.date}
+                            onClick={() => onSelectDate(day.date === selectedDate ? '' : day.date)}
+                            title={`${day.date} · ${formatReadDuration(day.seconds)} · ${day.noteCount} 条笔记`}
+                            className="relative w-4 h-4 rounded-[4px] transition-transform hover:scale-110"
+                            style={{
+                              backgroundColor: HEATMAP_COLORS[level],
+                              border: isSelected ? '1.5px solid #1f1c17' : '1px solid rgba(123,108,88,0.12)',
+                            }}
+                          >
+                            {day.noteCount > 0 && (
+                              <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#c08b2d] border border-white"></span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="h-1.5 bg-[#f0ece4] rounded-full overflow-hidden">
-              <div className="h-full rounded-full transition-all" style={{width:`${s.max?Math.round(s.v/s.max*100):0}%`,background:s.color}} />
-            </div>
-            <div className="text-xs text-[#ccc] mt-1.5">{s.max?Math.round(s.v/s.max*100):0}%</div>
           </div>
-        ))}
+
+          <div className="mt-4 pt-4 border-t border-[#f0ece4]">
+            {selectedDay ? (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-[#1f1c17]">{formatCalendarDate(selectedDay.date)}</div>
+                    <div className="text-xs text-[#91887d] mt-1">
+                      阅读 {formatReadDuration(selectedDay.seconds)} · 笔记 {selectedDay.noteCount} 条
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-[#b7aa8a]">
+                    {selectedDay.seconds > 0 ? `${Math.round(selectedDay.seconds / 60)} 分钟` : '未记录阅读'}
+                  </div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {selectedDay.notes.length > 0 ? selectedDay.notes.slice(0, 3).map(note => (
+                    <div key={note.id || note.sourceItemId} className="rounded-lg bg-[#faf9f6] border border-[#f0ece4] px-3 py-2">
+                      <div className="text-xs text-[#8f887d] mb-1">{note.bookTitle || '微信读书'}</div>
+                      <div className="text-[13px] text-[#3c382f] leading-6 line-clamp-2">{extractNotePreview(note.summary || note.title || '')}</div>
+                    </div>
+                  )) : (
+                    <div className="text-sm text-[#b6ada0]">这一天还没有同步到微信读书笔记。</div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-[#b6ada0]">同步后会在这里显示每日阅读时长和对应笔记。</div>
+            )}
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -1434,6 +1409,8 @@ function App() {
   const [books,    setBooks]   = useState(INIT_BOOKS);
   const [notes,    setNotes]   = useState(INIT_NOTES);
   const [updates,  setUpdates] = useState(INIT_UPDATES);
+  const [wereadMeta, setWereadMeta] = useState({ stats: cloneWereadStats(), syncedAt: '' });
+  const [selectedWereadDate, setSelectedWereadDate] = useState('');
   const [diary,    setDiary]   = useState({ today: { date: '', content: '' }, archive: [] });
   const [diarySaving, setDiarySaving] = useState(false);
   const diaryTimerRef = useRef(null);
@@ -1441,7 +1418,6 @@ function App() {
   const [detail,       setDetail]       = useState(null);
   const [projectModal, setProjectModal] = useState(null);
   const [noteModal,    setNoteModal]    = useState(null);
-  const [showWeRead,   setShowWeRead]   = useState(false);
   const uid  = useRef(1);
   const puid = useRef(1);
   const nuid = useRef(1);
@@ -1453,6 +1429,8 @@ function App() {
     setBooks(INIT_BOOKS);
     setNotes(INIT_NOTES);
     setUpdates(INIT_UPDATES);
+    setWereadMeta({ stats: cloneWereadStats(), syncedAt: '' });
+    setSelectedWereadDate('');
     setDiary({ today: { date: '', content: '' }, archive: [] });
     setDiarySaving(false);
     if (diaryTimerRef.current) clearTimeout(diaryTimerRef.current);
@@ -1460,7 +1438,6 @@ function App() {
     setDetail(null);
     setProjectModal(null);
     setNoteModal(null);
-    setShowWeRead(false);
     uid.current = Math.max(0, ...INIT_TASKS.map(x => x.id)) + 1;
     puid.current = Math.max(0, ...INIT_BOOKS.map(x => x.id)) + 1;
     nuid.current = Math.max(0, ...INIT_NOTES.map(x => x.id)) + 1;
@@ -1476,6 +1453,10 @@ function App() {
     setBooks(b);
     setNotes(n);
     setUpdates(u);
+    setWereadMeta({
+      stats: cloneWereadStats(d.wereadStats),
+      syncedAt: d.wereadSyncedAt || '',
+    });
     uid.current  = Math.max(0, ...t.map(x=>x.id)) + 1;
     puid.current = Math.max(0, ...b.map(x=>x.id)) + 1;
     nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;
@@ -1528,6 +1509,10 @@ function App() {
         setBooks(b);
         setNotes(n);
         setUpdates(u);
+        setWereadMeta({
+          stats: cloneWereadStats(hasSrv ? data.wereadStats : null),
+          syncedAt: hasSrv ? (data.wereadSyncedAt || '') : '',
+        });
         uid.current  = Math.max(0, ...t.map(x=>x.id)) + 1;
         puid.current = Math.max(0, ...b.map(x=>x.id)) + 1;
         nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;
@@ -1697,112 +1682,7 @@ function App() {
     if (n) log('note', `删除笔记「${n.title}」`);
   };
 
-  const handleWeReadSync = useCallback(({ books: wrBooks, notes: wrNotes }) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const syncedAt = new Date().toISOString();
-    setBooks(prev => {
-      const userBooks = prev.filter(b => !isWereadBook(b));
-      const existingWeread = prev.filter(b => isWereadBook(b));
-      const usedIds = new Set(userBooks.map(b => b.id));
-      const mergedWeread = wrBooks.map(wb => {
-        const existing = existingWeread.find(b => (wb._bookId && b._bookId === wb._bookId) || b.title === wb.title);
-        const id = existing?.id ?? nextLocalId(puid, usedIds);
-        usedIds.add(id);
-        return {
-          ...existing,
-          ...wb,
-          id,
-          source: 'weread',
-          author: wb.author || existing?.author || '',
-          status: existing?.status || 'reading',
-          accent: existing?.accent || pickBookAccent(wb.title),
-          startDate: existing?.startDate || today,
-          notes: existing?.notes || '',
-          currentPage: wb.currentPage,
-          totalPage: wb.totalPage || existing?.totalPage || 1,
-          readAt: wb.readAt || existing?.readAt || '',
-          readTimestamp: wb.readTimestamp || existing?.readTimestamp || 0,
-          progressPercent: wb.progressPercent ?? existing?.progressPercent ?? 0,
-          chapterIndex: wb.chapterIndex ?? existing?.chapterIndex ?? wb.currentPage ?? 0,
-          chapterCount: wb.chapterCount ?? existing?.chapterCount ?? wb.totalPage ?? 0,
-          estimatedCurrentPage: wb.estimatedCurrentPage ?? existing?.estimatedCurrentPage ?? 0,
-          estimatedTotalPage: wb.estimatedTotalPage ?? existing?.estimatedTotalPage ?? 0,
-          pageSource: wb.pageSource || existing?.pageSource || '',
-          isbn: wb.isbn || existing?.isbn || '',
-          totalWords: wb.totalWords ?? existing?.totalWords ?? 0,
-        };
-      });
-      return [...userBooks, ...mergedWeread];
-    });
-    setNotes(prev => {
-      const userNotes = prev.filter(n => !isWereadNote(n));
-      const existingWeread = prev.filter(n => isWereadNote(n));
-      const usedIds = new Set(userNotes.map(n => n.id));
-      const touched = wrNotes.map(wn => {
-        const existing = existingWeread.find(n =>
-          (wn.sourceItemId && n.sourceItemId === wn.sourceItemId)
-          || (
-            wn._bookId
-            && n._bookId === wn._bookId
-            && n.title === wn.title
-            && n.summary === wn.summary
-          )
-        );
-        const id = existing?.id ?? nextLocalId(nuid, usedIds);
-        usedIds.add(id);
-        return {
-          ...existing,
-          ...wn,
-          id,
-          source: 'weread',
-          updatedAt: today,
-          syncedAt,
-          sourceUpdatedAt: wn.sourceUpdatedAt || existing?.sourceUpdatedAt || '',
-          sourceUpdatedTimestamp: wn.sourceUpdatedTimestamp || existing?.sourceUpdatedTimestamp || 0,
-          projectId: null,
-        };
-      });
-      return [...userNotes, ...touched];
-    });
-    setUpdates(prev => {
-      const wereadUpdates = wrNotes.slice(0, 4).map((wn, idx) => ({
-        id: Date.now() + idx,
-        type: 'weread',
-        text: wn.title,
-        preview: extractNotePreview(wn.summary),
-        time: '刚刚',
-      }));
-      if (wereadUpdates.length > 0) {
-        return [...wereadUpdates, ...prev].slice(0, 8);
-      }
-      return [{ id: Date.now(), type: 'project', text: `微信读书同步：${wrBooks.length} 本书`, time: '刚刚' }, ...prev].slice(0, 8);
-    });
-  }, []);
 
-  useEffect(() => {
-    if (!CLOUD_MODE || !ready || !cloudUser) return;
-    let cancelled = false;
-
-    (async () => {
-      const lastAt = Number(localStorage.getItem(CLOUD_AUTO_SYNC_KEY) || 0);
-      if (Date.now() - lastAt < CLOUD_AUTO_SYNC_INTERVAL_MS) return;
-
-      try {
-        const status = await getLocalBridgeStatus();
-        if (cancelled || !status.hasApiKey) return;
-        const data = await runLocalBridgeSync();
-        if (cancelled) return;
-        handleWeReadSync(data);
-        localStorage.setItem(CLOUD_AUTO_SYNC_KEY, String(Date.now()));
-      } catch (_) {
-        // 云端页自动探测失败时静默跳过，不打断正常浏览
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [cloudUser, handleWeReadSync, ready]);
 
   const handleToggle = (id) => {
     setTasks(prev => prev.map(x => {
@@ -1827,7 +1707,7 @@ function App() {
     <div className="min-h-screen">
       <Header
         onAdd={()=>setModal('add')}
-        onWeRead={()=>setShowWeRead(true)}
+
         cloudMode={CLOUD_MODE}
         personalMode={PERSONAL_MODE}
         user={cloudUser}
@@ -1842,19 +1722,27 @@ function App() {
         {/* Bottom 2-col */}
         <div className="grid md:grid-cols-5 gap-6">
           <div className="md:col-span-3 space-y-6">
-            <WeReadNotes notes={wereadNotes} />
+            <WeReadNotes
+              notes={wereadNotes}
+              selectedDate={selectedWereadDate}
+              onClearDate={() => setSelectedWereadDate('')}
+            />
           </div>
           <div className="md:col-span-2 space-y-6">
-            <Progress tasks={tasks} books={learningBooks} />
+            <WeReadHeatmap
+              stats={wereadMeta.stats}
+              notes={wereadNotes}
+              syncedAt={wereadMeta.syncedAt}
+              selectedDate={selectedWereadDate}
+              onSelectDate={setSelectedWereadDate}
+            />
             <WereadRecent notes={wereadNotes} updates={updates} />
           </div>
         </div>
       </main>
 
       {/* Modals */}
-      {showWeRead && (
-        <WeReadModal onSync={handleWeReadSync} onClose={()=>setShowWeRead(false)} cloudMode={CLOUD_MODE} />
-      )}
+
       {modal && (
         <TaskModal task={modal==='add'?null:modal} books={learningBooks} onSave={handleSave} onClose={()=>setModal(null)} />
       )}

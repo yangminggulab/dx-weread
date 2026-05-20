@@ -826,10 +826,15 @@ async function syncWeRead(env) {
 
   const existing = await loadSharedData(env.TASKS_KV);
   await saveSharedData(env.TASKS_KV, {
-    tasks: (existing.tasks || []).filter((t) => t && typeof t === "object"),
-    books: [...(existing.books || []).filter((b) => b?.source !== "weread"), ...books],
-    notes: [...(existing.notes || []).filter((n) => n?.source !== "weread"), ...allNotes],
-    updates: (existing.updates || []).filter((u) => u?.type !== "weread"),
+    tasks:           (existing.tasks || []).filter((t) => t && typeof t === "object"),
+    books:           [...(existing.books || []).filter((b) => b?.source !== "weread"), ...books],
+    notes:           [...(existing.notes || []).filter((n) => n?.source !== "weread"), ...allNotes],
+    updates:         (existing.updates || []).filter((u) => u?.type !== "weread"),
+    wereadStats:     existing.wereadStats,
+    weekReadMinutes: existing.weekReadMinutes,
+    weekReadDaily:   existing.weekReadDaily,
+    totalReadDays:   existing.totalReadDays,
+    wereadSyncedAt:  existing.wereadSyncedAt,
   });
   console.log("[weread-cron] ✅ 已写入 KV");
 }
