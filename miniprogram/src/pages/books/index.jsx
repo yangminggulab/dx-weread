@@ -23,21 +23,72 @@ function getTodayMinutes(weekDaily) {
   }, 0)
 }
 
+function drawArrowTip(ctx, cx, cy, r, angle, sw) {
+  const tipX = cx + r * Math.cos(angle)
+  const tipY = cy + r * Math.sin(angle)
+  const half = sw / 2
+  ctx.beginPath()
+  ctx.arc(tipX, tipY, half, 0, Math.PI * 2)
+  ctx.fillStyle = '#7ef587'
+  ctx.fill()
+  const dir = angle + Math.PI / 2
+  const s = half * 0.5
+  ctx.save()
+  ctx.translate(tipX, tipY)
+  ctx.rotate(dir)
+  ctx.beginPath()
+  ctx.moveTo(0, -s * 1.3)
+  ctx.lineTo(s * 0.8, s * 0.8)
+  ctx.lineTo(-s * 0.8, s * 0.8)
+  ctx.closePath()
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fill()
+  ctx.restore()
+}
+
 function drawRing(ctx, W, H, minutes, goal) {
   const cx = W / 2, cy = H / 2
-  const sw = 12
-  const r = Math.min(W, H) / 2 - sw - 2
-  const pct = goal > 0 ? Math.min(1, minutes / goal) : 0
+  const sw = 22
+  const r = Math.min(W, H) / 2 - sw / 2 - 2
+  const pct = goal > 0 ? minutes / goal : 0
+  const start = -Math.PI / 2
+
   ctx.clearRect(0, 0, W, H)
+
+  // Track
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.strokeStyle = '#f0ede8'
+  ctx.strokeStyle = 'rgba(76,217,100,0.15)'
   ctx.lineWidth = sw
-  ctx.lineCap = 'round'
+  ctx.lineCap = 'butt'
   ctx.stroke()
-  if (pct > 0) {
+
+  if (pct <= 0) return
+
+  if (pct >= 1) {
+    // Full first lap
     ctx.beginPath()
-    ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct)
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.strokeStyle = '#4cd964'
+    ctx.lineWidth = sw
+    ctx.lineCap = 'butt'
+    ctx.stroke()
+
+    const overflow = pct % 1
+    if (overflow > 0.005) {
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, start, start + Math.PI * 2 * overflow)
+      ctx.strokeStyle = '#7ef587'
+      ctx.lineWidth = sw
+      ctx.lineCap = 'round'
+      ctx.stroke()
+      drawArrowTip(ctx, cx, cy, r, start + Math.PI * 2 * overflow, sw)
+    } else {
+      drawArrowTip(ctx, cx, cy, r, start, sw)
+    }
+  } else {
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, start, start + Math.PI * 2 * pct)
     ctx.strokeStyle = '#4cd964'
     ctx.lineWidth = sw
     ctx.lineCap = 'round'
@@ -69,25 +120,27 @@ function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
   const hrs = Math.floor(todayMinutes / 60)
   const mins = todayMinutes % 60
   const todayStr = hrs > 0 ? `${hrs}时${mins}分` : `${mins}分钟`
-  const pctNum = Math.min(100, Math.round(todayMinutes / (dayGoalMinutes || 1) * 100))
 
   return (
-    <View className='week-ring-card card'>
-      <View className='week-ring-top'>
-        <View className='week-ring-side'>
-          <Text className='week-ring-side-value'>{todayStr}</Text>
-          <Text className='week-ring-side-label'>今日累积</Text>
+    <View className='rring-card card'>
+      <View className='rring-row'>
+        <View className='rring-wrap'>
+          <Canvas type='2d' id='wr-ring' className='rring-canvas' />
         </View>
-        <View className='week-ring-wrap'>
-          <Canvas type='2d' id='wr-ring' className='week-ring-canvas' />
-          <View className='week-ring-center'>
-            <Text className='week-ring-pct'>{pctNum}%</Text>
-            <Text className='week-ring-sub'>今日进度</Text>
+        <View className='rring-stats'>
+          <View className='rring-stat'>
+            <View className='rring-stat-top'>
+              <Text className='rring-val'>{todayStr}</Text>
+            </View>
+            <Text className='rring-label'>今日阅读</Text>
           </View>
-        </View>
-        <View className='week-ring-side'>
-          <Text className='week-ring-side-value'>{totalReadDays}<Text className='week-ring-side-unit'>天</Text></Text>
-          <Text className='week-ring-side-label'>累计完成</Text>
+          <View className='rring-stat'>
+            <View className='rring-stat-top'>
+              <Text className='rring-val rring-val-days'>{totalReadDays}</Text>
+              <Text className='rring-unit'>天</Text>
+            </View>
+            <Text className='rring-label'>累计完成</Text>
+          </View>
         </View>
       </View>
     </View>

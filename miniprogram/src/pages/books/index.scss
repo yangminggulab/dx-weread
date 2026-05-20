@@ -325,73 +325,64 @@
 .btn-confirm { background: #2d6a4f; color: #fff; }
 
 // ── 今日阅读圆环 ──────────────────────────────────────
-.week-ring-card {
+.rring-card {
   margin: 0 0 24px;
-  padding: 32px 24px;
+  padding: 28px 24px;
 }
 
-.week-ring-top {
+.rring-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 36px;
 }
 
-.week-ring-side {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.week-ring-side-value {
-  font-size: 36px;
-  font-weight: 700;
-  color: #1c1c1c;
-  line-height: 1;
-}
-
-.week-ring-side-unit {
-  font-size: 24px;
-  font-weight: 400;
-  color: #888;
-}
-
-.week-ring-side-label {
-  font-size: 22px;
-  color: #aaa;
-}
-
-.week-ring-wrap {
-  position: relative;
-  width: 160px;
-  height: 160px;
+.rring-wrap {
+  width: 180px;
+  height: 180px;
   flex-shrink: 0;
 }
 
-.week-ring-canvas {
-  width: 160px;
-  height: 160px;
+.rring-canvas {
+  width: 180px;
+  height: 180px;
 }
 
-.week-ring-center {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+.rring-stats {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  gap: 28px;
 }
 
-.week-ring-pct {
-  font-size: 36px;
+.rring-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rring-stat-top {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.rring-val {
+  font-size: 48px;
   font-weight: 700;
   color: #4cd964;
   line-height: 1;
 }
 
-.week-ring-sub {
-  font-size: 20px;
+.rring-val-days {
+  font-size: 52px;
+}
+
+.rring-unit {
+  font-size: 26px;
+  color: #888;
+}
+
+.rring-label {
+  font-size: 22px;
   color: #aaa;
-  margin-top: 6px;
 }
