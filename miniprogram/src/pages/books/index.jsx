@@ -148,6 +148,7 @@ export default function BooksPage() {
   const reading = books
     .filter(b => !finishedIds.has(b.id) && b.status === 'reading')
     .sort((a, b) => (b.readTimestamp || b.sourceUpdatedTimestamp || 0) - (a.readTimestamp || a.sourceUpdatedTimestamp || 0))
+    .slice(0, 3)
 
   const want = books.filter(b => !finishedIds.has(b.id) && b.status === 'want')
 
