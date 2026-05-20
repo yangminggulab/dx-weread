@@ -38,7 +38,7 @@ function drawRing(ctx, W, H, minutes, goal) {
   if (pct > 0) {
     ctx.beginPath()
     ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct)
-    ctx.strokeStyle = '#2d6a4f'
+    ctx.strokeStyle = '#4cd964'
     ctx.lineWidth = sw
     ctx.lineCap = 'round'
     ctx.stroke()
