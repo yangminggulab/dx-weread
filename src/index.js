@@ -76,14 +76,28 @@ function normalizeArrayItems(value) {
   return Array.isArray(value) ? value.filter((item) => item && typeof item === "object") : [];
 }
 
+function normalizeWereadStats(stats) {
+  if (!stats || typeof stats !== "object") return { monthly: {}, annual: {}, dailyReadTimes: [] };
+  const daily = Array.isArray(stats.dailyReadTimes)
+    ? stats.dailyReadTimes.filter(item => item && item.date && typeof item.seconds === "number")
+    : [];
+  return { monthly: stats.monthly || {}, annual: stats.annual || {}, dailyReadTimes: daily };
+}
+
 function normalizeAppData(payload) {
   const data = payload && typeof payload === "object" ? payload : {};
-  return {
-    tasks: normalizeArrayItems(data.tasks),
-    books: normalizeArrayItems(data.books),
-    notes: normalizeArrayItems(data.notes),
+  const result = {
+    tasks:   normalizeArrayItems(data.tasks),
+    books:   normalizeArrayItems(data.books),
+    notes:   normalizeArrayItems(data.notes),
     updates: normalizeArrayItems(data.updates),
   };
+  if (data.wereadStats)             result.wereadStats      = normalizeWereadStats(data.wereadStats);
+  if (data.weekReadDaily)           result.weekReadDaily    = data.weekReadDaily;
+  if (data.weekReadMinutes != null) result.weekReadMinutes  = data.weekReadMinutes;
+  if (data.totalReadDays   != null) result.totalReadDays    = data.totalReadDays;
+  if (data.wereadSyncedAt)          result.wereadSyncedAt   = data.wereadSyncedAt;
+  return result;
 }
 
 function coerceDiaryViewCount(value) {
@@ -550,9 +564,281 @@ async function handleLogout(request, env) {
   return json({ ok: true });
 }
 
+// ── WeRead 定时同步（Cloudflare cron，key 存 Worker secret 不经 GitHub） ──────
+
+const WEREAD_GATEWAY = "https://i.weread.qq.com/api/agent/gateway";
+const WEREAD_SKILL_VER = "1.0.3";
+const WR_BOOK_ACCENTS = ["#2d6a4f", "#4a4a6a", "#6a4a2a", "#3a6a5a", "#5a3a6a"];
+
+async function wrCall(apiKey, apiName, params = {}) {
+  const resp = await fetch(WEREAD_GATEWAY, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ api_name: apiName, skill_version: WEREAD_SKILL_VER, ...params }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok || (data.errcode !== undefined && data.errcode !== 0))
+    throw new Error(data.errmsg || `HTTP ${resp.status}`);
+  if (data.upgrade_info?.message)
+    throw new Error(`WeRead skill 需升级：${data.upgrade_info.message}`);
+  return data;
+}
+
+function wrFormatTs(ms, withTime = true) {
+  if (!ms) return "";
+  const d = new Date(ms > 1e11 ? ms : ms * 1000);
+  if (isNaN(d.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    ...(withTime ? { hour: "2-digit", minute: "2-digit", hour12: false } : {}),
+  }).formatToParts(d);
+  const g = (t) => parts.find((p) => p.type === t)?.value || "";
+  return withTime
+    ? `${g("year")}-${g("month")}-${g("day")} ${g("hour")}:${g("minute")}`
+    : `${g("year")}-${g("month")}-${g("day")}`;
+}
+
+function wrAccent(seed = "") {
+  let s = 0;
+  for (const c of seed) s += c.charCodeAt(0);
+  return WR_BOOK_ACCENTS[s % WR_BOOK_ACCENTS.length];
+}
+
+function wrEpochMs(v) {
+  const n = Number(v) || 0;
+  return n <= 0 ? 0 : n < 1e11 ? n * 1000 : n;
+}
+
+async function wrSha1(str) {
+  const buf = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function wrItemId(bookId, type, ...parts) {
+  const norm = parts.map((p) => String(p || "").trim()).filter(Boolean).join("||");
+  const h = await wrSha1(`${bookId}|${type}|${norm}`);
+  return `${bookId}:${type}:${h.slice(0, 16)}`;
+}
+
+function wrShorten(text, limit = 18) {
+  const s = String(text || "").replace(/\s+/g, " ").trim();
+  return s.length <= limit ? s : s.slice(0, limit).trimEnd() + "...";
+}
+
+function wrNoteTitle(bookTitle, label, content) {
+  const p = wrShorten(content, 18);
+  return p ? `《${bookTitle}》${label} · ${p}` : `《${bookTitle}》${label}`;
+}
+
+function wrNormalizeBook(item, progressPayload) {
+  const b = (item && typeof item === "object") ? item : {};
+  const prog = progressPayload?.book && typeof progressPayload.book === "object" ? progressPayload.book : {};
+  const bookId = String(b.bookId || "").trim();
+  const pct = Math.max(0, Math.min(100, Number(prog.progress) || 0));
+  const readTs = wrEpochMs(prog.updateTime || b.readUpdateTime || b.updateTime);
+  return {
+    source: "weread",
+    _bookId: bookId,
+    title: b.title || "",
+    author: b.author || "",
+    cover: b.cover || "",
+    category: b.category || "",
+    status: pct >= 100 || Number(b.finishReading) === 1 ? "finished" : "reading",
+    progressPercent: pct,
+    readTimestamp: readTs,
+    readAt: wrFormatTs(readTs),
+    todayReadMinutes: 0,
+    accent: wrAccent(b.title || ""),
+    sourceUpdatedTimestamp: readTs,
+    recordReadingTime: Number(prog.recordReadingTime || prog.readingTime) || 0,
+    chapterUid: Number(prog.chapterUid) || 0,
+    chapterOffset: Number(prog.chapterOffset) || 0,
+    isStartReading: Boolean(Number(prog.isStartReading)),
+    secret: Number(b.secret) || 0,
+    isTop: Number(b.isTop) || 0,
+  };
+}
+
+async function wrNormalizeHighlight(bookTitle, bookId, mark, chapterTitles) {
+  const text = String(mark.markText || "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  const ts = wrEpochMs(mark.createTime);
+  const chUid = Number(mark.chapterUid) || 0;
+  const id = await wrItemId(bookId, "highlight", mark.bookmarkId, mark.range, chUid, text, ts);
+  return {
+    source: "weread",
+    title: wrNoteTitle(bookTitle, "划线", text),
+    tags: ["微信读书", "划线"],
+    summary: text,
+    noteType: "highlight",
+    bookTitle,
+    _bookId: bookId,
+    sourceItemId: id,
+    sourceUpdatedAt: wrFormatTs(ts),
+    sourceUpdatedTimestamp: ts,
+    updatedAt: wrFormatTs(ts, false),
+    chapterTitle: chapterTitles[chUid] || "",
+    chapterUid: chUid,
+    range: String(mark.range || "").trim(),
+    colorStyle: Number(mark.colorStyle) || 0,
+  };
+}
+
+async function wrNormalizeReview(bookTitle, bookId, reviewItem) {
+  const r = reviewItem?.review && typeof reviewItem.review === "object" ? reviewItem.review : {};
+  const content = String(r.content || "").replace(/\s+/g, " ").trim();
+  if (!content) return null;
+  const ts = wrEpochMs(r.createTime);
+  const id = await wrItemId(bookId, "review", r.reviewId, r.range, ts, content);
+  return {
+    source: "weread",
+    title: wrNoteTitle(bookTitle, "评论", content),
+    tags: ["微信读书", "评论"],
+    summary: content,
+    noteType: "review",
+    bookTitle,
+    _bookId: bookId,
+    sourceItemId: id,
+    sourceUpdatedAt: wrFormatTs(ts),
+    sourceUpdatedTimestamp: ts,
+    updatedAt: wrFormatTs(ts, false),
+    chapterTitle: String(r.chapterTitle || r.chapterName || "").trim(),
+    chapterUid: Number(r.chapterUid) || 0,
+    range: String(r.range || "").trim(),
+  };
+}
+
+async function wrPageNotebooks(apiKey) {
+  const books = [];
+  let lastSort = null;
+  for (let i = 0; i < 50; i++) {
+    const params = { count: 100, ...(lastSort ? { lastSort } : {}) };
+    const payload = await wrCall(apiKey, "/user/notebooks", params);
+    const page = (payload.books || []).filter((b) => b && typeof b === "object");
+    books.push(...page);
+    if (!payload.hasMore || !page.length) break;
+    const next = Number(page[page.length - 1]?.sort) || 0;
+    if (!next) break;
+    lastSort = next;
+  }
+  return books;
+}
+
+async function wrPageReviews(apiKey, bookId) {
+  const reviews = [];
+  let synckey = 0;
+  for (let i = 0; i < 50; i++) {
+    const payload = await wrCall(apiKey, "/review/list/mine", { bookid: bookId, count: 100, synckey });
+    const page = (payload.reviews || []).filter((r) => r && typeof r === "object");
+    reviews.push(...page);
+    if (!payload.hasMore || !page.length) break;
+    const next = Number(payload.synckey) || 0;
+    if (next === synckey) break;
+    synckey = next;
+  }
+  return reviews;
+}
+
+async function wrFetchProgress(apiKey, book) {
+  const bookId = String(book.bookId || "").trim();
+  if (!bookId) return {};
+  try { return await wrCall(apiKey, "/book/getprogress", { bookId }); } catch { return {}; }
+}
+
+async function wrFetchNotes(apiKey, notebookBook) {
+  const bookId = String(notebookBook.bookId || "").trim();
+  const meta = notebookBook.book && typeof notebookBook.book === "object" ? notebookBook.book : {};
+  const bookTitle = meta.title || notebookBook.title || bookId;
+  if (!bookId) return [];
+  try {
+    const [bmPayload, reviewItems] = await Promise.all([
+      wrCall(apiKey, "/book/bookmarklist", { bookId }),
+      wrPageReviews(apiKey, bookId),
+    ]);
+    const chapterTitles = {};
+    for (const ch of bmPayload.chapters || []) {
+      if (ch && typeof ch === "object")
+        chapterTitles[Number(ch.chapterUid) || 0] = String(ch.title || "").trim();
+    }
+    const notes = [];
+    const seen = new Set();
+    for (const item of bmPayload.updated || []) {
+      if (!item || typeof item !== "object") continue;
+      const n = await wrNormalizeHighlight(bookTitle, bookId, item, chapterTitles);
+      if (!n || seen.has(n.sourceItemId)) continue;
+      seen.add(n.sourceItemId);
+      notes.push(n);
+    }
+    for (const item of reviewItems) {
+      if (!item || typeof item !== "object") continue;
+      const n = await wrNormalizeReview(bookTitle, bookId, item);
+      if (!n || seen.has(n.sourceItemId)) continue;
+      seen.add(n.sourceItemId);
+      notes.push(n);
+    }
+    return notes.sort((a, b) => (b.sourceUpdatedTimestamp || 0) - (a.sourceUpdatedTimestamp || 0));
+  } catch (e) {
+    console.error(`[weread-cron] 笔记获取失败 ${bookId}：${e}`);
+    return [];
+  }
+}
+
+async function runBatched(items, batchSize, fn) {
+  const results = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = await Promise.all(items.slice(i, i + batchSize).map(fn));
+    results.push(...batch);
+  }
+  return results;
+}
+
+async function syncWeRead(env) {
+  const apiKey = String(env.WEREAD_API_KEY || "").trim();
+  if (!apiKey) { console.log("[weread-cron] 跳过：未配置 WEREAD_API_KEY"); return; }
+
+  console.log("[weread-cron] 开始同步...");
+  const [shelf, notebookBooks] = await Promise.all([
+    wrCall(apiKey, "/shelf/sync"),
+    wrPageNotebooks(apiKey),
+  ]);
+
+  const rawBooks = (shelf.books || []).filter((b) => b && typeof b === "object");
+  console.log(`[weread-cron] 书架 ${rawBooks.length} 本，笔记本 ${notebookBooks.length} 本`);
+
+  const progressList = await runBatched(rawBooks, 6, (b) => wrFetchProgress(apiKey, b));
+  const progressMap = Object.fromEntries(
+    rawBooks.map((b, i) => [String(b.bookId || "").trim(), progressList[i]])
+  );
+
+  const books = rawBooks
+    .map((b) => wrNormalizeBook(b, progressMap[String(b.bookId || "").trim()]))
+    .sort((a, b) => (b.readTimestamp || 0) - (a.readTimestamp || 0));
+
+  const noteLists = await runBatched(notebookBooks, 4, (b) => wrFetchNotes(apiKey, b));
+  const allNotes = noteLists
+    .flat()
+    .sort((a, b) => (b.sourceUpdatedTimestamp || 0) - (a.sourceUpdatedTimestamp || 0));
+
+  console.log(`[weread-cron] 同步完成：books=${books.length} notes=${allNotes.length}`);
+
+  const existing = await loadSharedData(env.TASKS_KV);
+  await saveSharedData(env.TASKS_KV, {
+    tasks: (existing.tasks || []).filter((t) => t && typeof t === "object"),
+    books: [...(existing.books || []).filter((b) => b?.source !== "weread"), ...books],
+    notes: [...(existing.notes || []).filter((n) => n?.source !== "weread"), ...allNotes],
+    updates: (existing.updates || []).filter((u) => u?.type !== "weread"),
+  });
+  console.log("[weread-cron] ✅ 已写入 KV");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runDailyReset(env));
+    ctx.waitUntil(Promise.all([runDailyReset(env), syncWeRead(env)]));
   },
 
   async fetch(request, env) {
