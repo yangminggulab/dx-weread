@@ -164,7 +164,7 @@ export default function BooksPage() {
   useEffect(() => { loadData() }, [loadData])
   useDidShow(() => { loadData() })
 
-  const finished = books.filter(b => (b.progressPercent ?? 0) >= 99)
+  const finished = books.filter(b => b.status === 'finished' || (b.progressPercent ?? 0) >= 99)
   const finishedIds = new Set(finished.map(b => b.id))
 
   const reading = books
