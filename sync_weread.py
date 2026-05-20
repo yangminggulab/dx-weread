@@ -117,8 +117,8 @@ def sync():
     done    = sum(1 for b in books if b["status"] == "finished")
     print(f"   在读 {reading}  想读 {want}  读完 {done}")
 
-    # 4. 本周阅读统计
-    print("📊 Fetching weekly reading stats...")
+    # 4. 阅读统计（本周每日 + 累计天数）
+    print("📊 Fetching reading stats...")
     try:
         week = gw("/readdata/detail", mode="weekly")
         week_read_minutes = coerce_int(week.get("totalReadTime")) // 60
@@ -131,6 +131,14 @@ def sync():
         print(f"   ⚠️ 本周统计跳过: {e}")
         week_read_minutes = 0
         week_read_daily   = {}
+
+    try:
+        overall = gw("/readdata/detail", mode="overall")
+        total_read_days = coerce_int(overall.get("readDays"))
+        print(f"   累计阅读天数: {total_read_days} 天")
+    except Exception as e:
+        print(f"   ⚠️ 累计统计跳过: {e}")
+        total_read_days = 0
 
     # 5. 拉云端、合并、推送
     print("☁️  Syncing to cloud...")
@@ -146,6 +154,7 @@ def sync():
     cloud["books"]           = other_books + books
     cloud["weekReadMinutes"] = week_read_minutes
     cloud["weekReadDaily"]   = week_read_daily
+    cloud["totalReadDays"]   = total_read_days
 
     push = requests.post(
         f"{CLOUD_BASE_URL}/api/data",

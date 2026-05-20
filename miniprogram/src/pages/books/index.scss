@@ -324,27 +324,54 @@
 .btn-cancel { background: #f5f5f5; color: #666; margin-right: 20px; }
 .btn-confirm { background: #2d6a4f; color: #fff; }
 
-// ── 本周阅读圆环 ──────────────────────────────────────
+// ── 今日阅读圆环 ──────────────────────────────────────
 .week-ring-card {
   margin: 0 0 24px;
-  padding: 32px;
+  padding: 32px 24px;
 }
 
 .week-ring-top {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+}
+
+.week-ring-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.week-ring-side-value {
+  font-size: 36px;
+  font-weight: 700;
+  color: #1c1c1c;
+  line-height: 1;
+}
+
+.week-ring-side-unit {
+  font-size: 24px;
+  font-weight: 400;
+  color: #888;
+}
+
+.week-ring-side-label {
+  font-size: 22px;
+  color: #aaa;
 }
 
 .week-ring-wrap {
   position: relative;
-  width: 140px;
-  height: 140px;
+  width: 160px;
+  height: 160px;
   flex-shrink: 0;
 }
 
 .week-ring-canvas {
-  width: 140px;
-  height: 140px;
+  width: 160px;
+  height: 160px;
 }
 
 .week-ring-center {
@@ -356,70 +383,15 @@
   justify-content: center;
 }
 
-.week-ring-time {
-  font-size: 26px;
-  font-weight: 700;
-  color: #1c1c1c;
-  line-height: 1.2;
-}
-
-.week-ring-sub {
-  font-size: 20px;
-  color: #888;
-  margin-top: 4px;
-}
-
-.week-ring-stats {
-  flex: 1;
-  padding-left: 36px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
 .week-ring-pct {
-  font-size: 56px;
+  font-size: 36px;
   font-weight: 700;
   color: #2d6a4f;
   line-height: 1;
 }
 
-.week-ring-goal {
-  font-size: 24px;
+.week-ring-sub {
+  font-size: 20px;
   color: #aaa;
-  margin-top: 10px;
+  margin-top: 6px;
 }
-
-.week-ring-days {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 28px;
-  padding-top: 24px;
-  border-top: 1px solid #f0ede8;
-}
-
-.week-day-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.week-day-dot {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #f0ede8;
-}
-
-.week-day-done { background: #2d6a4f; }
-
-.week-day-today {
-  box-sizing: border-box;
-  border: 2px solid #2d6a4f;
-  background: #eef5f1;
-  &.week-day-done { background: #2d6a4f; border-color: transparent; }
-}
-
-.week-day-label { font-size: 20px; color: #bbb; }
-.week-day-label-today { color: #2d6a4f; font-weight: 600; }

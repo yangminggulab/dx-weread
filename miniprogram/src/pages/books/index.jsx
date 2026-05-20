@@ -5,7 +5,7 @@ import { getData } from '../../api/index'
 import './index.scss'
 
 const BOOKS_CACHE_KEY = 'books_cache_v2'
-const WEEK_GOAL_MINUTES = 300 // 5小时/周
+const DAY_GOAL_MINUTES = 30 // 30分钟/天
 
 const TABS = [
   { key: 'reading',  label: '在读' },
@@ -13,24 +13,14 @@ const TABS = [
   { key: 'finished', label: '读完' },
 ]
 
-function getWeekDayDots(weekDaily) {
+function getTodayMinutes(weekDaily) {
   const now = new Date()
-  const dow = now.getDay()
-  const monday = new Date(now)
-  monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1))
-  monday.setHours(0, 0, 0, 0)
-  return ['一','二','三','四','五','六','日'].map((label, i) => {
-    const day = new Date(monday)
-    day.setDate(monday.getDate() + i)
-    const tsStart = Math.floor(day.getTime() / 1000)
-    const tsEnd = tsStart + 86400
-    const hasRead = Object.entries(weekDaily || {}).some(([k, v]) => {
-      const kt = parseInt(k)
-      return v > 0 && kt >= tsStart && kt < tsEnd
-    })
-    const isToday = day.toDateString() === now.toDateString()
-    return { label, hasRead, isToday }
-  })
+  const todayStart = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000)
+  const todayEnd = todayStart + 86400
+  return Object.entries(weekDaily || {}).reduce((sum, [k, v]) => {
+    const kt = parseInt(k)
+    return sum + (kt >= todayStart && kt < todayEnd ? v : 0)
+  }, 0)
 }
 
 function drawRing(ctx, W, H, minutes, goal) {
@@ -55,7 +45,9 @@ function drawRing(ctx, W, H, minutes, goal) {
   }
 }
 
-function WeeklyRing({ weekMinutes, weekDaily, goalMinutes }) {
+function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
+  const todayMinutes = getTodayMinutes(weekDaily)
+
   useEffect(() => {
     Taro.nextTick(() => {
       Taro.createSelectorQuery()
@@ -69,41 +61,34 @@ function WeeklyRing({ weekMinutes, weekDaily, goalMinutes }) {
           cv.width = res.width * dpr
           cv.height = res.height * dpr
           ctx.scale(dpr, dpr)
-          drawRing(ctx, res.width, res.height, weekMinutes, goalMinutes)
+          drawRing(ctx, res.width, res.height, todayMinutes, dayGoalMinutes)
         })
     })
-  }, [weekMinutes, goalMinutes])
+  }, [todayMinutes, dayGoalMinutes])
 
-  const hrs = Math.floor(weekMinutes / 60)
-  const mins = weekMinutes % 60
-  const timeStr = hrs > 0
-    ? `${hrs}小时${mins > 0 ? mins + '分' : ''}`
-    : `${mins || 0}分钟`
-  const pctNum = Math.min(100, Math.round(weekMinutes / (goalMinutes || 1) * 100))
-  const dayDots = getWeekDayDots(weekDaily)
+  const hrs = Math.floor(todayMinutes / 60)
+  const mins = todayMinutes % 60
+  const todayStr = hrs > 0 ? `${hrs}时${mins}分` : `${mins}分钟`
+  const pctNum = Math.min(100, Math.round(todayMinutes / (dayGoalMinutes || 1) * 100))
 
   return (
     <View className='week-ring-card card'>
       <View className='week-ring-top'>
+        <View className='week-ring-side'>
+          <Text className='week-ring-side-value'>{todayStr}</Text>
+          <Text className='week-ring-side-label'>今日累积</Text>
+        </View>
         <View className='week-ring-wrap'>
           <Canvas type='2d' id='wr-ring' className='week-ring-canvas' />
           <View className='week-ring-center'>
-            <Text className='week-ring-time'>{timeStr}</Text>
-            <Text className='week-ring-sub'>本周阅读</Text>
+            <Text className='week-ring-pct'>{pctNum}%</Text>
+            <Text className='week-ring-sub'>今日进度</Text>
           </View>
         </View>
-        <View className='week-ring-stats'>
-          <Text className='week-ring-pct'>{pctNum}%</Text>
-          <Text className='week-ring-goal'>目标 {Math.floor(goalMinutes / 60)} 小时/周</Text>
+        <View className='week-ring-side'>
+          <Text className='week-ring-side-value'>{totalReadDays}<Text className='week-ring-side-unit'>天</Text></Text>
+          <Text className='week-ring-side-label'>累计完成</Text>
         </View>
-      </View>
-      <View className='week-ring-days'>
-        {dayDots.map((d, i) => (
-          <View key={i} className='week-day-item'>
-            <View className={`week-day-dot${d.hasRead ? ' week-day-done' : ''}${d.isToday ? ' week-day-today' : ''}`} />
-            <Text className={`week-day-label${d.isToday ? ' week-day-label-today' : ''}`}>{d.label}</Text>
-          </View>
-        ))}
       </View>
     </View>
   )
@@ -120,8 +105,8 @@ export default function BooksPage() {
     try { return !Taro.getStorageSync(BOOKS_CACHE_KEY)?.books } catch { return true }
   })
   const [tab, setTab] = useState('reading')
-  const [weekMinutes, setWeekMinutes] = useState(0)
   const [weekDaily, setWeekDaily] = useState({})
+  const [totalReadDays, setTotalReadDays] = useState(0)
   const touchRef = useRef({ x: 0, y: 0, time: 0 })
 
   const loadData = useCallback(async () => {
@@ -129,8 +114,8 @@ export default function BooksPage() {
       const data = await getData()
       const fetched = (data.books || []).filter(b => b.source === 'weread')
       setBooks(fetched)
-      setWeekMinutes(data.weekReadMinutes || 0)
       setWeekDaily(data.weekReadDaily || {})
+      setTotalReadDays(data.totalReadDays || 0)
       try { Taro.setStorageSync(BOOKS_CACHE_KEY, { books: fetched }) } catch {}
     } catch {
       Taro.showToast({ title: '加载失败', icon: 'error' })
@@ -226,10 +211,10 @@ export default function BooksPage() {
         })}
 
         {!loading && tab === 'reading' && (
-          <WeeklyRing
-            weekMinutes={weekMinutes}
+          <ReadingRing
             weekDaily={weekDaily}
-            goalMinutes={WEEK_GOAL_MINUTES}
+            totalReadDays={totalReadDays}
+            dayGoalMinutes={DAY_GOAL_MINUTES}
           />
         )}
       </ScrollView>
