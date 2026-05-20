@@ -58,7 +58,7 @@ function drawRing(ctx, W, H, minutes, goal) {
   // Track
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.strokeStyle = 'rgba(0,0,0,0.1)'
+  ctx.strokeStyle = '#1a3d28'
   ctx.lineWidth = sw
   ctx.lineCap = 'butt'
   ctx.stroke()
