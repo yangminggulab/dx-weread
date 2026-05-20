@@ -12,6 +12,7 @@
       "id": "082d72b578e3497ca27e6a37b8e65baf"
     }
   ],
+  // 启用 /tasks-cloud 多用户版时，再加回 AUTH_DB 的 D1 绑定。
   "routes": [
     {
       "pattern": "yangminggu.com/tasks*",
