@@ -7,13 +7,12 @@ from flask import Flask, request, jsonify, send_from_directory, make_response
 from datetime import datetime
 import hashlib
 import math
-from pathlib import Path
 import secrets
 import threading
 import time
 import requests, os, json
 
-from scripts.github_actions_secrets import pick_github_token, resolve_github_repo, sync_repo_secrets
+from weread import WeReadApiError, load_weread_api_key, sync_weread_snapshot
 
 app = Flask(__name__, static_folder=os.path.dirname(__file__))
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data.json")
@@ -91,18 +90,12 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-WEREAD_SYNC_MODE = (os.environ.get("WEREAD_SYNC_MODE", "hybrid") or "hybrid").strip().lower()
+WEREAD_SYNC_MODE = "api-key"
 WEREAD_ENABLE_GITHUB_SECRET_SYNC = _env_flag(
     "WEREAD_ENABLE_GITHUB_SECRET_SYNC",
     default=WEREAD_SYNC_MODE != "local-only",
 )
-WEREAD_AUTO_SYNC_SOURCE = (
-    os.environ.get(
-        "WEREAD_AUTO_SYNC_SOURCE",
-        "saved-cookie" if WEREAD_SYNC_MODE == "local-only" else "chrome",
-    )
-    or "saved-cookie"
-).strip().lower()
+WEREAD_AUTO_SYNC_SOURCE = "api-key"
 WEREAD_AUTO_SYNC_INTERVAL_HOURS = max(_env_float("WEREAD_AUTO_SYNC_INTERVAL_HOURS", 2.0), 0.25)
 WEREAD_AUTO_SYNC_START_DELAY_SECONDS = max(_env_float("WEREAD_AUTO_SYNC_START_DELAY_SECONDS", 60.0), 0.0)
 WEREAD_AUTO_SYNC_ON_START = _env_flag("WEREAD_AUTO_SYNC_ON_START", True)
@@ -185,12 +178,74 @@ DIARY_FILE = os.path.join(os.path.dirname(__file__), "diary.json")
 def empty_diary():
     return {"today": {"date": "", "content": ""}, "archive": []}
 
+def _coerce_diary_view_count(value):
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+def _normalize_diary_archive_entry(entry):
+    if not isinstance(entry, dict):
+        return None
+    date = str(entry.get("date", "")).strip()
+    if not date:
+        return None
+    return {
+        **entry,
+        "date": date,
+        "content": str(entry.get("content", "")),
+        "viewCount": _coerce_diary_view_count(entry.get("viewCount")),
+        "lastViewedAt": str(entry.get("lastViewedAt", "")).strip(),
+    }
+
+def _merge_diary_archive_entry(left, right):
+    normalized_left = _normalize_diary_archive_entry(left)
+    normalized_right = _normalize_diary_archive_entry(right)
+    primary = normalized_left or normalized_right
+    secondary = normalized_right if normalized_left else None
+    if not primary:
+        return None
+    if not secondary:
+        return primary
+
+    left_content = _clean_diary_content(primary.get("content", ""))
+    right_content = _clean_diary_content(secondary.get("content", ""))
+    content = right_content if len(right_content) > len(left_content) else left_content
+    last_viewed_at = max(
+        str(primary.get("lastViewedAt", "") or ""),
+        str(secondary.get("lastViewedAt", "") or ""),
+    )
+    return {
+        **primary,
+        "date": primary.get("date") or secondary.get("date") or "",
+        "content": content,
+        "viewCount": max(
+            _coerce_diary_view_count(primary.get("viewCount")),
+            _coerce_diary_view_count(secondary.get("viewCount")),
+        ),
+        "lastViewedAt": last_viewed_at,
+    }
+
 def _normalize_diary(diary):
     if not isinstance(diary, dict):
         return empty_diary()
     today   = diary.get("today")   if isinstance(diary.get("today"),   dict) else {}
-    archive = [e for e in (diary.get("archive") or []) if isinstance(e, dict) and e.get("date")]
-    return {"today": today, "archive": archive}
+    archive = [
+        normalized
+        for normalized in (
+            _normalize_diary_archive_entry(e)
+            for e in (diary.get("archive") or [])
+        )
+        if normalized
+    ]
+    return {
+        "today": {
+            **today,
+            "date": str(today.get("date", "")).strip(),
+            "content": str(today.get("content", "")),
+        },
+        "archive": archive,
+    }
 
 def load_diary_file():
     return _normalize_diary(load_json_file(DIARY_FILE, empty_diary()))
@@ -219,7 +274,11 @@ def archive_diary_if_needed(diary=None):
     existing_date = today.get("date", "")
     if existing_date and existing_date != today_str:
         if today.get("content", "").strip():
-            archive = sorted([*archive, today], key=lambda x: x.get("date", ""))
+            archived_today = _normalize_diary_archive_entry(today)
+            archive = sorted(
+                [*archive, archived_today] if archived_today else archive,
+                key=lambda x: x.get("date", ""),
+            )
         today = {"date": today_str, "content": ""}
     elif not existing_date:
         today = {"date": today_str, "content": ""}
@@ -256,24 +315,33 @@ def _merge_diary(local_diary: dict, cloud_diary: dict) -> dict:
     archive_map = {}
     for e in local_diary["archive"]:
         if e.get("date"):
-            archive_map[e["date"]] = {**e, "content": _clean_diary_content(e.get("content", ""))}
+            archive_map[e["date"]] = _merge_diary_archive_entry(
+                e,
+                {**e, "content": _clean_diary_content(e.get("content", ""))},
+            )
 
     for entry in cloud_diary["archive"]:
         d = entry.get("date")
         if not d:
             continue
-        cloud_content = _clean_diary_content(entry.get("content", ""))
-        if d not in archive_map:
-            archive_map[d] = {**entry, "content": cloud_content}
-        elif len(cloud_content) > len(archive_map[d].get("content", "")):
-            archive_map[d] = {**entry, "content": cloud_content}
+        archive_map[d] = _merge_diary_archive_entry(
+            archive_map.get(d),
+            {**entry, "content": _clean_diary_content(entry.get("content", ""))},
+        )
 
     # 过滤掉清理后内容为空的条目
-    valid = {d: e for d, e in archive_map.items() if e.get("content", "").strip()}
+    valid = {
+        d: _normalize_diary_archive_entry(e)
+        for d, e in archive_map.items()
+        if e and e.get("content", "").strip()
+    }
 
     return {
         "today":   merged_today,
-        "archive": sorted(valid.values(), key=lambda x: x.get("date", "")),
+        "archive": sorted(
+            [entry for entry in valid.values() if entry],
+            key=lambda x: x.get("date", ""),
+        ),
     }
 
 # ── 云端拉取（任务 + 日记分开处理） ──────────────────────
@@ -392,8 +460,7 @@ def _daily_5am_reset():
 threading.Thread(target=_daily_5am_reset, daemon=True).start()
 
 def _weread_auto_sync_scheduler(interval_hours: int = 2):
-    """每 N 小时自动从 Chrome 读取微信读书 Cookie 并同步，无需手动操作。
-    Chrome 必须曾经登录过 weread.qq.com，不需要浏览器正在运行。"""
+    """每 N 小时用本机配置的 WEREAD_API_KEY 自动同步一次微信读书数据。"""
     time.sleep(WEREAD_AUTO_SYNC_START_DELAY_SECONDS)
     first_round = True
     while True:
@@ -403,13 +470,13 @@ def _weread_auto_sync_scheduler(interval_hours: int = 2):
             continue
 
         try:
-            cookie = _resolve_auto_sync_cookie()
-            if cookie:
+            if load_weread_api_key():
                 print("[weread-auto] 🔄 自动同步微信读书...")
-                _, counts = _run_weread_sync(cookie, "weread-auto-sync")
+                _, counts = _run_weread_sync("weread-auto-sync")
                 print(f"[weread-auto] ✅ 完成：{counts}")
-        except RuntimeError as e:
-            # Cookie 不存在或 Chrome 未授权，静默跳过
+            else:
+                print("[weread-auto] ⚠️  跳过：未配置 WEREAD_API_KEY")
+        except WeReadApiError as e:
             print(f"[weread-auto] ⚠️  跳过（{e}）")
         except Exception as e:
             print(f"[weread-auto] ❌ 同步失败：{e}")
@@ -436,121 +503,9 @@ def _push_diary_to_cloud_async(label: str = "auto"):
     threading.Thread(target=_do, daemon=True).start()
 
 BACKUP_DIR = os.path.join(os.path.dirname(__file__), ".backups")
-WEREAD_COOKIE_FILE = os.path.join(os.path.dirname(__file__), ".weread_cookie.json")
 WEREAD_DATA_FILE = os.path.join(os.path.dirname(__file__), ".weread_data.json")
 WEREAD_NOTES_FILE = os.path.join(os.path.dirname(__file__), ".weread_notes.json")
-WEREAD_BRIDGE_FILE = os.path.join(os.path.dirname(__file__), ".weread_bridge.json")
-WEREAD_READ_TEMPLATE_FILE = os.path.join(os.path.dirname(__file__), ".weread_read_template.json")
 BOOK_ACCENTS = ["#2d6a4f", "#4a4a6a", "#6a4a2a", "#3a6a5a", "#5a3a6a"]
-
-HEADERS_BASE = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
-    "Accept-Encoding": "gzip, deflate",
-    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-    "accept": "application/json, text/plain, */*",
-    "Content-Type": "application/json",
-}
-WEREAD_WEB_BASE = "https://weread.qq.com"
-WEREAD_MOBILE_BASE = "https://i.weread.qq.com"
-
-# ── GitHub Actions Secret 自动更新 ──────────────────────────────────────────
-# 需在 .env 中配置：
-#   GH_PAT  = 你的 GitHub Personal Access Token（或 GH_TOKEN / GITHUB_TOKEN）
-#   GH_REPO = 仓库路径，格式 owner/repo（例如 dx/task-app）
-_GH_PAT, _GH_PAT_SOURCE = pick_github_token()
-_GH_REPO = resolve_github_repo(Path(__file__).resolve().parent)
-_GH_SECRET_SYNC_REASON = ""
-if not WEREAD_ENABLE_GITHUB_SECRET_SYNC:
-    _GH_SECRET_SYNC_REASON = "disabled"
-elif not _GH_REPO:
-    _GH_SECRET_SYNC_REASON = "missing_repo"
-elif not _GH_PAT:
-    _GH_SECRET_SYNC_REASON = "missing_token"
-
-if _GH_SECRET_SYNC_REASON == "disabled":
-    if WEREAD_SYNC_MODE == "local-only":
-        print("[github-secret] 纯本地模式：已禁用 GitHub Secret 自动同步")
-    else:
-        print("[github-secret] 已禁用 GitHub Secret 自动同步")
-elif _GH_SECRET_SYNC_REASON == "missing_token":
-    print("[github-secret] 自动同步未启用：缺少有效 GitHub token（请设置 GH_PAT / GH_TOKEN）")
-elif _GH_SECRET_SYNC_REASON == "missing_repo":
-    print("[github-secret] 自动同步未启用：缺少 GH_REPO，且无法从 git remote 推断仓库")
-else:
-    print(f"[github-secret] 自动同步已启用：{_GH_REPO}（token: {_GH_PAT_SOURCE}）")
-
-def _update_github_secrets(secret_values: dict[str, str]) -> bool:
-    """将本地关键同步配置推送到 GitHub Actions Secrets。"""
-    if not WEREAD_ENABLE_GITHUB_SECRET_SYNC or not _GH_PAT or not _GH_REPO:
-        return False
-    try:
-        updated = sync_repo_secrets(_GH_REPO, _GH_PAT, secret_values)
-        if updated:
-            print(f"[github-secret] ✅ 已更新 {', '.join(updated)}（{_GH_REPO}）")
-            return True
-        print("[github-secret] 跳过：没有可更新的 Secret")
-        return False
-    except Exception as e:
-        print(f"[github-secret] ❌ 更新异常: {e}")
-        return False
-
-def _update_github_secret_async(secret_values: dict[str, str]):
-    """在后台线程中更新 GitHub Secret，不阻塞 HTTP 响应。"""
-    threading.Thread(target=_update_github_secrets, args=(secret_values,), daemon=True).start()
-
-# ────────────────────────────────────────────────────────────────────────────
-
-def wr_get(path, cookie, params=None, base_url=WEREAD_WEB_BASE):
-    last_error = None
-    for attempt in range(3):
-        try:
-            resp = requests.get(
-                f"{base_url}{path}",
-                headers={**HEADERS_BASE, "Cookie": cookie},
-                params=params,
-                timeout=15,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            if isinstance(data, dict) and data.get("errCode") not in (None, 0):
-                err = requests.HTTPError(data.get("errMsg") or f"WeRead errCode={data.get('errCode')}")
-                err.response = resp
-                err.weread_payload = data
-                raise err
-            return data
-        except (requests.ConnectionError, requests.Timeout) as e:
-            last_error = e
-            if attempt == 2:
-                raise
-            time.sleep(0.4 * (attempt + 1))
-    if last_error is not None:
-        raise last_error
-
-def load_weread_cookie():
-    if not os.path.exists(WEREAD_COOKIE_FILE):
-        return ""
-    try:
-        with open(WEREAD_COOKIE_FILE, encoding="utf-8") as f:
-            payload = json.load(f)
-        if isinstance(payload, dict):
-            return str(payload.get("cookie", "")).strip()
-        if isinstance(payload, str):
-            return payload.strip()
-    except Exception:
-        return ""
-    return ""
-
-def save_weread_cookie(cookie):
-    payload = {
-        "cookie": cookie,
-        "updatedAt": datetime.now().isoformat(timespec="seconds"),
-    }
-    with open(WEREAD_COOKIE_FILE, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-    try:
-        os.chmod(WEREAD_COOKIE_FILE, 0o600)
-    except OSError:
-        pass
 
 def empty_weread_read_template_data():
     return {
@@ -1440,267 +1395,23 @@ def _resolve_auto_sync_cookie() -> str:
     return load_weread_cookie_from_chrome()
 
 
-def _run_weread_sync(cookie: str, label: str, sync_github_secret: bool = False):
-    result = fetch_weread_data(cookie, load_weread_notes_data())
-    save_weread_cookie(cookie)
+def _run_weread_sync(label: str):
+    print(f"[weread-sync] 开始同步（{label}）")
+    result = fetch_weread_data(load_weread_notes_data())
     migrate_embedded_special_data()
     _, counts = persist_weread_result(result)
     _push_to_cloud_async(label)
-    if sync_github_secret and WEREAD_ENABLE_GITHUB_SECRET_SYNC:
-        _update_github_secret_async({
-            "WEREAD_COOKIE": cookie,
-            "API_TOKEN": CLOUD_API_TOKEN,
-        })
+    print(
+        "[weread-sync] 同步完成"
+        f"（{label}） books={counts['books']} notes={counts['notes']} updates={counts['updates']}"
+    )
     return result, counts
 
 
 threading.Thread(target=_weread_auto_sync_scheduler, args=(WEREAD_AUTO_SYNC_INTERVAL_HOURS,), daemon=True).start()
 
-def fetch_weread_data(cookie, existing_notes_store=None):
-    # 1. 书架
-    shelf = wr_get("/web/shelf/sync", cookie)
-    books_raw = shelf.get("books", [])
-    progress_map = {
-        str(item.get("bookId")): item
-        for item in (shelf.get("bookProgress") or [])
-        if item.get("bookId")
-    }
-    existing_notes_payload = normalize_weread_notes_data(existing_notes_store)
-    existing_note_map = {}
-    for note in existing_notes_payload.get("notes", []):
-        bid = str(note.get("_bookId") or "")
-        if bid:
-            existing_note_map.setdefault(bid, []).append(note)
-    sync_started_at = datetime.now().isoformat(timespec="seconds")
-
-    books = []
-    shelf_note_candidates = []
-    shelf_note_candidate_map = {}
-    for item in books_raw:
-        b = item.get("book", item) if isinstance(item, dict) else {}
-        bid = str(b.get("bookId", "") or "").strip()
-        if not bid:
-            continue
-
-        progress = progress_map.get(str(bid), {})
-        current_page = progress.get("chapterIdx", 0) if isinstance(progress, dict) else 0
-        total_page = (b.get("lastChapterIdx", 0) or 0) + 1
-        progress_percent = max(0, min(100, coerce_int_id(progress.get("progress"))))
-        read_ts = pick_timestamp_ms(item, b, progress)
-        source_signal = note_source_signal(item, b, progress)
-
-        books.append({
-            "title": b.get("title", ""),
-            "author": b.get("author", ""),
-            "currentPage": current_page,
-            "totalPage": total_page or 1,
-            "chapterIndex": current_page,
-            "chapterCount": total_page or 1,
-            "progressPercent": progress_percent,
-            "_bookId": bid,
-            "readTimestamp": read_ts,
-            "readAt": format_timestamp_label(read_ts),
-        })
-        candidate = {
-            "bookId": bid,
-            "title": b.get("title", ""),
-            "author": b.get("author", ""),
-            "sourceSignal": source_signal,
-        }
-        shelf_note_candidates.append(candidate)
-        shelf_note_candidate_map[bid] = candidate
-
-    books.sort(key=lambda item: (item.get("readTimestamp") or 0, item.get("progressPercent") or 0), reverse=True)
-
-    # 获取今日阅读时长
-    today_str = datetime.now().strftime("%Y%m%d")
-    try:
-        read_detail = wr_get("/web/book/read", cookie, {"synckey": 0, "date": today_str})
-        today_read_map = {}
-        for item in (read_detail.get("readTimes") or read_detail.get("items") or []):
-            bid = str(item.get("bookId") or "")
-            mins = coerce_int_id(item.get("readingTime") or item.get("duration") or 0) // 60
-            if bid and mins > 0:
-                today_read_map[bid] = mins
-    except Exception:
-        today_read_map = {}
-
-    for book in books:
-        book["todayReadMinutes"] = today_read_map.get(str(book.get("_bookId", "")), 0)
-
-    for book in books[:6]:
-        try:
-            info = wr_get("/web/book/info", cookie, {"bookId": book["_bookId"]})
-        except Exception:
-            continue
-
-        total_words = coerce_int_id(info.get("totalWords"))
-        estimated_total_page = estimate_total_pages(total_words)
-        estimated_current_page = estimate_current_page(book.get("progressPercent"), estimated_total_page)
-        book["isbn"] = info.get("isbn", "") or ""
-        book["totalWords"] = total_words
-        book["estimatedTotalPage"] = estimated_total_page
-        book["estimatedCurrentPage"] = estimated_current_page
-        book["pageSource"] = "estimated_words" if estimated_total_page else ""
-
-    note_sync_candidates = shelf_note_candidates
-    try:
-        notebook_payload = wr_get("/user/notebooks", cookie, base_url=WEREAD_MOBILE_BASE)
-        notebook_candidates = []
-        for item in extract_notebook_books(notebook_payload):
-            bid = str(item.get("bookId", "") or "").strip()
-            if not bid:
-                continue
-            shelf_candidate = shelf_note_candidate_map.get(bid, {})
-            notebook_candidates.append({
-                "bookId": bid,
-                "title": item.get("title", "") or shelf_candidate.get("title", ""),
-                "author": item.get("author", "") or shelf_candidate.get("author", ""),
-                "sourceSignal": max(
-                    coerce_int_id(item.get("sourceSignal")),
-                    coerce_int_id(shelf_candidate.get("sourceSignal")),
-                ),
-            })
-        if notebook_candidates:
-            note_sync_candidates = notebook_candidates
-    except Exception:
-        pass
-
-    # 3. 笔记 / 划线
-    notes = []
-    next_book_states = {}
-    all_note_fetches_succeeded = True
-    for candidate in note_sync_candidates:
-        bid = str(candidate.get("bookId", "") or "").strip()
-        title = candidate.get("title", "") or bid
-        if not bid:
-            continue
-
-        next_book_states[bid] = {
-            "lastSourceSignal": candidate["sourceSignal"],
-            "lastSyncedAt": sync_started_at,
-        }
-
-        book_notes = []
-        book_fetch_failed = False
-        seen_note_ids = set()
-
-        def append_book_note(item):
-            source_item_id = item.get("sourceItemId") or f"{item.get('noteType')}|{item.get('title')}|{item.get('summary')}"
-            if source_item_id in seen_note_ids:
-                return
-            seen_note_ids.add(source_item_id)
-            book_notes.append(item)
-
-        bookmark_fetch_ok = False
-        for path, base_url in (
-            ("/book/bookmarklist", WEREAD_MOBILE_BASE),
-            ("/web/book/bookmarklist", WEREAD_WEB_BASE),
-        ):
-            try:
-                bm = wr_get(path, cookie, {"bookId": bid}, base_url=base_url)
-                bookmark_fetch_ok = True
-                for mark in extract_bookmark_items(bm):
-                    mark_text = compact_text(
-                        mark.get("markText")
-                        or mark.get("bookmarkText")
-                        or mark.get("abstract")
-                        or mark.get("content")
-                        or mark.get("text")
-                    )
-                    if not mark_text:
-                        continue
-                    mark_ts = pick_timestamp_ms(mark)
-                    chapter_title = compact_text(mark.get("chapterTitle") or mark.get("chapterName") or mark.get("chapterUid"))
-                    source_item_id = make_source_item_id(
-                        bid,
-                        "highlight",
-                        mark.get("bookmarkId"),
-                        mark.get("bookmarkUid"),
-                        mark.get("range"),
-                        chapter_title,
-                        mark_ts or "",
-                        mark_text,
-                    )
-                    append_book_note({
-                        "title": build_weread_note_title(title, "划线", mark_text),
-                        "tags": ["微信读书", "划线"],
-                        "summary": mark_text,
-                        "source": "weread",
-                        "noteType": "highlight",
-                        "bookTitle": title,
-                        "_bookId": bid,
-                        "sourceItemId": source_item_id,
-                        "sourceUpdatedAt": format_timestamp_label(mark_ts),
-                        "sourceUpdatedTimestamp": mark_ts or 0,
-                        "chapterTitle": chapter_title,
-                    })
-            except Exception:
-                continue
-        if not bookmark_fetch_ok:
-            book_fetch_failed = True
-
-        review_fetch_ok = False
-        for path, params, base_url in (
-            ("/review/list", {"bookId": bid, "listType": 11, "mine": 1, "synckey": 0, "listMode": 0}, WEREAD_MOBILE_BASE),
-            ("/web/review/list", {"bookId": bid, "listType": 11, "mine": 1}, WEREAD_WEB_BASE),
-        ):
-            try:
-                rv = wr_get(path, cookie, params, base_url=base_url)
-                review_fetch_ok = True
-                for review_item in extract_review_items(rv):
-                    review = review_item.get("review", {}) if isinstance(review_item.get("review"), dict) else {}
-                    container = review_item.get("container", {}) if isinstance(review_item.get("container"), dict) else {}
-                    content = compact_text(review.get("content") or container.get("content"))
-                    if not content:
-                        continue
-                    review_ts = pick_timestamp_ms(container, review)
-                    source_item_id = make_source_item_id(
-                        bid,
-                        "review",
-                        review.get("reviewId"),
-                        container.get("reviewId"),
-                        review_ts or "",
-                        content,
-                    )
-                    append_book_note({
-                        "title": build_weread_note_title(title, "评论", content),
-                        "tags": ["微信读书", "评论"],
-                        "summary": content,
-                        "source": "weread",
-                        "noteType": "review",
-                        "bookTitle": title,
-                        "_bookId": bid,
-                        "sourceItemId": source_item_id,
-                        "sourceUpdatedAt": format_timestamp_label(review_ts),
-                        "sourceUpdatedTimestamp": review_ts or 0,
-                    })
-            except Exception:
-                continue
-        if not review_fetch_ok:
-            book_fetch_failed = True
-
-        if book_fetch_failed:
-            all_note_fetches_succeeded = False
-            if existing_note_map.get(bid):
-                notes.extend(existing_note_map.get(bid, []))
-            else:
-                notes.extend(book_notes)
-            continue
-
-        notes.extend(book_notes)
-
-    notes.sort(key=lambda item: (item.get("sourceUpdatedTimestamp") or 0, item.get("_bookId") or ""), reverse=True)
-    return {
-        "books": books,
-        "notes": notes,
-        "notesMeta": {
-            "fullSyncCompleted": all_note_fetches_succeeded,
-            "lastFullSyncAt": sync_started_at if all_note_fetches_succeeded else existing_notes_payload.get("meta", {}).get("lastFullSyncAt", ""),
-            "lastIncrementalSyncAt": "",
-            "bookStates": next_book_states,
-        }
-    }
+def fetch_weread_data(existing_notes_store=None):
+    return sync_weread_snapshot(existing_notes_store=existing_notes_store)
 
 # ── 静态文件 ──────────────────────────────────────────
 @app.route("/")
@@ -1738,274 +1449,49 @@ def save_data():
 @app.route("/api/weread/status", methods=["GET"])
 def weread_status():
     migrate_embedded_special_data()
-    bridge = load_weread_bridge_data()
-    read_template = load_weread_read_template_data()
-    latest_capture = read_template.get("latest", {})
+    current_weread = load_weread_data()
+    current_notes = load_weread_notes_data()
+    has_api_key = bool(load_weread_api_key())
     return jsonify({
-        "hasCookie": bool(load_weread_cookie()),
-        "cookiePath": os.path.basename(WEREAD_COOKIE_FILE),
+        "hasApiKey": has_api_key,
+        "provider": "api-key",
         "dataPath": os.path.basename(WEREAD_DATA_FILE),
         "notesPath": os.path.basename(WEREAD_NOTES_FILE),
-        "readTemplatePath": os.path.basename(WEREAD_READ_TEMPLATE_FILE),
-        "hasReadTemplate": bool(latest_capture.get("url")),
-        "readTemplateCapturedAt": latest_capture.get("capturedAt", ""),
-        "readTemplateLastUrl": latest_capture.get("url", ""),
-        "readTemplateCount": len(read_template.get("captures", [])),
-        "bridgePath": os.path.basename(WEREAD_BRIDGE_FILE),
-        "bridgeReady": bool(bridge.get("token")),
-        "bridgeEndpoint": "/api/weread/mini-sync",
-        "bridgeTokenCreatedAt": bridge.get("createdAt", ""),
-        "bridgeLatestPushAt": bridge.get("latestPushAt", ""),
-        "bridgeLatestStatus": bridge.get("latestStatus", ""),
-        "autoImportBrowser": "Chrome",
-        "extensionDir": "chrome-extension/weread-sync",
+        "syncedAt": current_weread.get("syncedAt", ""),
+        "bookCount": len(current_weread.get("books") or []),
+        "noteCount": len(current_notes.get("notes") or []),
         "wereadSyncMode": WEREAD_SYNC_MODE,
         "wereadAutoSyncEnabled": True,
         "wereadAutoSyncSource": WEREAD_AUTO_SYNC_SOURCE,
         "wereadAutoSyncIntervalHours": WEREAD_AUTO_SYNC_INTERVAL_HOURS,
         "wereadAutoSyncOnStart": WEREAD_AUTO_SYNC_ON_START,
         "cloudPushEnabled": bool(CLOUD_API_TOKEN),
-        "githubSecretSyncEnabled": not _GH_SECRET_SYNC_REASON,
-        "githubSecretRepo": _GH_REPO,
-        "githubSecretSyncReason": _GH_SECRET_SYNC_REASON,
+        "message": "" if has_api_key else "未配置 WEREAD_API_KEY，暂时无法同步微信读书数据",
     })
-
-@app.route("/api/weread/read-template", methods=["GET", "POST"])
-def weread_read_template():
-    if request.method == "GET":
-        return jsonify(load_weread_read_template_data())
-
-    body = request.get_json(force=True) or {}
-    capture = body.get("capture") if isinstance(body.get("capture"), dict) else {}
-    if not capture:
-        return jsonify({"error": "缺少 capture 数据"}), 400
-
-    try:
-        payload = save_weread_read_template_capture(capture)
-        latest = payload.get("latest", {})
-        return jsonify({
-            "ok": True,
-            "templatePath": os.path.basename(WEREAD_READ_TEMPLATE_FILE),
-            "capturedAt": latest.get("capturedAt", ""),
-            "url": latest.get("url", ""),
-            "captures": len(payload.get("captures", [])),
-            "message": "已保存微信读书阅读请求模板",
-        })
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 400
-
-@app.route("/api/weread/bridge-token", methods=["POST"])
-def weread_bridge_token():
-    body = request.get_json(silent=True) or {}
-    force = bool(body.get("rotate"))
-    bridge = ensure_weread_bridge_token(force=force)
-    return jsonify({
-        "ok": True,
-        "token": bridge.get("token", ""),
-        "createdAt": bridge.get("createdAt", ""),
-        "bridgePath": os.path.basename(WEREAD_BRIDGE_FILE),
-        "endpoint": "/api/weread/mini-sync",
-    })
-
-@app.route("/api/weread/mini-sync", methods=["POST"])
-def weread_mini_sync():
-    body = request.get_json(force=True)
-    bridge = load_weread_bridge_data()
-    token = str(body.get("token", "")).strip()
-    source = str(body.get("source", "mini-program")).strip() or "mini-program"
-
-    if not bridge.get("token"):
-        return jsonify({"error": "桥接 token 尚未生成，请先调用 /api/weread/bridge-token"}), 400
-    if token != bridge.get("token"):
-        update_weread_bridge_record(
-            latestPushAt=datetime.now().isoformat(timespec="seconds"),
-            latestSource=source,
-            latestStatus="rejected",
-            latestMessage="bridge token 不匹配",
-        )
-        return jsonify({"error": "bridge token 不匹配"}), 403
-
-    try:
-        incoming_cookie = str(body.get("cookie", "")).strip()
-        incoming_payload = body.get("payload") if isinstance(body.get("payload"), dict) else None
-
-        if incoming_cookie:
-            result = fetch_weread_data(incoming_cookie, load_weread_notes_data())
-            save_weread_cookie(incoming_cookie)
-            _, counts = persist_weread_result(result)
-            update_weread_bridge_record(
-                latestPushAt=datetime.now().isoformat(timespec="seconds"),
-                latestSource=source,
-                latestStatus="ok",
-                latestMessage=f"通过桥接同步 {counts['books']} 本书、{counts['notes']} 条笔记",
-            )
-            return jsonify({
-                "ok": True,
-                "mode": "cookie",
-                "books": counts["books"],
-                "notes": counts["notes"],
-                "dataPath": os.path.basename(WEREAD_DATA_FILE),
-                "notesPath": os.path.basename(WEREAD_NOTES_FILE),
-            })
-
-        if incoming_payload:
-            payload = build_weread_sync_payload({
-                "books": incoming_payload.get("books") or [],
-                "notes": incoming_payload.get("notes") or [],
-                "notesMeta": incoming_payload.get("notesMeta") or {},
-                "updates": incoming_payload.get("updates") or [],
-            })
-            counts = persist_weread_sync_payload(payload)
-            update_weread_bridge_record(
-                latestPushAt=datetime.now().isoformat(timespec="seconds"),
-                latestSource=source,
-                latestStatus="ok",
-                latestMessage=f"通过桥接写入 {counts['books']} 本书、{counts['notes']} 条笔记",
-            )
-            return jsonify({
-                "ok": True,
-                "mode": "payload",
-                "books": counts["books"],
-                "notes": counts["notes"],
-                "dataPath": os.path.basename(WEREAD_DATA_FILE),
-                "notesPath": os.path.basename(WEREAD_NOTES_FILE),
-            })
-
-        return jsonify({"error": "缺少 cookie 或 payload"}), 400
-    except requests.HTTPError as e:
-        payload = getattr(e, "weread_payload", {}) if hasattr(e, "weread_payload") else {}
-        err_code = payload.get("errCode")
-        err_msg = payload.get("errMsg") or payload.get("errmsg") or ""
-        update_weread_bridge_record(
-            latestPushAt=datetime.now().isoformat(timespec="seconds"),
-            latestSource=source,
-            latestStatus="error",
-            latestMessage=err_msg or str(e),
-        )
-        if err_code == -2012 or "登录超时" in err_msg:
-            return jsonify({"error": "Cookie 已失效，请重新登录微信读书后再试"}), 401
-        if e.response is not None and e.response.status_code in (401, 403):
-            return jsonify({"error": "Cookie 已失效，请重新登录微信读书后再试"}), 401
-        return jsonify({"error": f"微信读书接口错误: {e}"}), 502
-    except Exception as e:
-        app.logger.exception("WeRead mini-sync failed")
-        update_weread_bridge_record(
-            latestPushAt=datetime.now().isoformat(timespec="seconds"),
-            latestSource=source,
-            latestStatus="error",
-            latestMessage=str(e),
-        )
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/weread/import-cookie", methods=["POST"])
-def weread_import_cookie():
-    try:
-        cookie = load_weread_cookie_from_chrome()
-        save_weread_cookie(cookie)
-        return jsonify({
-            "ok": True,
-            "cookiePath": os.path.basename(WEREAD_COOKIE_FILE),
-            "message": "已从 Chrome 自动读取并保存 Cookie",
-        })
-    except RuntimeError as e:
-        return jsonify({"error": str(e)}), 400
-
-
-@app.route("/api/weread/local-sync", methods=["POST"])
-def weread_local_sync():
-    try:
-        cookie = load_weread_cookie_from_chrome()
-        result, counts = _run_weread_sync(cookie, "local-chrome-sync", sync_github_secret=True)
-        return jsonify({
-            "ok": True,
-            "books": result["books"],
-            "notes": result["notes"],
-            "savedCookie": True,
-            "usedSavedCookie": False,
-            "cookiePath": os.path.basename(WEREAD_COOKIE_FILE),
-            "dataPath": os.path.basename(WEREAD_DATA_FILE),
-            "notesPath": os.path.basename(WEREAD_NOTES_FILE),
-            "message": f"已从 Chrome 自动读取并同步：{counts['books']} 本书，{counts['notes']} 份笔记",
-        })
-    except RuntimeError as e:
-        return jsonify({"error": str(e)}), 400
-    except requests.HTTPError as e:
-        payload = getattr(e, "weread_payload", {}) if hasattr(e, "weread_payload") else {}
-        err_code = payload.get("errCode")
-        err_msg = payload.get("errMsg") or payload.get("errmsg") or ""
-        if err_code == -2012 or "登录超时" in err_msg:
-            return jsonify({"error": "Chrome 中的微信读书登录已失效，请重新登录后再试"}), 401
-        if e.response is not None and e.response.status_code in (401, 403):
-            return jsonify({"error": "Chrome 中的微信读书登录已失效，请重新登录后再试"}), 401
-        return jsonify({"error": f"微信读书接口错误: {e}"}), 502
-    except Exception as e:
-        app.logger.exception("WeRead local-sync failed")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/weread/extension-sync", methods=["POST"])
-def weread_extension_sync():
-    body = request.get_json(force=True)
-    cookie = str(body.get("cookie", "")).strip()
-    if not cookie:
-        return jsonify({"error": "扩展未提供 Cookie"}), 400
-
-    try:
-        _, counts = _run_weread_sync(cookie, "extension-sync", sync_github_secret=True)
-        return jsonify({
-            "ok": True,
-            "books": counts["books"],
-            "notes": counts["notes"],
-            "cookiePath": os.path.basename(WEREAD_COOKIE_FILE),
-            "dataPath": os.path.basename(WEREAD_DATA_FILE),
-            "notesPath": os.path.basename(WEREAD_NOTES_FILE),
-            "message": f"同步成功：{counts['books']} 本书，{counts['notes']} 份笔记",
-        })
-    except requests.HTTPError as e:
-        payload = getattr(e, "weread_payload", {}) if hasattr(e, "weread_payload") else {}
-        err_code = payload.get("errCode")
-        err_msg = payload.get("errMsg") or payload.get("errmsg") or ""
-        if err_code == -2012 or "登录超时" in err_msg:
-            return jsonify({"error": "Cookie 已失效，请重新登录微信读书后再试"}), 401
-        if e.response is not None and e.response.status_code in (401, 403):
-            return jsonify({"error": "Cookie 已失效，请重新登录微信读书后再试"}), 401
-        return jsonify({"error": f"微信读书接口错误: {e}"}), 502
-    except Exception as e:
-        app.logger.exception("WeRead extension-sync failed")
-        return jsonify({"error": str(e)}), 500
 
 # ── WeRead 同步接口 ───────────────────────────────────
 @app.route("/api/weread/sync", methods=["POST"])
 def weread_sync():
     migrate_embedded_special_data()
-    body = request.get_json(silent=True) or {}
-    incoming_cookie = body.get("cookie", "").strip()
-    cookie = incoming_cookie or load_weread_cookie()
-    if not cookie:
-        return jsonify({"error": "缺少 Cookie，且未找到本地保存的 Cookie"}), 400
+    if not load_weread_api_key():
+        return jsonify({"error": "缺少 WEREAD_API_KEY，请先在项目根目录 .env 或当前终端环境中配置"}), 400
 
     try:
-        result, _ = _run_weread_sync(cookie, "manual-sync")
+        result, counts = _run_weread_sync("manual-sync")
+        current_weread = load_weread_data()
 
         return jsonify({
             "books": result["books"],
             "notes": result["notes"],
-            "savedCookie": True,
-            "usedSavedCookie": bool(cookie and not incoming_cookie),
-            "cookiePath": os.path.basename(WEREAD_COOKIE_FILE),
             "dataPath": os.path.basename(WEREAD_DATA_FILE),
             "notesPath": os.path.basename(WEREAD_NOTES_FILE),
+            "provider": "api-key",
+            "syncedAt": current_weread.get("syncedAt", ""),
+            "message": f"同步成功：{counts['books']} 本书，{counts['notes']} 份笔记",
         })
 
-    except requests.HTTPError as e:
-        payload = getattr(e, "weread_payload", {}) if hasattr(e, "weread_payload") else {}
-        err_code = payload.get("errCode")
-        err_msg = payload.get("errMsg") or payload.get("errmsg") or ""
-        if err_code == -2012 or "登录超时" in err_msg:
-            return jsonify({"error": "Cookie 已失效，请重新获取"}), 401
-        if e.response is not None and e.response.status_code in (401, 403):
-            return jsonify({"error": "Cookie 已失效，请重新获取"}), 401
-        return jsonify({"error": f"微信读书接口错误: {e}"}), 502
+    except WeReadApiError as e:
+        return jsonify({"error": str(e)}), e.status_code
     except Exception as e:
         app.logger.exception("WeRead manual sync failed")
         return jsonify({"error": str(e)}), 500

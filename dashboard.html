@@ -101,13 +101,15 @@ const INIT_UPDATES = [
 const BOOK_ACCENTS = ['#2d6a4f', '#4a4a6a', '#6a4a2a', '#3a6a5a', '#5a3a6a'];
 const PERSONAL_ROUTE_PREFIX = '/tasks';
 const CLOUD_ROUTE_PREFIX = '/tasks-cloud';
+// 多用户云端版暂不使用：前端保留登录页代码，但入口逻辑强制关闭。
+const MULTIUSER_CLOUD_ENABLED = false;
 const detectAppBasePath = () => {
   if (/^\/tasks-cloud(\/|$)/.test(window.location.pathname)) return CLOUD_ROUTE_PREFIX;
   if (/^\/tasks(\/|$)/.test(window.location.pathname)) return PERSONAL_ROUTE_PREFIX;
   return '';
 };
 const APP_BASE_PATH = detectAppBasePath();
-const CLOUD_MODE = APP_BASE_PATH === CLOUD_ROUTE_PREFIX;
+const CLOUD_MODE = MULTIUSER_CLOUD_ENABLED && APP_BASE_PATH === CLOUD_ROUTE_PREFIX;
 const PERSONAL_MODE = APP_BASE_PATH === PERSONAL_ROUTE_PREFIX;
 const LOCAL_DASHBOARD_URL = 'http://127.0.0.1:8080/dashboard.html';
 const LOCAL_API_ORIGINS = ['http://127.0.0.1:8080', 'http://localhost:8080'];
@@ -540,9 +542,9 @@ function CloudWeReadModal({ onSync, onClose }) {
         setLocalStatus(data);
         setStatus('idle');
         setMsg(
-          data.hasCookie
-            ? `已连接本机同步服务（${data.localOrigin}），可以直接用本机已保存 Cookie 同步。`
-            : `已连接本机同步服务（${data.localOrigin}），但本机还没有保存 Cookie。`
+          data.hasApiKey
+            ? `已连接本机同步服务（${data.localOrigin}），可以直接用本机配置的 WEREAD_API_KEY 同步。`
+            : `已连接本机同步服务（${data.localOrigin}），但本机还没有配置 WEREAD_API_KEY。`
         );
       })
       .catch(err => {
@@ -558,7 +560,7 @@ function CloudWeReadModal({ onSync, onClose }) {
       const data = await runLocalBridgeSync();
       onSync?.(data);
       localStorage.setItem(CLOUD_AUTO_SYNC_KEY, String(Date.now()));
-      setLocalStatus(prev => ({ ...(prev || {}), hasCookie: true, localOrigin: data.localOrigin }));
+      setLocalStatus(prev => ({ ...(prev || {}), hasApiKey: true, localOrigin: data.localOrigin }));
       setStatus('ok');
       setMsg(`已通过本机同步：${data.books.length} 本书，${data.notes.length} 份笔记`);
     } catch (err) {
@@ -580,7 +582,7 @@ function CloudWeReadModal({ onSync, onClose }) {
         <div className="px-6 py-5 space-y-4 text-sm text-[#555] leading-relaxed">
           <div className="bg-[#eef5f1] border border-[#d8e7de] rounded-xl p-4 text-[#2d6a4f] text-xs space-y-1.5">
             <div className="font-medium">推荐方式</div>
-            <div>直接用本机服务里已保存的微信读书 Cookie 同步，不需要专门打开 WeRead 页面。</div>
+            <div>直接用本机服务里已配置的 <span className="font-mono bg-white px-1 rounded">WEREAD_API_KEY</span> 同步，不再依赖扩展或 Cookie。</div>
             <div>进入 `yangminggu.com/tasks` 时，页面也会自动尝试一次本机同步。</div>
           </div>
           <div className="bg-[#f7f5f0] border border-[#e8e4dc] rounded-xl p-4 space-y-2 text-xs text-[#666]">
@@ -589,14 +591,14 @@ function CloudWeReadModal({ onSync, onClose }) {
             {localStatus?.localOrigin && (
               <div>连接地址：<span className="font-mono bg-white px-1 rounded">{localStatus.localOrigin}</span></div>
             )}
-            {!localStatus?.hasCookie && (
-              <div>如果本机还没保存 Cookie，先去本地版粘贴一次 Cookie，或用扩展同步一次。</div>
+            {!localStatus?.hasApiKey && (
+              <div>如果本机还没配置 API Key，先去本地版确认项目根目录 <span className="font-mono bg-white px-1 rounded">.env</span> 里已有 <span className="font-mono bg-white px-1 rounded">WEREAD_API_KEY</span>。</div>
             )}
           </div>
           <div className="bg-[#f7f5f0] border border-[#e8e4dc] rounded-xl p-4 space-y-2 text-xs text-[#666]">
             <div>需要手动处理时，本地版仍然在：</div>
             <div><span className="font-mono bg-white px-1 rounded">{LOCAL_DASHBOARD_URL}</span></div>
-            <div>只要本机服务开着，云端版和本地版都可以共用这份已保存 Cookie。</div>
+            <div>只要本机服务开着，云端版和本地版都可以共用这份本机 API 配置。</div>
           </div>
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#e8e4dc]">
@@ -605,10 +607,10 @@ function CloudWeReadModal({ onSync, onClose }) {
           </button>
           <button
             onClick={handleBridgeSync}
-            disabled={status === 'checking' || status === 'syncing' || status === 'offline' || !localStatus?.hasCookie}
+            disabled={status === 'checking' || status === 'syncing' || status === 'offline' || !localStatus?.hasApiKey}
             className="px-4 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] disabled:opacity-50 text-white rounded-lg transition-colors font-medium"
           >
-            {status === 'syncing' ? '同步中...' : '使用本机已保存 Cookie 同步'}
+            {status === 'syncing' ? '同步中...' : '使用本机 API Key 同步'}
           </button>
           <button onClick={onClose} className="px-4 py-2 text-sm text-[#888] hover:text-[#444] rounded-lg hover:bg-[#f7f5f0] transition-colors">知道了</button>
         </div>
@@ -618,91 +620,54 @@ function CloudWeReadModal({ onSync, onClose }) {
 }
 
 function LocalWeReadModal({ onSync, onClose }) {
-  const [cookie, setCookie] = useState(() => localStorage.getItem('wr_cookie') || '');
-  const [hasSavedCookie, setHasSavedCookie] = useState(false);
-  const [savedCookiePath, setSavedCookiePath] = useState('.weread_cookie.json');
   const [savedDataPath, setSavedDataPath] = useState('.weread_data.json');
   const [savedNotesPath, setSavedNotesPath] = useState('.weread_notes.json');
-  const [extensionDir, setExtensionDir] = useState('chrome-extension/weread-sync');
-  const [syncMode, setSyncMode] = useState('hybrid');
-  const [autoSyncSource, setAutoSyncSource] = useState('saved-cookie');
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [syncMode, setSyncMode] = useState('api-key');
+  const [autoSyncSource, setAutoSyncSource] = useState('api-key');
   const [autoSyncIntervalHours, setAutoSyncIntervalHours] = useState(2);
   const [cloudPushEnabled, setCloudPushEnabled] = useState(false);
+  const [syncedAt, setSyncedAt] = useState('');
   const [status, setStatus] = useState('idle'); // idle | loading | ok | err
   const [msg, setMsg] = useState('');
 
-  const runSync = async (payload) => {
+  const runSync = async () => {
     const res = await apiFetch('/api/weread/sync', {
       method: 'POST',
-      body: JSON.stringify(payload || {}),
+      body: JSON.stringify({}),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '同步失败');
-    if (data.savedCookie) setHasSavedCookie(true);
-    if (data.cookiePath) setSavedCookiePath(data.cookiePath);
     if (data.dataPath) setSavedDataPath(data.dataPath);
     if (data.notesPath) setSavedNotesPath(data.notesPath);
+    if (data.syncedAt) setSyncedAt(data.syncedAt);
     onSync(data);
     setStatus('ok');
-    setMsg(
-      data.usedSavedCookie
-        ? `同步成功：${data.books.length} 本书，${data.notes.length} 份笔记（已使用 ${data.cookiePath || savedCookiePath}，书架写入 ${data.dataPath || savedDataPath}，笔记写入 ${data.notesPath || savedNotesPath}）`
-        : `同步成功：${data.books.length} 本书，${data.notes.length} 份笔记（Cookie 保存到 ${data.cookiePath || savedCookiePath}，书架写入 ${data.dataPath || savedDataPath}，笔记写入 ${data.notesPath || savedNotesPath}）`
-    );
+    setMsg(`同步成功：${data.books.length} 本书，${data.notes.length} 份笔记（书架写入 ${data.dataPath || savedDataPath}，笔记写入 ${data.notesPath || savedNotesPath}）`);
   };
 
   useEffect(() => {
     apiFetch('/api/weread/status')
       .then(r => r.json())
       .then(data => {
-        setHasSavedCookie(Boolean(data.hasCookie));
-        if (data.cookiePath) setSavedCookiePath(data.cookiePath);
+        setHasApiKey(Boolean(data.hasApiKey));
         if (data.dataPath) setSavedDataPath(data.dataPath);
         if (data.notesPath) setSavedNotesPath(data.notesPath);
-        if (data.extensionDir) setExtensionDir(data.extensionDir);
         if (data.wereadSyncMode) setSyncMode(data.wereadSyncMode);
         if (data.wereadAutoSyncSource) setAutoSyncSource(data.wereadAutoSyncSource);
         if (data.wereadAutoSyncIntervalHours) setAutoSyncIntervalHours(data.wereadAutoSyncIntervalHours);
+        if (data.syncedAt) setSyncedAt(data.syncedAt);
         setCloudPushEnabled(Boolean(data.cloudPushEnabled));
+        if (data.message) setMsg(data.message);
       })
       .catch(() => {});
   }, []);
 
-  const handleChromeSync = async () => {
-    setStatus('loading');
-    setMsg('');
-    try {
-      const res = await apiFetch('/api/weread/local-sync', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '同步失败');
-      setHasSavedCookie(true);
-      if (data.cookiePath) setSavedCookiePath(data.cookiePath);
-      if (data.dataPath) setSavedDataPath(data.dataPath);
-      if (data.notesPath) setSavedNotesPath(data.notesPath);
-      onSync(data);
-      setStatus('ok');
-      setMsg(
-        `已从 Chrome 自动读取并同步：${data.books.length} 本书，${data.notes.length} 份笔记`
-        + `（Cookie 保存到 ${data.cookiePath || savedCookiePath}，书架写入 ${data.dataPath || savedDataPath}，笔记写入 ${data.notesPath || savedNotesPath}）`
-      );
-    } catch (e) {
-      setStatus('err');
-      setMsg(e.message);
-    }
-  };
-
   const handleSync = async () => {
-    const ck = cookie.trim();
-    if (!ck && !hasSavedCookie) return;
-    if (ck) localStorage.setItem('wr_cookie', ck);
     setStatus('loading');
     setMsg('');
     try {
-      if (ck) {
-        localStorage.removeItem('wr_cookie');
-        setCookie('');
-      }
-      await runSync(ck ? { cookie: ck } : {});
+      await runSync();
     } catch (e) {
       setStatus('err');
       setMsg(e.message);
@@ -715,68 +680,39 @@ function LocalWeReadModal({ onSync, onClose }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e8e4dc]">
           <div>
             <h3 className="serif font-semibold text-base">同步微信读书</h3>
-            <p className="text-xs text-[#aaa] mt-0.5">需要微信读书网页版 Cookie</p>
+            <p className="text-xs text-[#aaa] mt-0.5">当前版本已改为本机 API Key 同步</p>
           </div>
           <button onClick={onClose} className="text-[#bbb] hover:text-[#666] text-2xl font-light leading-none">×</button>
         </div>
         <div className="px-6 py-5 space-y-4">
           <div className="bg-[#eef5f1] border border-[#d8e7de] rounded-xl p-4 text-xs text-[#2d6a4f] space-y-1.5 leading-relaxed">
-            <div className="font-medium mb-1">推荐：纯本地自动同步</div>
-            <div>
-              {autoSyncSource === 'saved-cookie'
-                ? <>后台会直接使用本地已保存的 Cookie 自动同步，不需要每次读取 Chrome 钥匙串。</>
-                : <>这台 Mac 上只要 Chrome 已登录 <span className="font-mono bg-white px-1 rounded">weread.qq.com</span>，就可以直接从本机读取 Cookie，不需要扩展。</>}
-            </div>
+            <div className="font-medium mb-1">当前方案：API-first</div>
+            <div>后台会直接使用你本机环境里的 <span className="font-mono bg-white px-1 rounded">WEREAD_API_KEY</span> 调微信读书网关，不再依赖浏览器扩展或 Cookie。</div>
             <div>后台会每 {autoSyncIntervalHours} 小时自动同步一次{cloudPushEnabled ? '，并顺手推送到你的云端数据' : ''}。</div>
             <div>当前模式：<span className="font-mono bg-white px-1 rounded">{syncMode}</span></div>
             <div>自动同步来源：<span className="font-mono bg-white px-1 rounded">{autoSyncSource}</span></div>
           </div>
-          <div className="bg-[#fdf6ec] border border-[#f0d9a8] rounded-xl p-4 text-xs text-[#7a5c1a] space-y-1.5 leading-relaxed">
-            <div className="font-medium mb-2">如何获取 Cookie：</div>
-            <div>1. 浏览器打开 <span className="font-mono bg-white px-1 rounded">weread.qq.com</span> 并登录</div>
-            <div>2. 按 F12 → Network 面板 → 刷新页面</div>
-            <div>3. 点任意请求 → Headers → 复制 <span className="font-mono bg-white px-1 rounded">Cookie</span> 的值</div>
-            <div>4. 粘贴到下方，Cookie 有效期约 1-2 周</div>
-          </div>
           <div className="bg-white border border-[#e0d9cc] rounded-xl p-4 text-xs text-[#666] space-y-2.5">
-            <div className="font-medium text-[#444]">推荐自动化方案</div>
-            <div>如果你不想授权系统读取 Chrome 钥匙串，可以先手动粘贴 Cookie，或用扩展同步一次，后续自动同步直接用本地已保存 Cookie。</div>
-            <div>扩展目录：<span className="font-mono bg-[#f7f5f0] px-1 rounded">{extensionDir}</span></div>
-            <div>加载后，在微信读书页面点扩展图标，就能把当前登录态直接同步到本地应用。</div>
+            <div className="font-medium text-[#444]">本机配置</div>
+            <div>微信读书同步内容会单独保存到 <span className="font-mono bg-[#f7f5f0] px-1 rounded">{savedDataPath}</span> 和 <span className="font-mono bg-[#f7f5f0] px-1 rounded">{savedNotesPath}</span>。</div>
+            <div>API Key 建议只保存在本机环境或项目根目录 <span className="font-mono bg-[#f7f5f0] px-1 rounded">.env</span>，不会跟代码一起提交。</div>
+            {syncedAt ? <div>最近同步时间：<span className="font-mono bg-[#f7f5f0] px-1 rounded">{syncedAt}</span></div> : null}
           </div>
-          {hasSavedCookie && (
-            <div className="bg-[#f0f4f1] border border-[#dce8df] rounded-xl p-4 text-xs text-[#2d6a4f] leading-relaxed">
-              已检测到项目本地 Cookie：
-              <span className="font-mono bg-white px-1 rounded ml-1">{savedCookiePath}</span>
-              。可以直接点同步；重新粘贴新 Cookie 会覆盖它。
+          {!hasApiKey && (
+            <div className="bg-[#fef2f2] border border-[#f5caca] rounded-xl p-4 text-xs text-[#9f3a3a] leading-relaxed">
+              当前没有检测到 <span className="font-mono bg-white px-1 rounded">WEREAD_API_KEY</span>。请先在项目根目录 <span className="font-mono bg-white px-1 rounded">.env</span> 或启动服务的终端环境里配置它。
             </div>
           )}
-          <div>
-            <label className="block text-xs font-medium text-[#666] mb-1.5">Cookie{hasSavedCookie ? '（可留空）' : ''}</label>
-            <textarea
-              className="w-full px-3 py-2 bg-white border border-[#e0d9cc] rounded-lg text-xs font-mono resize-none focus:outline-none focus:border-[#2d6a4f]"
-              rows={4}
-              placeholder={hasSavedCookie ? '留空则使用本地已保存 Cookie；也可以粘贴新的来覆盖' : 'wr_skey=...; wr_vid=...'}
-              value={cookie}
-              onChange={e=>setCookie(e.target.value)} />
-            <div className="text-[11px] text-[#aaa] mt-1.5">
-              Cookie 会保存到 <span className="font-mono">{savedCookiePath}</span>；微信读书同步内容会单独保存到 <span className="font-mono">{savedDataPath}</span>。
-            </div>
-          </div>
           {msg && (
             <div className={`text-xs px-3 py-2 rounded-lg ${status==='ok'?'bg-[#f0f4f1] text-[#2d6a4f]':'bg-[#fef2f2] text-[#dc4949]'}`}>{msg}</div>
           )}
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#e8e4dc]">
           <button onClick={onClose} className="px-4 py-2 text-sm text-[#888] hover:text-[#444] rounded-lg hover:bg-[#f7f5f0] transition-colors">取消</button>
-          <button onClick={handleChromeSync} disabled={status==='loading'}
-            className="px-5 py-2 text-sm bg-[#efe7d7] hover:bg-[#e7dcc7] disabled:opacity-50 text-[#6b5431] rounded-lg transition-colors font-medium">
-            从 Chrome 自动同步
-          </button>
-          <button onClick={handleSync} disabled={status==='loading' || (!cookie.trim() && !hasSavedCookie)}
+          <button onClick={handleSync} disabled={status==='loading' || !hasApiKey}
             className="px-5 py-2 text-sm bg-[#2d6a4f] hover:bg-[#1e4d38] disabled:opacity-50 text-white rounded-lg transition-colors font-medium flex items-center gap-2">
             {status==='loading' && <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>}
-            {status==='loading' ? '同步中...' : hasSavedCookie && !cookie.trim() ? '使用已保存 Cookie 同步' : '一键同步'}
+            {status==='loading' ? '同步中...' : '一键同步'}
           </button>
         </div>
       </div>
@@ -1853,7 +1789,7 @@ function App() {
 
       try {
         const status = await getLocalBridgeStatus();
-        if (cancelled || !status.hasCookie) return;
+        if (cancelled || !status.hasApiKey) return;
         const data = await runLocalBridgeSync();
         if (cancelled) return;
         handleWeReadSync(data);

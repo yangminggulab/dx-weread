@@ -8,8 +8,8 @@
 - 展示学习书架与微信读书书架
 - 从微信读书同步最近阅读、划线、高亮和评论
 - 把微信读书笔记单独存到本地文件，和主业务数据分开
-- 用 Chrome 扩展在登录态下自动抓取 Cookie 并后台同步
-- 预留一个桥接接口，方便后续接微信小程序或云端同步
+- 用本机 `WEREAD_API_KEY` 直接调用微信读书网关同步
+- 把同步结果继续合并回现有 Dashboard 和小程序数据视图
 
 ## 本地运行
 
@@ -40,85 +40,52 @@ TASK_APP_HOST=0.0.0.0 TASK_APP_PORT=8080 python3 server.py
 
 ### 纯本地自动同步（推荐）
 
-如果你的目标是“只在这台 Mac 上稳定自动同步”，最省心的方案是不依赖 Chrome 扩展，也不依赖 GitHub Actions。
+如果你的目标是“只在这台 Mac 上稳定自动同步”，现在最省心的方案是直接在本机配置 `WEREAD_API_KEY`，不再依赖 Chrome 扩展、Cookie 抓取或桥接 token。
 
 项目已经支持：
 
-- 首次手动粘贴一次 Cookie，或从 Chrome/扩展同步一次
-- 后台默认直接使用项目本地保存的 `.weread_cookie.json`
-- 不需要每次读取 macOS 钥匙串，所以不要求系统密码
+- 后台直接读取本机环境中的 `WEREAD_API_KEY`
 - 后台按固定间隔自动同步书架和笔记
 - 如果配置了 `API_TOKEN`，同步后会顺手推送到你的云端 `yangminggu.com/tasks`
 
-一键切到纯本地模式：
+推荐把 Key 放在项目根目录 `.env`：
 
-```bash
-bash scripts/setup_local_weread_sync.sh
+```env
+WEREAD_API_KEY=wrk-你的key
 ```
 
-默认每 2 小时自动同步一次；如果想改成每 1 小时：
-
-```bash
-bash scripts/setup_local_weread_sync.sh 1
-```
-
-切好之后：
+启动后：
 
 1. 打开本地页面 `http://127.0.0.1:8080/dashboard.html`
-2. 首次任选其一：
-   - 手动粘贴 Cookie
-   - 点“从 Chrome 自动同步”
-   - 用 Chrome 扩展同步一次
-3. 之后就交给本地后台服务
+2. 直接点“同步微信读书”
+3. 之后就交给本地后台服务自动同步
 
-这个模式下，GitHub secret 自动同步会默认关闭。
+这个模式下，微信读书板块只走 API-first 的本地同步链路。
 
-### 混合方案触发流程
+### 运行约定
 
-首次抓取登录态和恢复同步，靠的是**本地 Chrome 扩展**；后续定时备份、云端同步和自动阅读，靠的是 **GitHub Actions**。
+- 本地服务启动时会从项目根目录 `.env` 读取 `WEREAD_API_KEY`
+- 手动同步入口：`POST /api/weread/sync`
+- 状态查看入口：`GET /api/weread/status`
+- 自动同步也复用同一套 API-first 实现，不再区分“本地手动同步”和“扩展同步”
 
-```mermaid
-flowchart TD
-  A["在 Chrome 登录 weread.qq.com"] --> B["扩展抓取 Cookie"]
-  B --> C["POST /api/weread/extension-sync 到本地 server.py"]
-  C --> D["写入 .weread_cookie.json / .weread_data.json / .weread_notes.json"]
-  C --> E["后台推送云端数据"]
-  C --> F["后台更新 GitHub Secret: WEREAD_COOKIE"]
-  F --> G["GitHub Actions 定时任务"]
-  G --> H["同步书架 / 导出笔记 / 自动阅读"]
+### 推荐环境变量
+
+```env
+WEREAD_API_KEY=wrk-你的key
+WEREAD_SYNC_MODE=api-key
+WEREAD_AUTO_SYNC_SOURCE=api-key
+WEREAD_AUTO_SYNC_INTERVAL_HOURS=2
+WEREAD_AUTO_SYNC_START_DELAY_SECONDS=15
+WEREAD_AUTO_SYNC_ON_START=1
 ```
 
-### 方式一：Chrome 扩展自动同步
+### 排查建议
 
-扩展目录在：
-
-- `chrome-extension/weread-sync`
-
-加载方式：
-
-1. 打开 `chrome://extensions/`
-2. 开启开发者模式
-3. 点击“加载已解压的扩展程序”
-4. 选择 `chrome-extension/weread-sync`
-
-扩展会在你登录 `weread.qq.com` 后尝试读取当前请求里的 Cookie，并发给本地服务同步。
-
-### 方式二：手动导入 Cookie
-
-后端支持把 Cookie 保存到本地：
-
-- `.weread_cookie.json`
-
-之后同步接口会优先使用你传入的 Cookie，没有传入时就回退到本地保存的 Cookie。
-
-### 方式三：桥接到后续小程序 / 云端
-
-后端已经提供：
-
-- `POST /api/weread/bridge-token`
-- `POST /api/weread/mini-sync`
-
-这部分是给后续的小程序、云函数或者你自己的线上服务做桥接准备的。现在它还不是完整的小程序方案，但已经把数据入口预留好了。
+- 如果 `GET /api/weread/status` 返回 `hasApiKey=false`，先检查 `.env` 是否存在 `WEREAD_API_KEY`
+- 如果同步时报 “API Key 无效或已失效”，先确认 key 是否仍可用，再重启本地服务
+- 如果同步时报 “当前微信读书 skill 需要升级”，按 skill 包里的升级提示先更新 skill 版本
+- 如果网关偶发超时，当前实现会自动重试 3 次；仍失败时再看终端日志里的 `[weread-api]` 和 `[weread-sync]` 前缀日志
 
 ## 数据文件说明
 
@@ -130,10 +97,6 @@ flowchart TD
   微信读书书架、最近动态、同步时间等
 - `.weread_notes.json`
   微信读书笔记明细，包括划线和评论
-- `.weread_cookie.json`
-  本地保存的 Cookie
-- `.weread_bridge.json`
-  小程序 / 云端桥接 token 与状态
 - `.backups/`
   本地数据备份
 
@@ -145,14 +108,10 @@ flowchart TD
 .
 ├── dashboard.html
 ├── server.py
+├── weread/
+│   ├── __init__.py
+│   └── service.py
 ├── requirements.txt
-├── chrome-extension/
-│   └── weread-sync/
-│       ├── manifest.json
-│       ├── background.js
-│       ├── popup.html
-│       ├── popup.js
-│       └── README.md
 └── .github/
     └── workflows/
 ```

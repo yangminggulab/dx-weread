@@ -8,7 +8,9 @@ const CORS_HEADERS = {
 
 const PERSONAL_ROUTE_PREFIX = "/tasks";
 const CLOUD_ROUTE_PREFIX = "/tasks-cloud";
-const CLOUD_WEREAD_MESSAGE = "云端版暂不支持直接抓取微信读书 Cookie，请先在本地版同步后再把数据上传到云端。";
+// 多用户云端版暂不使用：保留相关代码，入口强制关闭，避免误把小程序/网页切到登录态数据。
+const MULTIUSER_CLOUD_ENABLED = false;
+const CLOUD_WEREAD_MESSAGE = "云端版暂不支持直接调用本机微信读书 API Key，请先在本地版同步后再把数据上传到云端。";
 const EMPTY_APP_DATA = { tasks: [], books: [], notes: [], updates: [] };
 const EMPTY_DIARY_DATA = { today: { date: "", content: "" }, archive: [] };
 const TEXT_ENCODER = new TextEncoder();
@@ -84,21 +86,53 @@ function normalizeAppData(payload) {
   };
 }
 
+function coerceDiaryViewCount(value) {
+  const count = Number.parseInt(value, 10);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+function normalizeDiaryArchiveEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const date = String(entry.date || "").trim();
+  if (!date) return null;
+  return {
+    ...entry,
+    date,
+    content: String(entry.content || ""),
+    viewCount: coerceDiaryViewCount(entry.viewCount),
+    lastViewedAt: String(entry.lastViewedAt || "").trim(),
+  };
+}
+
+function mergeDiaryArchiveEntries(left, right) {
+  const normalizedLeft = normalizeDiaryArchiveEntry(left);
+  const normalizedRight = normalizeDiaryArchiveEntry(right);
+  if (!normalizedLeft || !normalizedRight) return normalizedLeft || normalizedRight;
+
+  const leftContent = String(normalizedLeft.content || "");
+  const rightContent = String(normalizedRight.content || "");
+  const primary = rightContent.length > leftContent.length ? normalizedRight : normalizedLeft;
+  return {
+    ...primary,
+    date: primary.date || normalizedLeft.date || normalizedRight.date,
+    content: rightContent.length > leftContent.length ? rightContent : leftContent,
+    viewCount: Math.max(normalizedLeft.viewCount || 0, normalizedRight.viewCount || 0),
+    lastViewedAt: [normalizedLeft.lastViewedAt || "", normalizedRight.lastViewedAt || ""].sort().slice(-1)[0] || "",
+  };
+}
+
 function normalizeDiaryData(payload) {
   const diary = payload && typeof payload === "object" ? payload : {};
   const today = diary.today && typeof diary.today === "object" ? diary.today : {};
   const archive = Array.isArray(diary.archive)
-    ? diary.archive.filter((entry) => entry && typeof entry === "object" && entry.date)
+    ? diary.archive.map(normalizeDiaryArchiveEntry).filter(Boolean)
     : [];
   return {
     today: {
       date: String(today.date || ""),
       content: String(today.content || ""),
     },
-    archive: archive.map((entry) => ({
-      date: String(entry.date || ""),
-      content: String(entry.content || ""),
-    })),
+    archive,
   };
 }
 
@@ -527,7 +561,7 @@ export default {
       const route = resolveRoute(url.pathname);
       if (!route) return json({ error: "not found" }, 404);
       const { mode, path } = route;
-      const cloudEnabled = Boolean(env.AUTH_DB);
+      const cloudEnabled = MULTIUSER_CLOUD_ENABLED && Boolean(env.AUTH_DB);
 
       if (request.method === "OPTIONS") {
         return new Response(null, { headers: CORS_HEADERS });
@@ -687,13 +721,16 @@ export default {
 
             const archiveMap = {};
             for (const entry of stored.archive || []) {
-              if (entry?.date) archiveMap[entry.date] = entry;
+              const normalized = normalizeDiaryArchiveEntry(entry);
+              if (normalized?.date) archiveMap[normalized.date] = normalized;
             }
             for (const entry of body.archive || []) {
-              if (!entry?.date) continue;
-              if (!archiveMap[entry.date] || entry.content.length > String(archiveMap[entry.date].content || "").length) {
-                archiveMap[entry.date] = entry;
-              }
+              const normalized = normalizeDiaryArchiveEntry(entry);
+              if (!normalized?.date) continue;
+              archiveMap[normalized.date] = mergeDiaryArchiveEntries(
+                archiveMap[normalized.date],
+                normalized,
+              );
             }
             body.archive = Object.values(archiveMap).sort((a, b) => (a.date < b.date ? -1 : 1));
             await saveDiary(env.TASKS_KV, auth.userId, body);
@@ -704,10 +741,7 @@ export default {
             return json({ syncAvailable: false, cloudMode: true, message: CLOUD_WEREAD_MESSAGE });
           }
 
-          if (
-            (path === "/api/weread/sync" || path === "/api/weread/extension-sync" || path === "/api/weread/import-cookie")
-            && request.method === "POST"
-          ) {
+          if (path === "/api/weread/sync" && request.method === "POST") {
             return json({ error: CLOUD_WEREAD_MESSAGE, cloudMode: true }, 501);
           }
         }
@@ -836,13 +870,16 @@ export default {
 
         const archiveMap = {};
         for (const entry of stored.archive || []) {
-          if (entry?.date) archiveMap[entry.date] = entry;
+          const normalized = normalizeDiaryArchiveEntry(entry);
+          if (normalized?.date) archiveMap[normalized.date] = normalized;
         }
         for (const entry of body.archive || []) {
-          if (!entry?.date) continue;
-          if (!archiveMap[entry.date] || entry.content.length > String(archiveMap[entry.date].content || "").length) {
-            archiveMap[entry.date] = entry;
-          }
+          const normalized = normalizeDiaryArchiveEntry(entry);
+          if (!normalized?.date) continue;
+          archiveMap[normalized.date] = mergeDiaryArchiveEntries(
+            archiveMap[normalized.date],
+            normalized,
+          );
         }
         body.archive = Object.values(archiveMap).sort((a, b) => (a.date < b.date ? -1 : 1));
         await saveSharedDiary(env.TASKS_KV, body);
@@ -853,10 +890,7 @@ export default {
         return json({ syncAvailable: false, cloudMode: true, message: CLOUD_WEREAD_MESSAGE });
       }
 
-      if (
-        (path === "/api/weread/sync" || path === "/api/weread/extension-sync" || path === "/api/weread/import-cookie")
-        && request.method === "POST"
-      ) {
+      if (path === "/api/weread/sync" && request.method === "POST") {
         return json({ error: CLOUD_WEREAD_MESSAGE, cloudMode: true }, 501);
       }
 
