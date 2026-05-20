@@ -36,7 +36,7 @@ function paintRing(canvasId, minutes, goal) {
   // Track
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.setStrokeStyle('#1a3d28')
+  ctx.setStrokeStyle('#d4f0dc')
   ctx.setLineWidth(sw)
   ctx.setLineCap('butt')
   ctx.stroke()
