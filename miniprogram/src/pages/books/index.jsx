@@ -23,102 +23,68 @@ function getTodayMinutes(weekDaily) {
   }, 0)
 }
 
-function drawArrowTip(ctx, cx, cy, r, angle, sw) {
-  const tipX = cx + r * Math.cos(angle)
-  const tipY = cy + r * Math.sin(angle)
-  const half = sw / 2
-  ctx.beginPath()
-  ctx.arc(tipX, tipY, half, 0, Math.PI * 2)
-  ctx.fillStyle = '#7ef587'
-  ctx.fill()
-  const dir = angle + Math.PI / 2
-  const s = half * 0.5
-  ctx.save()
-  ctx.translate(tipX, tipY)
-  ctx.rotate(dir)
-  ctx.beginPath()
-  ctx.moveTo(0, -s * 1.3)
-  ctx.lineTo(s * 0.8, s * 0.8)
-  ctx.lineTo(-s * 0.8, s * 0.8)
-  ctx.closePath()
-  ctx.fillStyle = 'rgba(0,0,0,0.55)'
-  ctx.fill()
-  ctx.restore()
-}
-
-function drawRing(ctx, W, H, minutes, goal) {
-  const cx = W / 2, cy = H / 2
-  const sw = 22
-  const r = Math.min(W, H) / 2 - sw / 2 - 2
+function paintRing(canvasId, minutes, goal) {
+  const S = 110  // drawing size (matches 220rpx on standard screen)
+  const cx = S / 2, cy = S / 2
+  const sw = 18
+  const r = S / 2 - sw / 2 - 2
   const pct = goal > 0 ? minutes / goal : 0
   const start = -Math.PI / 2
 
-  ctx.clearRect(0, 0, W, H)
+  const ctx = Taro.createCanvasContext(canvasId)
 
   // Track
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.strokeStyle = '#1a3d28'
-  ctx.lineWidth = sw
-  ctx.lineCap = 'butt'
+  ctx.setStrokeStyle('#1a3d28')
+  ctx.setLineWidth(sw)
+  ctx.setLineCap('butt')
   ctx.stroke()
 
-  if (pct <= 0) return
-
-  if (pct >= 1) {
-    // Full first lap
-    ctx.beginPath()
-    ctx.arc(cx, cy, r, 0, Math.PI * 2)
-    ctx.strokeStyle = '#4cd964'
-    ctx.lineWidth = sw
-    ctx.lineCap = 'butt'
-    ctx.stroke()
-
-    const overflow = pct % 1
-    if (overflow > 0.005) {
+  if (pct > 0) {
+    if (pct >= 1) {
       ctx.beginPath()
-      ctx.arc(cx, cy, r, start, start + Math.PI * 2 * overflow)
-      ctx.strokeStyle = '#7ef587'
-      ctx.lineWidth = sw
-      ctx.lineCap = 'round'
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.setStrokeStyle('#4cd964')
+      ctx.setLineWidth(sw)
+      ctx.setLineCap('butt')
       ctx.stroke()
-      drawArrowTip(ctx, cx, cy, r, start + Math.PI * 2 * overflow, sw)
+      const ov = pct % 1
+      if (ov > 0.005) {
+        ctx.beginPath()
+        ctx.arc(cx, cy, r, start, start + Math.PI * 2 * ov)
+        ctx.setStrokeStyle('#7ef587')
+        ctx.setLineWidth(sw)
+        ctx.setLineCap('round')
+        ctx.stroke()
+        const tipAngle = start + Math.PI * 2 * ov
+        const tx = cx + r * Math.cos(tipAngle)
+        const ty = cy + r * Math.sin(tipAngle)
+        ctx.beginPath()
+        ctx.arc(tx, ty, sw / 2, 0, Math.PI * 2)
+        ctx.setFillStyle('#7ef587')
+        ctx.fill()
+      }
     } else {
-      drawArrowTip(ctx, cx, cy, r, start, sw)
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, start, start + Math.PI * 2 * pct)
+      ctx.setStrokeStyle('#4cd964')
+      ctx.setLineWidth(sw)
+      ctx.setLineCap('round')
+      ctx.stroke()
     }
-  } else {
-    ctx.beginPath()
-    ctx.arc(cx, cy, r, start, start + Math.PI * 2 * pct)
-    ctx.strokeStyle = '#4cd964'
-    ctx.lineWidth = sw
-    ctx.lineCap = 'round'
-    ctx.stroke()
   }
+
+  ctx.draw()
 }
 
 function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
   const todayMinutes = getTodayMinutes(weekDaily)
 
   useEffect(() => {
-    const paint = () => {
-      Taro.createSelectorQuery()
-        .select('#wr-ring')
-        .fields({ node: true, size: true })
-        .exec(([res]) => {
-          if (!res?.node) return
-          const cv = res.node
-          const ctx = cv.getContext('2d')
-          const dpr = Taro.getSystemInfoSync().pixelRatio
-          const W = res.width || 90
-          const H = res.height || 90
-          cv.width = W * dpr
-          cv.height = H * dpr
-          ctx.scale(dpr, dpr)
-          drawRing(ctx, W, H, todayMinutes, dayGoalMinutes)
-        })
-    }
+    const paint = () => paintRing('wr-ring', todayMinutes, dayGoalMinutes)
     Taro.nextTick(paint)
-    const t = setTimeout(paint, 500)
+    const t = setTimeout(paint, 300)
     return () => clearTimeout(t)
   }, [todayMinutes, dayGoalMinutes])
 
@@ -134,7 +100,7 @@ function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
           <Text className='rring-label'>今日阅读</Text>
         </View>
         <View className='rring-wrap'>
-          <Canvas type='2d' id='wr-ring' className='rring-canvas' />
+          <Canvas canvas-id='wr-ring' className='rring-canvas' />
         </View>
         <View className='rring-side'>
           <View className='rring-side-top'>
