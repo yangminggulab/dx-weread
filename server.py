@@ -4,7 +4,7 @@ WeRead + Dashboard 本地服务
 访问: http://localhost:8080
 """
 from flask import Flask, request, jsonify, send_from_directory
-from datetime import datetime
+from datetime import datetime, timedelta
 import hashlib
 import math
 import secrets
@@ -639,8 +639,27 @@ def empty_weread_notes_data():
         }
     }
 
+def empty_weread_stats():
+    return {
+        "monthly": {
+            "baseTime": 0,
+            "readDays": 0,
+            "totalReadTime": 0,
+            "dayAverageReadTime": 0,
+            "compare": 0,
+        },
+        "annual": {
+            "baseTime": 0,
+            "readDays": 0,
+            "totalReadTime": 0,
+            "dayAverageReadTime": 0,
+            "compare": 0,
+        },
+        "dailyReadTimes": [],
+    }
+
 def empty_weread_data():
-    return {"books": [], "notes": [], "updates": [], "syncedAt": ""}
+    return {"books": [], "notes": [], "updates": [], "stats": empty_weread_stats(), "syncedAt": ""}
 
 def empty_weread_bridge_data():
     return {
@@ -721,6 +740,113 @@ def normalize_weread_update(item):
     update["time"] = update.get("time", "刚刚")
     return update
 
+def normalize_weread_stats(stats):
+    payload = stats if isinstance(stats, dict) else {}
+
+    def _normalize_brief(section):
+        item = section if isinstance(section, dict) else {}
+        compare = item.get("compare")
+        if not isinstance(compare, (int, float)):
+            compare = 0
+        return {
+            "baseTime": coerce_int_id(item.get("baseTime")),
+            "readDays": coerce_int_id(item.get("readDays")),
+            "totalReadTime": coerce_int_id(item.get("totalReadTime")),
+            "dayAverageReadTime": coerce_int_id(item.get("dayAverageReadTime")),
+            "compare": compare,
+        }
+
+    daily_read_times = []
+    for item in payload.get("dailyReadTimes") or []:
+        if not isinstance(item, dict):
+            continue
+        date = str(item.get("date", "")).strip()
+        seconds = coerce_int_id(item.get("seconds"))
+        if not date or seconds < 0:
+            continue
+        daily_read_times.append({
+            "date": date,
+            "timestamp": coerce_int_id(item.get("timestamp")),
+            "seconds": seconds,
+        })
+
+    daily_read_times.sort(key=lambda item: item.get("date", ""))
+    return {
+        "monthly": _normalize_brief(payload.get("monthly")),
+        "annual": _normalize_brief(payload.get("annual")),
+        "dailyReadTimes": daily_read_times,
+    }
+
+def has_weread_stats(stats):
+    payload = normalize_weread_stats(stats)
+    if payload.get("dailyReadTimes"):
+        return True
+    for key in ("monthly", "annual"):
+        section = payload.get(key) or {}
+        if any(coerce_int_id(section.get(field)) > 0 for field in ("baseTime", "readDays", "totalReadTime", "dayAverageReadTime")):
+            return True
+        compare = section.get("compare")
+        if isinstance(compare, (int, float)) and compare != 0:
+            return True
+    return False
+
+def build_weread_stats(existing_stats, today_read_map):
+    normalized_existing = normalize_weread_stats(existing_stats)
+    daily_map = {
+        str(item.get("date", "")).strip(): {
+            "date": str(item.get("date", "")).strip(),
+            "timestamp": coerce_int_id(item.get("timestamp")),
+            "seconds": coerce_int_id(item.get("seconds")),
+        }
+        for item in normalized_existing.get("dailyReadTimes", [])
+        if str(item.get("date", "")).strip()
+    }
+
+    today_seconds = max(0, sum(max(0, coerce_int_id(minutes)) for minutes in today_read_map.values()) * 60)
+    today_key = datetime.now().date().isoformat()
+    current_ts = int(datetime.now().timestamp() * 1000)
+    if today_seconds > 0:
+        existing_today = daily_map.get(today_key, {})
+        daily_map[today_key] = {
+            "date": today_key,
+            "timestamp": current_ts,
+            "seconds": max(today_seconds, coerce_int_id(existing_today.get("seconds"))),
+        }
+
+    daily_read_times = sorted(daily_map.values(), key=lambda item: item.get("date", ""))
+    now = datetime.now()
+    month_prefix = now.strftime("%Y-%m-")
+    year_prefix = now.strftime("%Y-")
+    prev_month = (now.replace(day=1) - timedelta(days=1))
+    prev_month_prefix = prev_month.strftime("%Y-%m-")
+    prev_year_prefix = f"{now.year - 1}-"
+
+    def _summarize(prefix, natural_days, compare_prefix, base_time):
+        days = [item for item in daily_read_times if item.get("date", "").startswith(prefix)]
+        total_seconds = sum(coerce_int_id(item.get("seconds")) for item in days)
+        read_days = sum(1 for item in days if coerce_int_id(item.get("seconds")) > 0)
+        compare_days = [item for item in daily_read_times if item.get("date", "").startswith(compare_prefix)]
+        compare_total = sum(coerce_int_id(item.get("seconds")) for item in compare_days)
+        compare = 0
+        if compare_total > 0:
+            compare = round((total_seconds - compare_total) / compare_total, 4)
+        return {
+            "baseTime": int(base_time.timestamp()),
+            "readDays": read_days,
+            "totalReadTime": total_seconds,
+            "dayAverageReadTime": round(total_seconds / max(1, natural_days)),
+            "compare": compare,
+        }
+
+    monthly = _summarize(month_prefix, now.day, prev_month_prefix, datetime(now.year, now.month, 1))
+    annual = _summarize(year_prefix, now.timetuple().tm_yday, prev_year_prefix, datetime(now.year, 1, 1))
+
+    return {
+        "monthly": monthly,
+        "annual": annual,
+        "dailyReadTimes": daily_read_times,
+    }
+
 def normalize_weread_data(data):
     payload = data if isinstance(data, dict) else {}
     return {
@@ -739,6 +865,7 @@ def normalize_weread_data(data):
             for item in (payload.get("updates") or [])
             if isinstance(item, dict)
         ],
+        "stats": normalize_weread_stats(payload.get("stats")),
         "syncedAt": str(payload.get("syncedAt", "")).strip(),
     }
 
@@ -1005,9 +1132,10 @@ def split_combined_payload(data):
     books = [item for item in (payload.get("books") or []) if isinstance(item, dict)]
     notes = [item for item in (payload.get("notes") or []) if isinstance(item, dict)]
     updates = [item for item in (payload.get("updates") or []) if isinstance(item, dict)]
+    special_keys = {"books", "notes", "updates", "wereadStats", "wereadSyncedAt"}
 
     user_data = {
-        **{k: v for k, v in payload.items() if k not in {"books", "notes", "updates"}},
+        **{k: v for k, v in payload.items() if k not in special_keys},
         "tasks": tasks,
         "books": [dict(item) for item in books if not is_weread_book(item)],
         "notes": [dict(item) for item in notes if not is_weread_note(item)],
@@ -1017,6 +1145,8 @@ def split_combined_payload(data):
         "books": [item for item in books if is_weread_book(item)],
         "notes": [],
         "updates": [item for item in updates if is_weread_update(item)],
+        "stats": payload.get("wereadStats"),
+        "syncedAt": payload.get("wereadSyncedAt", ""),
     })
     weread_notes_data = normalize_weread_notes_data({
         "notes": [item for item in notes if is_weread_note(item)],
@@ -1096,6 +1226,7 @@ def merge_weread_store(existing, incoming):
         "books": books,
         "notes": notes,
         "updates": updates,
+        "stats": fresh.get("stats") or base.get("stats") or empty_weread_stats(),
         "syncedAt": fresh.get("syncedAt") or base.get("syncedAt", ""),
     }
 
@@ -1182,6 +1313,8 @@ def merge_app_and_special_data(data, weread, weread_notes_data):
         "books": books,
         "notes": notes,
         "updates": updates,
+        "wereadStats": weread_payload.get("stats") or empty_weread_stats(),
+        "wereadSyncedAt": weread_payload.get("syncedAt", ""),
     }
 
 def migrate_embedded_special_data():
@@ -1262,6 +1395,7 @@ def build_weread_sync_payload(result):
     return {
         "books": books,
         "notes": notes,
+        "stats": normalize_weread_stats(result.get("stats")),
         "notesMeta": normalize_weread_notes_data({
             "notes": [],
             "meta": result.get("notesMeta", {}),
@@ -1420,6 +1554,9 @@ def fetch_weread_data(cookie, existing_notes_store=None):
 
     for book in books:
         book["todayReadMinutes"] = today_read_map.get(str(book.get("_bookId", "")), 0)
+
+    existing_stats = normalize_weread_stats(load_weread_data().get("stats"))
+    weread_stats = build_weread_stats(existing_stats, today_read_map)
 
     for book in books[:6]:
         try:
@@ -1587,6 +1724,7 @@ def fetch_weread_data(cookie, existing_notes_store=None):
     return {
         "books": books,
         "notes": notes,
+        "stats": weread_stats,
         "notesMeta": {
             "fullSyncCompleted": all_note_fetches_succeeded,
             "lastFullSyncAt": sync_started_at if all_note_fetches_succeeded else existing_notes_payload.get("meta", {}).get("lastFullSyncAt", ""),
@@ -1615,6 +1753,8 @@ def save_data():
     user_data, weread_data, weread_notes_data = split_combined_payload(data)
     write_base_app_data(user_data)
     if has_weread_content(weread_data):
+        if "wereadStats" not in data or not has_weread_stats(weread_data.get("stats")):
+            weread_data["stats"] = current_weread.get("stats", empty_weread_stats())
         weread_data["syncedAt"] = weread_data.get("syncedAt") or current_weread.get("syncedAt", "")
         write_weread_data(weread_data)
     elif not has_weread_content(current_weread):
@@ -1849,10 +1989,13 @@ def weread_sync():
 
         persist_weread_result(result)
         _push_to_cloud_async("manual-sync")
+        current_weread = load_weread_data()
 
         return jsonify({
             "books": result["books"],
             "notes": result["notes"],
+            "stats": current_weread.get("stats", empty_weread_stats()),
+            "syncedAt": current_weread.get("syncedAt", ""),
             "savedCookie": True,
             "usedSavedCookie": bool(cookie and not incoming_cookie),
             "cookiePath": os.path.basename(WEREAD_COOKIE_FILE),

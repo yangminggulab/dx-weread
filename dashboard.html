@@ -165,6 +165,70 @@ const getFullNoteText = (summary='') =>
     .map(line => line.trimEnd())
     .filter(Boolean)
     .join('\n\n') || '暂无同步内容';
+const EMPTY_WEREAD_STATS = {
+  monthly: { baseTime: 0, readDays: 0, totalReadTime: 0, dayAverageReadTime: 0, compare: 0 },
+  annual: { baseTime: 0, readDays: 0, totalReadTime: 0, dayAverageReadTime: 0, compare: 0 },
+  dailyReadTimes: [],
+};
+const cloneWereadStats = (stats) => ({
+  monthly: { ...EMPTY_WEREAD_STATS.monthly, ...(stats?.monthly || {}) },
+  annual: { ...EMPTY_WEREAD_STATS.annual, ...(stats?.annual || {}) },
+  dailyReadTimes: Array.isArray(stats?.dailyReadTimes) ? stats.dailyReadTimes : [],
+});
+const formatLocalDateKey = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+const toIsoDateKey = (value) => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const match = trimmed.match(/\d{4}-\d{2}-\d{2}/);
+    if (match) return match[0];
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return formatLocalDateKey(parsed);
+    return '';
+  }
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    const ts = value < 1e11 ? value * 1000 : value;
+    const parsed = new Date(ts);
+    if (!Number.isNaN(parsed.getTime())) return formatLocalDateKey(parsed);
+  }
+  return '';
+};
+const getWereadNoteDate = (note) =>
+  toIsoDateKey(note?.sourceUpdatedAt) || toIsoDateKey(note?.updatedAt) || '';
+const formatReadDuration = (seconds=0) => {
+  const safe = Math.max(0, Number(seconds) || 0);
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.round((safe % 3600) / 60);
+  if (hours > 0 && minutes > 0) return `${hours}小时 ${minutes}分钟`;
+  if (hours > 0) return `${hours}小时`;
+  return `${minutes}分钟`;
+};
+const formatCalendarDate = (dateKey='') => {
+  if (!dateKey) return '暂无日期';
+  const parsed = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return dateKey;
+  return parsed.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' });
+};
+const HEATMAP_COLORS = ['#f2ede4', '#d7e4db', '#a8c2b0', '#6f977e', '#2d6a4f'];
+const getHeatmapLevel = (seconds=0, maxSeconds=0) => {
+  if (!seconds || !maxSeconds) return 0;
+  const ratio = seconds / maxSeconds;
+  if (ratio >= 0.75) return 4;
+  if (ratio >= 0.5) return 3;
+  if (ratio >= 0.25) return 2;
+  return 1;
+};
+const formatCompareText = (compare=0) => {
+  const ratio = Number(compare);
+  if (!Number.isFinite(ratio) || ratio === 0) return '和上个周期基本持平';
+  const percent = Math.abs(Math.round(ratio * 100));
+  return ratio > 0 ? `比上个周期多 ${percent}%` : `比上个周期少 ${percent}%`;
+};
 
 
 const STATUS = {
@@ -928,29 +992,40 @@ function WeReadShelf({ books }) {
    WEREAD NOTES
 ═══════════════════════════════════════════════════════════ */
 
-function WeReadNotes({ notes }) {
+function WeReadNotes({ notes, selectedDate, onClearDate }) {
   const orderedNotes = React.useMemo(
     () => [...notes].sort((a, b) => (b.sourceUpdatedTimestamp || 0) - (a.sourceUpdatedTimestamp || 0)),
     [notes]
   );
-  const [sel, setSel] = React.useState(orderedNotes[0] || null);
+  const visibleNotes = React.useMemo(
+    () => selectedDate ? orderedNotes.filter(note => getWereadNoteDate(note) === selectedDate) : orderedNotes,
+    [orderedNotes, selectedDate]
+  );
+  const [sel, setSel] = React.useState(visibleNotes[0] || null);
 
   React.useEffect(() => {
-    if (!orderedNotes.length) { setSel(null); return; }
-    if (!sel || !orderedNotes.some(n => n.id === sel.id)) setSel(orderedNotes[0]);
-  }, [orderedNotes]);
+    if (!visibleNotes.length) { setSel(null); return; }
+    if (!sel || !visibleNotes.some(n => n.id === sel.id)) setSel(visibleNotes[0]);
+  }, [visibleNotes, sel]);
+
+  const noteSub = selectedDate
+    ? `${formatCalendarDate(selectedDate)} · ${visibleNotes.length} 条笔记`
+    : (orderedNotes.length ? `已同步 ${orderedNotes.length} 条划线与评论` : '同步后的划线和评论会显示在这里');
 
   return (
     <section>
       <SectionHead
         title="微信读书笔记"
-        sub={orderedNotes.length ? `已同步 ${orderedNotes.length} 条划线与评论` : '同步后的划线和评论会显示在这里'}
+        sub={noteSub}
+        right={selectedDate ? (
+          <button type="button" onClick={onClearDate} className="text-xs text-[#8f887d] hover:text-[#2d6a4f] transition-colors">查看全部</button>
+        ) : null}
       />
       <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden flex" style={{height:320}}>
         <div className="w-52 shrink-0 border-r border-[#e8e4dc] overflow-y-auto">
-          {orderedNotes.length === 0
-            ? <div className="p-4 text-xs text-[#ccc] text-center mt-8">还没有同步笔记</div>
-            : orderedNotes.map(n => (
+          {visibleNotes.length === 0
+            ? <div className="p-4 text-xs text-[#ccc] text-center mt-8">{selectedDate ? '这一天还没有同步到微信读书笔记' : '还没有同步笔记'}</div>
+            : visibleNotes.map(n => (
               <div key={n.id} onClick={() => setSel(n)}
                 className={`px-4 py-3 cursor-pointer border-b border-[#f5f2eb] last:border-0 transition-colors ${sel?.id === n.id ? 'bg-[#f0f4f1]' : 'hover:bg-[#faf9f6]'}`}>
                 <div className={`text-sm font-medium leading-snug mb-1.5 ${sel?.id === n.id ? 'text-[#2d6a4f] serif' : 'text-[#1c1c1c]'}`}>{n.title}</div>
@@ -964,7 +1039,7 @@ function WeReadNotes({ notes }) {
           }
         </div>
         <div className="flex-1 p-5 overflow-y-auto">
-          {sel && orderedNotes.find(n => n.id === sel.id) ? (
+          {sel && visibleNotes.find(n => n.id === sel.id) ? (
             <>
               <div className="flex items-start justify-between mb-3">
                 <h4 className="serif font-semibold text-base text-[#1c1c1c] leading-snug flex-1 pr-3">{sel.title}</h4>
@@ -988,34 +1063,153 @@ function WeReadNotes({ notes }) {
    PROGRESS
 ═══════════════════════════════════════════════════════════ */
 
-function Progress({ tasks, books }) {
-  const total  = tasks.length;
-  const done   = tasks.filter(t=>t.status==='completed').length;
-  const reading = books.filter(b=>b.status==='reading').length;
-  const wip    = tasks.filter(t=>t.status==='in_progress').length;
+function WeReadHeatmap({ stats, notes, syncedAt, selectedDate, onSelectDate }) {
+  const wereadStats = React.useMemo(() => cloneWereadStats(stats), [stats]);
+  const noteMap = React.useMemo(() => {
+    const grouped = new Map();
+    notes.forEach(note => {
+      const dateKey = getWereadNoteDate(note);
+      if (!dateKey) return;
+      if (!grouped.has(dateKey)) grouped.set(dateKey, []);
+      grouped.get(dateKey).push(note);
+    });
+    grouped.forEach(dayNotes => {
+      dayNotes.sort((a, b) => (b.sourceUpdatedTimestamp || 0) - (a.sourceUpdatedTimestamp || 0));
+    });
+    return grouped;
+  }, [notes]);
 
-  const stats = [
-    { label:'在读书籍', v:reading, max:books.length, color:'#2d6a4f' },
-    { label:'已完成任务', v:done,   max:total,            color:'#3a7d52' },
-    { label:'活跃任务',   v:wip,    max:total,            color:'#b45309' },
+  const heatmap = React.useMemo(() => {
+    const readMap = new Map();
+    wereadStats.dailyReadTimes.forEach(item => {
+      const dateKey = toIsoDateKey(item?.date || item?.timestamp);
+      const seconds = Math.max(0, Number(item?.seconds) || 0);
+      if (!dateKey) return;
+      readMap.set(dateKey, seconds);
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date(today);
+    const endOffset = 6 - ((end.getDay() + 6) % 7);
+    end.setDate(end.getDate() + endOffset);
+    const start = new Date(end);
+    start.setDate(end.getDate() - (18 * 7 - 1));
+
+    const days = [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      const dateKey = formatLocalDateKey(cursor);
+      const seconds = readMap.get(dateKey) || 0;
+      const dayNotes = noteMap.get(dateKey) || [];
+      days.push({ date: dateKey, seconds, noteCount: dayNotes.length, notes: dayNotes });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const weeks = [];
+    for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+    const maxSeconds = days.reduce((max, item) => Math.max(max, item.seconds), 0);
+    const latestActive = [...days].reverse().find(item => item.seconds > 0 || item.noteCount > 0);
+    return { weeks, maxSeconds, latestActiveDate: latestActive?.date || '' };
+  }, [noteMap, wereadStats]);
+
+  const activeDate = selectedDate || heatmap.latestActiveDate;
+  const selectedDay = React.useMemo(() => {
+    for (const week of heatmap.weeks) {
+      const found = week.find(day => day.date === activeDate);
+      if (found) return found;
+    }
+    return null;
+  }, [activeDate, heatmap.weeks]);
+
+  const monthSummary = wereadStats.monthly || EMPTY_WEREAD_STATS.monthly;
+  const summaryCards = [
+    { label: '本月时长', value: formatReadDuration(monthSummary.totalReadTime), hint: formatCompareText(monthSummary.compare) },
+    { label: '本月阅读天数', value: `${monthSummary.readDays || 0} 天`, hint: '按当前本机同步记录统计' },
+    { label: '自然日均', value: formatReadDuration(monthSummary.dayAverageReadTime), hint: '按本月已过去自然日计算' },
   ];
+
   return (
     <section>
-      <SectionHead title="进度总览" />
-      <div className="grid grid-cols-3 gap-3">
-        {stats.map((s,i)=>(
-          <div key={i} className="bg-white rounded-xl border border-[#e8e4dc] p-4">
-            <div className="text-xs text-[#bbb] mb-2">{s.label}</div>
-            <div className="flex items-end justify-between mb-2.5">
-              <span className="text-2xl font-semibold" style={{color:s.color}}>{s.v}</span>
-              <span className="text-xs text-[#ccc] mb-0.5">/ {s.max}</span>
+      <SectionHead title="阅读热力" sub={`最近 18 周 · 色块越深表示读得越久，金点代表当天有微信读书笔记${syncedAt ? ` · 同步于 ${String(syncedAt).replace('T', ' ').slice(0, 16)}` : ''}`} />
+      <div className="space-y-4">
+        <div className="grid gap-3">
+          {summaryCards.map(card => (
+            <div key={card.label} className="bg-white rounded-xl border border-[#e8e4dc] p-4">
+              <div className="text-xs text-[#b3aa9d] mb-2">{card.label}</div>
+              <div className="text-xl font-semibold text-[#1f1c17]">{card.value}</div>
+              <div className="text-xs text-[#91887d] mt-2">{card.hint}</div>
             </div>
-            <div className="h-1.5 bg-[#f0ece4] rounded-full overflow-hidden">
-              <div className="h-full rounded-full transition-all" style={{width:`${s.max?Math.round(s.v/s.max*100):0}%`,background:s.color}} />
+          ))}
+        </div>
+        <div className="bg-white rounded-xl border border-[#e8e4dc] p-4">
+          <div className="overflow-x-auto pb-2">
+            <div className="min-w-[280px]">
+              <div className="flex mb-2 pl-6">
+                {heatmap.weeks.map((week, idx) => {
+                  const first = week[0];
+                  const prev = idx > 0 ? heatmap.weeks[idx - 1][0] : null;
+                  const showLabel = !prev || first.date.slice(5, 7) !== prev.date.slice(5, 7);
+                  return <div key={`month-${first.date}`} className="w-4 text-[10px] text-[#c0b7aa] text-center">{showLabel ? `${Number(first.date.slice(5, 7))}月` : ''}</div>;
+                })}
+              </div>
+              <div className="flex gap-2">
+                <div className="w-4 shrink-0 flex flex-col justify-between py-0.5 text-[10px] text-[#c0b7aa]">
+                  {['一', '二', '三', '四', '五', '六', '日'].map(label => (
+                    <div key={label} className="h-4 leading-4 text-center">{label}</div>
+                  ))}
+                </div>
+                <div className="flex gap-1">
+                  {heatmap.weeks.map((week, weekIdx) => (
+                    <div key={`week-${weekIdx}`} className="flex flex-col gap-1">
+                      {week.map(day => {
+                        const level = getHeatmapLevel(day.seconds, heatmap.maxSeconds);
+                        const isSelected = selectedDate ? day.date === selectedDate : false;
+                        return (
+                          <button
+                            key={day.date}
+                            onClick={() => onSelectDate(day.date === selectedDate ? '' : day.date)}
+                            title={`${day.date} · ${formatReadDuration(day.seconds)} · ${day.noteCount} 条笔记`}
+                            className="relative w-4 h-4 rounded-[4px] transition-transform hover:scale-110"
+                            style={{
+                              backgroundColor: HEATMAP_COLORS[level],
+                              border: isSelected ? '1.5px solid #1f1c17' : '1px solid rgba(123,108,88,0.12)',
+                            }}
+                          >
+                            {day.noteCount > 0 && <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-[#c08b2d] border border-white"></span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-[#ccc] mt-1.5">{s.max?Math.round(s.v/s.max*100):0}%</div>
           </div>
-        ))}
+          <div className="mt-4 pt-4 border-t border-[#f0ece4]">
+            {selectedDay ? (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-[#1f1c17]">{formatCalendarDate(selectedDay.date)}</div>
+                    <div className="text-xs text-[#91887d] mt-1">阅读 {formatReadDuration(selectedDay.seconds)} · 笔记 {selectedDay.noteCount} 条</div>
+                  </div>
+                  <div className="text-[11px] text-[#b7aa8a]">{selectedDay.seconds > 0 ? `${Math.round(selectedDay.seconds / 60)} 分钟` : '未记录阅读'}</div>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {selectedDay.notes.length > 0 ? selectedDay.notes.slice(0, 3).map(note => (
+                    <div key={note.id || note.sourceItemId} className="rounded-lg bg-[#faf9f6] border border-[#f0ece4] px-3 py-2">
+                      <div className="text-xs text-[#8f887d] mb-1">{note.bookTitle || '微信读书'}</div>
+                      <div className="text-[13px] text-[#3c382f] leading-6 line-clamp-2">{extractNotePreview(note.summary || note.title || '')}</div>
+                    </div>
+                  )) : <div className="text-sm text-[#b6ada0]">这一天还没有同步到微信读书笔记。</div>}
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-[#b6ada0]">同步后会在这里显示每日阅读时长和对应笔记。</div>
+            )}
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -1117,6 +1311,8 @@ function App() {
   const [books,    setBooks]   = useState(INIT_BOOKS);
   const [notes,    setNotes]   = useState(INIT_NOTES);
   const [updates,  setUpdates] = useState(INIT_UPDATES);
+  const [wereadMeta, setWereadMeta] = useState({ stats: cloneWereadStats(), syncedAt: '' });
+  const [selectedWereadDate, setSelectedWereadDate] = useState('');
   const [diary,    setDiary]   = useState({ today: { date: '', content: '' }, archive: [] });
   const [diarySaving, setDiarySaving] = useState(false);
   const diaryTimerRef = useRef(null);
@@ -1142,6 +1338,10 @@ function App() {
     setBooks(b);
     setNotes(n);
     setUpdates(u);
+    setWereadMeta({
+      stats: cloneWereadStats(d.wereadStats),
+      syncedAt: d.wereadSyncedAt || '',
+    });
     uid.current  = Math.max(0, ...t.map(x=>x.id)) + 1;
     puid.current = Math.max(0, ...b.map(x=>x.id)) + 1;
     nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;
@@ -1169,6 +1369,10 @@ function App() {
         setBooks(b);
         setNotes(n);
         setUpdates(u);
+        setWereadMeta({
+          stats: cloneWereadStats(hasSrv ? d.wereadStats : null),
+          syncedAt: hasSrv ? (d.wereadSyncedAt || '') : '',
+        });
         uid.current  = Math.max(0, ...t.map(x=>x.id)) + 1;
         puid.current = Math.max(0, ...b.map(x=>x.id)) + 1;
         nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;
@@ -1279,7 +1483,7 @@ function App() {
     if (n) log('note', `删除笔记「${n.title}」`);
   };
 
-  const handleWeReadSync = ({ books: wrBooks, notes: wrNotes }) => {
+  const handleWeReadSync = ({ books: wrBooks, notes: wrNotes, stats: wrStats, syncedAt: wrSyncedAt }) => {
     const today = new Date().toISOString().slice(0, 10);
     const syncedAt = new Date().toISOString();
     setBooks(prev => {
@@ -1359,6 +1563,10 @@ function App() {
       }
       return [{ id: Date.now(), type: 'project', text: `微信读书同步：${wrBooks.length} 本书`, time: '刚刚' }, ...prev].slice(0, 8);
     });
+    setWereadMeta(prev => ({
+      stats: cloneWereadStats(wrStats || prev.stats),
+      syncedAt: wrSyncedAt || syncedAt || prev.syncedAt,
+    }));
   };
 
   const handleToggle = (id) => {
@@ -1388,10 +1596,16 @@ function App() {
         {/* Bottom 2-col */}
         <div className="grid md:grid-cols-5 gap-6">
           <div className="md:col-span-3 space-y-6">
-            <WeReadNotes notes={wereadNotes} />
+            <WeReadNotes notes={wereadNotes} selectedDate={selectedWereadDate} onClearDate={()=>setSelectedWereadDate('')} />
           </div>
           <div className="md:col-span-2 space-y-6">
-            <Progress tasks={tasks} books={learningBooks} />
+            <WeReadHeatmap
+              stats={wereadMeta.stats}
+              notes={wereadNotes}
+              syncedAt={wereadMeta.syncedAt}
+              selectedDate={selectedWereadDate}
+              onSelectDate={setSelectedWereadDate}
+            />
             <WereadRecent notes={wereadNotes} updates={updates} />
           </div>
         </div>
