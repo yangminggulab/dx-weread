@@ -127,7 +127,7 @@ function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
   const todayStr = hrs > 0 ? `${hrs}时${mins}分` : `${mins}分钟`
 
   return (
-    <View className='rring-card card'>
+    <View className='rring-card'>
       <View className='rring-row'>
         <View className='rring-wrap'>
           <Canvas type='2d' id='wr-ring' className='rring-canvas' />
@@ -238,7 +238,7 @@ export default function BooksPage() {
         {!loading && listMap[tab].map(book => {
           const pct = book.progressPercent ?? 0
           return (
-            <View key={book.id} className='book-card card'>
+            <View key={book.id} className='book-card'>
               <View className='book-row'>
                 {book.cover
                   ? <Image className='book-cover' src={book.cover} mode='aspectFill' />
