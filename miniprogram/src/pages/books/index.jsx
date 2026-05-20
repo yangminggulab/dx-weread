@@ -23,69 +23,84 @@ function getTodayMinutes(weekDaily) {
   }, 0)
 }
 
-function paintRing(canvasId, minutes, goal) {
-  const S = 110  // drawing size (matches 220rpx on standard screen)
-  const cx = S / 2, cy = S / 2
+function drawRing(ctx, W, H, minutes, goal) {
+  const cx = W / 2, cy = H / 2
   const sw = 18
-  const r = S / 2 - sw / 2 - 2
+  const r = Math.min(W, H) / 2 - sw / 2 - 2
   const pct = goal > 0 ? minutes / goal : 0
   const start = -Math.PI / 2
 
-  const ctx = Taro.createCanvasContext(canvasId)
+  ctx.clearRect(0, 0, W, H)
 
-  // Track
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.setStrokeStyle('#d4f0dc')
-  ctx.setLineWidth(sw)
-  ctx.setLineCap('butt')
+  ctx.strokeStyle = '#d4f0dc'
+  ctx.lineWidth = sw
+  ctx.lineCap = 'butt'
   ctx.stroke()
 
-  if (pct > 0) {
-    if (pct >= 1) {
-      ctx.beginPath()
-      ctx.arc(cx, cy, r, 0, Math.PI * 2)
-      ctx.setStrokeStyle('#4cd964')
-      ctx.setLineWidth(sw)
-      ctx.setLineCap('butt')
-      ctx.stroke()
-      const ov = pct % 1
-      if (ov > 0.005) {
-        ctx.beginPath()
-        ctx.arc(cx, cy, r, start, start + Math.PI * 2 * ov)
-        ctx.setStrokeStyle('#7ef587')
-        ctx.setLineWidth(sw)
-        ctx.setLineCap('round')
-        ctx.stroke()
-        const tipAngle = start + Math.PI * 2 * ov
-        const tx = cx + r * Math.cos(tipAngle)
-        const ty = cy + r * Math.sin(tipAngle)
-        ctx.beginPath()
-        ctx.arc(tx, ty, sw / 2, 0, Math.PI * 2)
-        ctx.setFillStyle('#7ef587')
-        ctx.fill()
-      }
-    } else {
-      ctx.beginPath()
-      ctx.arc(cx, cy, r, start, start + Math.PI * 2 * pct)
-      ctx.setStrokeStyle('#4cd964')
-      ctx.setLineWidth(sw)
-      ctx.setLineCap('round')
-      ctx.stroke()
-    }
-  }
+  if (pct <= 0) return
 
-  ctx.draw()
+  if (pct >= 1) {
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.strokeStyle = '#4cd964'
+    ctx.lineWidth = sw
+    ctx.lineCap = 'butt'
+    ctx.stroke()
+    const ov = pct % 1
+    if (ov > 0.005) {
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, start, start + Math.PI * 2 * ov)
+      ctx.strokeStyle = '#7ef587'
+      ctx.lineWidth = sw
+      ctx.lineCap = 'round'
+      ctx.stroke()
+      const tipAngle = start + Math.PI * 2 * ov
+      const tx = cx + r * Math.cos(tipAngle)
+      const ty = cy + r * Math.sin(tipAngle)
+      ctx.beginPath()
+      ctx.arc(tx, ty, sw / 2, 0, Math.PI * 2)
+      ctx.fillStyle = '#7ef587'
+      ctx.fill()
+    }
+  } else {
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, start, start + Math.PI * 2 * pct)
+    ctx.strokeStyle = '#4cd964'
+    ctx.lineWidth = sw
+    ctx.lineCap = 'round'
+    ctx.stroke()
+  }
 }
 
 function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
   const todayMinutes = getTodayMinutes(weekDaily)
 
   useEffect(() => {
-    const paint = () => paintRing('wr-ring', todayMinutes, dayGoalMinutes)
+    let cancelled = false
+    const paint = () => {
+      if (cancelled) return
+      Taro.createSelectorQuery()
+        .select('#wr-ring')
+        .fields({ node: true, size: true })
+        .exec(([res]) => {
+          if (cancelled || !res?.node) return
+          const cv = res.node
+          const ctx = cv.getContext('2d')
+          const dpr = Taro.getSystemInfoSync().pixelRatio
+          const W = res.width || 110
+          const H = res.height || 110
+          cv.width = W * dpr
+          cv.height = H * dpr
+          ctx.scale(dpr, dpr)
+          drawRing(ctx, W, H, todayMinutes, dayGoalMinutes)
+        })
+    }
     Taro.nextTick(paint)
-    const t = setTimeout(paint, 300)
-    return () => clearTimeout(t)
+    const t1 = setTimeout(paint, 300)
+    const t2 = setTimeout(paint, 1000)
+    return () => { cancelled = true; clearTimeout(t1); clearTimeout(t2) }
   }, [todayMinutes, dayGoalMinutes])
 
   const hrs = Math.floor(todayMinutes / 60)
@@ -100,7 +115,7 @@ function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
           <Text className='rring-label'>今日阅读</Text>
         </View>
         <View className='rring-wrap'>
-          <Canvas canvas-id='wr-ring' className='rring-canvas' />
+          <Canvas type='2d' id='wr-ring' className='rring-canvas' />
         </View>
         <View className='rring-side'>
           <View className='rring-side-top'>
