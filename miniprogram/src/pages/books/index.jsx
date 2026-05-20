@@ -129,23 +129,19 @@ function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
   return (
     <View className='rring-card'>
       <View className='rring-row'>
+        <View className='rring-side'>
+          <Text className='rring-val'>{todayStr}</Text>
+          <Text className='rring-label'>今日阅读</Text>
+        </View>
         <View className='rring-wrap'>
           <Canvas type='2d' id='wr-ring' className='rring-canvas' />
         </View>
-        <View className='rring-stats'>
-          <View className='rring-stat'>
-            <View className='rring-stat-top'>
-              <Text className='rring-val'>{todayStr}</Text>
-            </View>
-            <Text className='rring-label'>今日阅读</Text>
+        <View className='rring-side'>
+          <View className='rring-side-top'>
+            <Text className='rring-val rring-val-days'>{totalReadDays}</Text>
+            <Text className='rring-unit'>天</Text>
           </View>
-          <View className='rring-stat'>
-            <View className='rring-stat-top'>
-              <Text className='rring-val rring-val-days'>{totalReadDays}</Text>
-              <Text className='rring-unit'>天</Text>
-            </View>
-            <Text className='rring-label'>累计完成</Text>
-          </View>
+          <Text className='rring-label'>累计完成</Text>
         </View>
       </View>
     </View>
@@ -238,7 +234,7 @@ export default function BooksPage() {
         {!loading && listMap[tab].map(book => {
           const pct = book.progressPercent ?? 0
           return (
-            <View key={book.id} className='book-card'>
+            <View key={book.id} className='book-card card'>
               <View className='book-row'>
                 {book.cover
                   ? <Image className='book-cover' src={book.cover} mode='aspectFill' />
