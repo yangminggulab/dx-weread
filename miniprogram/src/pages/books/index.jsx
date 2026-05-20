@@ -58,7 +58,7 @@ function drawRing(ctx, W, H, minutes, goal) {
   // Track
   ctx.beginPath()
   ctx.arc(cx, cy, r, 0, Math.PI * 2)
-  ctx.strokeStyle = 'rgba(76,217,100,0.15)'
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)'
   ctx.lineWidth = sw
   ctx.lineCap = 'butt'
   ctx.stroke()
@@ -100,7 +100,7 @@ function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
   const todayMinutes = getTodayMinutes(weekDaily)
 
   useEffect(() => {
-    Taro.nextTick(() => {
+    const paint = () => {
       Taro.createSelectorQuery()
         .select('#wr-ring')
         .fields({ node: true, size: true })
@@ -109,12 +109,17 @@ function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
           const cv = res.node
           const ctx = cv.getContext('2d')
           const dpr = Taro.getSystemInfoSync().pixelRatio
-          cv.width = res.width * dpr
-          cv.height = res.height * dpr
+          const W = res.width || 90
+          const H = res.height || 90
+          cv.width = W * dpr
+          cv.height = H * dpr
           ctx.scale(dpr, dpr)
-          drawRing(ctx, res.width, res.height, todayMinutes, dayGoalMinutes)
+          drawRing(ctx, W, H, todayMinutes, dayGoalMinutes)
         })
-    })
+    }
+    Taro.nextTick(paint)
+    const t = setTimeout(paint, 500)
+    return () => clearTimeout(t)
   }, [todayMinutes, dayGoalMinutes])
 
   const hrs = Math.floor(todayMinutes / 60)
