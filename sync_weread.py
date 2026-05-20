@@ -117,7 +117,7 @@ def sync():
     done    = sum(1 for b in books if b["status"] == "finished")
     print(f"   在读 {reading}  想读 {want}  读完 {done}")
 
-    # 4. 阅读统计（本周每日 + 累计天数）
+    # 4. 阅读统计
     print("📊 Fetching reading stats...")
     try:
         week = gw("/readdata/detail", mode="weekly")
@@ -140,7 +140,56 @@ def sync():
         print(f"   ⚠️ 累计统计跳过: {e}")
         total_read_days = 0
 
-    # 5. 拉云端、合并、推送
+    # 5. 热力图：并发拉 18 周每日阅读数据
+    print("📅 Fetching heatmap data (18 weeks)...")
+    weread_stats = {"monthly": {}, "annual": {}, "dailyReadTimes": []}
+    try:
+        monthly_data = gw("/readdata/detail", mode="monthly")
+        annual_data  = gw("/readdata/detail", mode="annually")
+
+        def _brief(d):
+            return {
+                "baseTime":           coerce_int(d.get("baseTime")),
+                "readDays":           coerce_int(d.get("readDays")),
+                "totalReadTime":      coerce_int(d.get("totalReadTime")),
+                "dayAverageReadTime": coerce_int(d.get("dayAverageReadTime")),
+                "compare":            d.get("compare") or 0,
+            }
+
+        now_ts = int(datetime.now().timestamp())
+        week_offsets = [i * 7 * 86400 for i in range(18)]
+
+        def fetch_week(offset):
+            try:
+                base = now_ts - offset
+                data = gw("/readdata/detail", mode="weekly", baseTime=base)
+                return data.get("readTimes") or {}
+            except Exception:
+                return {}
+
+        daily_map = {}
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            for rt in pool.map(fetch_week, week_offsets):
+                for ts_str, secs in rt.items():
+                    ts = int(ts_str)
+                    date_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+                    daily_map[date_str] = max(daily_map.get(date_str, 0), coerce_int(secs))
+
+        daily_list = sorted(
+            [{"date": d, "timestamp": int(datetime.strptime(d, "%Y-%m-%d").timestamp()), "seconds": s}
+             for d, s in daily_map.items()],
+            key=lambda x: x["date"]
+        )
+        weread_stats = {
+            "monthly":        _brief(monthly_data),
+            "annual":         _brief(annual_data),
+            "dailyReadTimes": daily_list,
+        }
+        print(f"   热力图每日数据: {len(daily_list)} 天")
+    except Exception as e:
+        print(f"   ⚠️ 热力图数据跳过: {e}")
+
+    # 6. 拉云端、合并、推送
     print("☁️  Syncing to cloud...")
     r = requests.get(
         f"{CLOUD_BASE_URL}/api/data",
@@ -155,6 +204,7 @@ def sync():
     cloud["weekReadMinutes"] = week_read_minutes
     cloud["weekReadDaily"]   = week_read_daily
     cloud["totalReadDays"]   = total_read_days
+    cloud["wereadStats"]     = weread_stats
 
     push = requests.post(
         f"{CLOUD_BASE_URL}/api/data",
@@ -163,7 +213,7 @@ def sync():
         timeout=15,
     )
     push.raise_for_status()
-    print(f"✅ Done: {len(books)} weread + {len(other_books)} other = {len(cloud['books'])} total, 本周 {week_read_minutes} 分钟")
+    print(f"✅ Done: {len(books)} weread + {len(other_books)} other = {len(cloud['books'])} total, 热力图 {len(weread_stats['dailyReadTimes'])} 天")
     return len(books)
 
 
