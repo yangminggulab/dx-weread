@@ -609,7 +609,7 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
         title="今日聚焦"
         sub={`${dateStr} · ${focus.length} 项待处理`}
       />
-      <div className="grid md:grid-cols-2 gap-4 items-start">
+      <div className="grid md:grid-cols-2 gap-4 items-stretch">
         {/* 左栏：今日任务 */}
         <div className="bg-white rounded-2xl border border-[#e8e4dc] overflow-hidden">
           {focus.length === 0 ? (
@@ -637,7 +637,8 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
           )}
         </div>
 
-        {/* 右栏：今日日记 */}
+        {/* 右栏：今日日记（底部与左栏对齐） */}
+        <div className="flex flex-col justify-end">
         <div className="bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col" style={{height:'180px'}}>
           <div className="flex items-center justify-between mb-2">
             <span className="serif text-sm font-semibold text-[#1c1c1c]">今日日记</span>
@@ -649,6 +650,7 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
             value={todayContent}
             onChange={e => onDiaryChange(e.target.value)}
           />
+        </div>
         </div>
       </div>
     </section>
