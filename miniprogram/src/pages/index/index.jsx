@@ -368,7 +368,12 @@ export default function TaskPage() {
         nextDiary = applyDiarySnapshot(data)
         if (archiveViewDirtyRef.current) syncViewedArchiveIfNeeded(nextDiary)
       }
-    } catch {} finally {
+    } catch {
+      // 加载失败时若有缓存，仍允许保存今日日记
+      if (!archiveLoadedRef.current && readCachedDiary()) {
+        archiveLoadedRef.current = true
+      }
+    } finally {
       setDiaryLoading(false)
     }
   }, [applyDiarySnapshot, recordArchiveView, syncViewedArchiveIfNeeded])
@@ -409,7 +414,7 @@ export default function TaskPage() {
     const normalized = normalizeDiaryPayload(diaryRef.current)
     persistDiaryCache(normalized)
     // 今日内容或观看记录有变更时，都在切后台时补推一次
-    if ((normalized.today?.content?.trim() || archiveViewDirtyRef.current) && archiveLoadedRef.current) {
+    if (normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
       const hadDirtyViewMeta = archiveViewDirtyRef.current
       if (hadDirtyViewMeta) archiveViewDirtyRef.current = false
       saveDiary(normalized).catch(() => {
@@ -428,7 +433,7 @@ export default function TaskPage() {
       }
       const normalized = normalizeDiaryPayload(diaryRef.current)
       persistDiaryCache(normalized)
-      if (normalized.today?.content?.trim() || archiveViewDirtyRef.current) {
+      if (normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
         const hadDirtyViewMeta = archiveViewDirtyRef.current
         if (hadDirtyViewMeta) archiveViewDirtyRef.current = false
         saveDiary(normalized).catch(() => {
@@ -545,7 +550,6 @@ export default function TaskPage() {
         setDiarySaving(true)
         const normalized = normalizeDiaryPayload(updated)
         persistDiaryCache(normalized)
-        if (!archiveLoadedRef.current) return   // archive 未加载完，只缓存不推送
         await saveDiary(normalized)
       } catch {
         Taro.showToast({ title: '保存失败', icon: 'error' })
