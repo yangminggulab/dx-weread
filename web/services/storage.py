@@ -151,7 +151,7 @@ def load_diary_file():
 
 
 def write_diary_file(diary):
-    backup_file(DIARY_FILE, "diary")
+    backup_file(DIARY_FILE, "diary", keep=1)
     write_json_file(DIARY_FILE, _normalize_diary(diary))
 
 
@@ -529,7 +529,7 @@ def load_weread_notes_data():
 
 
 def write_weread_notes_data(data):
-    backup_file(WEREAD_NOTES_FILE, "weread-notes")
+    backup_file(WEREAD_NOTES_FILE, "weread-notes", keep=1)
     write_json_file(WEREAD_NOTES_FILE, normalize_weread_notes_data(data))
 
 
