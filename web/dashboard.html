@@ -605,42 +605,40 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
 
   return (
     <section>
-      <div className="grid md:grid-cols-2 gap-4 items-stretch">
-        {/* 左栏：标题 + 任务卡片 */}
-        <div className="flex flex-col gap-3">
-          <SectionHead
-            title="今日聚焦"
-            sub={`${dateStr} · ${focus.length} 项待处理`}
-          />
-          <div className="bg-white rounded-2xl border border-[#e8e4dc] overflow-hidden">
-            {focus.length === 0 ? (
-              <div className="p-8 text-center text-[#ccc] text-sm">今日无待处理任务，好好休息 ☕</div>
-            ) : (
-              focus.map((task, i) => {
-                const near = isNear(task.deadline), over = isOver(task.deadline, task.status);
-                return (
-                  <div key={task.id} onClick={() => onClick(task)}
-                    className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#faf9f6] transition-colors
-                      ${i < focus.length - 1 ? 'border-b border-[#f0ede8]' : ''}`}>
-                    <span className="serif text-[11px] text-[#ccc] font-medium w-5 shrink-0">#{i+1}</span>
-                    <p className="serif text-sm font-medium text-[#1c1c1c] flex-1 leading-snug">{task.title}</p>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Pill text={PRIORITY[task.priority].label} cls={PRIORITY[task.priority].cls} />
-                      {task.deadline && (
-                        <span className={`text-xs ${over ? 'text-red-500' : near ? 'text-amber-600' : 'text-[#ccc]'}`}>
-                          {task.deadline.slice(5)}
-                        </span>
-                      )}
-                    </div>
+      <SectionHead
+        title="今日聚焦"
+        sub={`${dateStr} · ${focus.length} 项待处理`}
+      />
+      <div className="grid md:grid-cols-2 gap-4 items-start">
+        {/* 左栏：今日任务 */}
+        <div className="bg-white rounded-2xl border border-[#e8e4dc] overflow-hidden">
+          {focus.length === 0 ? (
+            <div className="p-8 text-center text-[#ccc] text-sm">今日无待处理任务，好好休息 ☕</div>
+          ) : (
+            focus.map((task, i) => {
+              const near = isNear(task.deadline), over = isOver(task.deadline, task.status);
+              return (
+                <div key={task.id} onClick={() => onClick(task)}
+                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#faf9f6] transition-colors
+                    ${i < focus.length - 1 ? 'border-b border-[#f0ede8]' : ''}`}>
+                  <span className="serif text-[11px] text-[#ccc] font-medium w-5 shrink-0">#{i+1}</span>
+                  <p className="serif text-sm font-medium text-[#1c1c1c] flex-1 leading-snug">{task.title}</p>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Pill text={PRIORITY[task.priority].label} cls={PRIORITY[task.priority].cls} />
+                    {task.deadline && (
+                      <span className={`text-xs ${over ? 'text-red-500' : near ? 'text-amber-600' : 'text-[#ccc]'}`}>
+                        {task.deadline.slice(5)}
+                      </span>
+                    )}
                   </div>
-                );
-              })
-            )}
-          </div>
+                </div>
+              );
+            })
+          )}
         </div>
 
-        {/* 右栏：今日日记（从顶部拉通，与左栏整体等高） */}
-        <div className="bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col">
+        {/* 右栏：今日日记 */}
+        <div className="bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col" style={{height:'180px'}}>
           <div className="flex items-center justify-between mb-2">
             <span className="serif text-sm font-semibold text-[#1c1c1c]">今日日记</span>
             <span className="text-xs text-[#bbb]">{diarySaving ? '保存中...' : (todayContent ? '已自动保存' : '')}</span>
