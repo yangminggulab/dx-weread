@@ -252,7 +252,6 @@ export default function TaskPage() {
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
   const [diaryFocused, setDiaryFocused] = useState(false)
-  const diaryFocusTimerRef = useRef(null)
 
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
@@ -272,9 +271,6 @@ export default function TaskPage() {
   const diaryFullLoadingRef = useRef(false)
 
   useEffect(() => { diaryRef.current = diary }, [diary])
-  useEffect(() => () => {
-    if (diaryFocusTimerRef.current) clearTimeout(diaryFocusTimerRef.current)
-  }, [])
 
   const applyDiarySnapshot = useCallback((nextDiary) => {
     const normalized = normalizeDiaryPayload(nextDiary)
@@ -604,41 +600,6 @@ export default function TaskPage() {
     }, 1500)
   }
 
-  function showDiaryEditing(delay = 280) {
-    if (diaryFocusTimerRef.current) clearTimeout(diaryFocusTimerRef.current)
-    diaryFocusTimerRef.current = setTimeout(() => {
-      setDiaryFocused(true)
-      diaryFocusTimerRef.current = null
-    }, delay)
-  }
-
-  function hideDiaryEditing() {
-    if (diaryFocusTimerRef.current) {
-      clearTimeout(diaryFocusTimerRef.current)
-      diaryFocusTimerRef.current = null
-    }
-    setDiaryFocused(false)
-  }
-
-  function dismissDiaryKeyboard() {
-    hideDiaryEditing()
-    try { Taro.hideKeyboard() } catch {}
-  }
-
-  function stopDiaryTap(e) {
-    e.stopPropagation()
-  }
-
-  function handleDiaryPageTap() {
-    if (diaryFocused || diaryFocusTimerRef.current) dismissDiaryKeyboard()
-  }
-
-  function handleDiaryKeyboardHeightChange(e) {
-    const height = Number(e.detail?.height || 0)
-    if (height > 0) showDiaryEditing(180)
-    else hideDiaryEditing()
-  }
-
   function openFullscreen(idx) {
     setFullscreenIdx(idx)
     setFsHistory([])
@@ -761,7 +722,6 @@ export default function TaskPage() {
       {/* ── 日记 Tab ── */}
       {tab === 'diary' && (
         <View className='diary-page'
-          onClick={handleDiaryPageTap}
           onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           {diaryLoading && !diary.today?.date ? (
             <View className='empty'><Text>加载中...</Text></View>
@@ -774,22 +734,18 @@ export default function TaskPage() {
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
                   <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
                 </View>
-                <View className='diary-textarea-wrap' onClick={stopDiaryTap}>
+                <ScrollView scrollY className='diary-textarea-scroll'>
                   <Textarea
                     className='diary-textarea'
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
-                    onFocus={() => showDiaryEditing()}
-                    onBlur={hideDiaryEditing}
-                    onKeyboardHeightChange={handleDiaryKeyboardHeightChange}
-                    adjustPosition={false}
-                    cursorSpacing={24}
-                    disableDefaultPadding
-                    showConfirmBar={false}
+                    onFocus={() => setDiaryFocused(true)}
+                    onBlur={() => setDiaryFocused(false)}
+                    adjustPosition
                     maxlength={10000}
                   />
-                </View>
+                </ScrollView>
               </View>
 
               {/* 下半：历史上的今天 / 往期日记 */}
