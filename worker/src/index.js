@@ -807,26 +807,16 @@ async function wrFetchStats(apiKey) {
   const monthly = monthlyResult.status === "fulfilled" ? monthlyResult.value : {};
   const overall = overallResult.status === "fulfilled" ? overallResult.value : {};
 
-  // 热力图：18 周的 weekly 数据，每次 6 个并发
-  const weekOffsets = Array.from({ length: 18 }, (_, i) => i * 7 * 86400);
-  const fetchWeek = async (offset) => {
-    try {
-      const d = await wrCall(apiKey, "/readdata/detail", { mode: "weekly", baseTime: now - offset });
-      return d.readTimes || {};
-    } catch { return {}; }
-  };
+  // 热力图：annually 一次拿全年数据，格式 {ts_str: seconds}
+  const annualResult = await wrCall(apiKey, "/readdata/detail", { mode: "annually", baseTime: now }).catch(() => ({}));
+  const rawAnnual = annualResult.dailyReadTimes || annualResult.readTimes || {};
   const dailyMap = {};
-  for (let i = 0; i < weekOffsets.length; i += 6) {
-    const batch = await Promise.all(weekOffsets.slice(i, i + 6).map(fetchWeek));
-    for (const readTimes of batch) {
-      for (const [ts, secs] of Object.entries(readTimes)) {
-        const t = Number(ts);
-        if (!t) continue;
-        const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" })
-          .format(new Date(t > 1e11 ? t : t * 1000));
-        dailyMap[dateKey] = (dailyMap[dateKey] || 0) + Math.max(0, Number(secs) || 0);
-      }
-    }
+  for (const [ts, secs] of Object.entries(rawAnnual)) {
+    const t = Number(ts);
+    if (!t) continue;
+    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" })
+      .format(new Date(t > 1e11 ? t : t * 1000));
+    dailyMap[dateKey] = (dailyMap[dateKey] || 0) + Math.max(0, Number(secs) || 0);
   }
   const dailyReadTimes = Object.entries(dailyMap)
     .map(([date, seconds]) => ({
@@ -873,21 +863,19 @@ async function syncWeRead(env) {
   if (!apiKey) { console.log("[weread-cron] 跳过：未配置 WEREAD_API_KEY"); return; }
 
   console.log("[weread-cron] 开始同步...");
-  const [shelf, notebookBooks] = await Promise.all([
+  const [shelf, allNotebookBooks] = await Promise.all([
     wrCall(apiKey, "/shelf/sync"),
     wrPageNotebooks(apiKey),
   ]);
+  // 每本笔记 2 个 subrequest（bookmarklist + review），Free 计划上限 50，最多取 20 本
+  const notebookBooks = allNotebookBooks.slice(0, 20);
 
   const rawBooks = (shelf.books || []).filter((b) => b && typeof b === "object");
   console.log(`[weread-cron] 书架 ${rawBooks.length} 本，笔记本 ${notebookBooks.length} 本`);
 
-  const progressList = await runBatched(rawBooks, 6, (b) => wrFetchProgress(apiKey, b));
-  const progressMap = Object.fromEntries(
-    rawBooks.map((b, i) => [String(b.bookId || "").trim(), progressList[i]])
-  );
-
+  // 跳过单本 progress API（每本 1 个 subrequest，Free 计划上限 50 不够用）
   const books = rawBooks
-    .map((b) => wrNormalizeBook(b, progressMap[String(b.bookId || "").trim()]))
+    .map((b) => wrNormalizeBook(b, {}))
     .sort((a, b) => (b.readTimestamp || 0) - (a.readTimestamp || 0));
 
   const noteLists = await runBatched(notebookBooks, 4, (b) => wrFetchNotes(apiKey, b));
@@ -1262,7 +1250,15 @@ export default {
       }
 
       if (path === "/api/weread/sync" && request.method === "POST") {
-        return json({ error: CLOUD_WEREAD_MESSAGE, cloudMode: true }, 501);
+        if (!isPersonalAuthorized(request, env))
+          return json({ error: "unauthorized" }, 401);
+        try {
+          await syncWeRead(env);
+          const data = await loadSharedData(env.TASKS_KV);
+          return json({ ok: true, dailyReadTimesCount: data.wereadStats?.dailyReadTimes?.length ?? 0, totalReadDays: data.totalReadDays ?? 0 });
+        } catch (e) {
+          return json({ error: String(e) }, 500);
+        }
       }
 
       return json({ error: "not found" }, 404);
