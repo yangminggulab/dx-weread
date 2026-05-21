@@ -24,6 +24,7 @@ sync/sync_weread.py              ← 手动命令行脚本
       ▼
 data/weread_data.json
 data/weread_notes.json
+data/time.json
 data/tasks.json
 data/diary.json
       │
@@ -79,6 +80,7 @@ npm run deploy
 |---|---|
 | `data/tasks.json` | 任务数据 |
 | `data/diary.json` | 日记 |
+| `data/time.json` | 时间模块数据，目前包含 `weread` 阅读时长 |
 | `data/weread_data.json` | 微信读书书架、统计 |
 | `data/weread_notes.json` | 微信读书笔记 |
 | `data/.backups/` | 每次写入前的自动备份 |

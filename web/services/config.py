@@ -10,6 +10,7 @@ DATA_DIR = os.path.join(ROOT_DIR, "data")
 
 DATA_FILE = os.path.join(DATA_DIR, "tasks.json")
 DIARY_FILE = os.path.join(DATA_DIR, "diary.json")
+TIME_FILE = os.path.join(DATA_DIR, "time.json")
 BACKUP_DIR = os.path.join(DATA_DIR, ".backups")
 RESET_FLAG_FILE = os.path.join(DATA_DIR, ".daily_reset_date")
 ENV_FILE = os.path.join(ROOT_DIR, ".env")
