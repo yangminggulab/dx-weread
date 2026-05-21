@@ -736,12 +736,11 @@ export default function TaskPage() {
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
-                    onFocus={() => setDiaryFocused(true)}
                     onBlur={() => { setDiaryFocused(false); setDiaryKeyboardHeight(0) }}
                     onKeyboardHeightChange={e => {
                       const h = Number(e.detail?.height || 0)
                       setDiaryKeyboardHeight(h)
-                      if (h === 0) setDiaryFocused(false)
+                      setDiaryFocused(h > 0)
                     }}
                     adjustPosition={false}
                     cursorSpacing={16}

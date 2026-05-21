@@ -421,7 +421,6 @@
   min-height: 200px;
 }
 
-// 聚焦后延迟进入编辑态，避开 iOS 键盘弹起瞬间的原生 textarea 重排失焦
 .diary-editing {
   .diary-section-top {
     height: calc(84% - 8px);
