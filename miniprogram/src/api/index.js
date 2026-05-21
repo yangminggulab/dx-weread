@@ -1,36 +1,7 @@
 import Taro from '@tarojs/taro'
 import { BASE_URL, API_TOKEN } from '../config'
 
-// 多用户云端版暂不使用：小程序先固定走个人版 /tasks + API_TOKEN。
-// 之前的 session/login 接入点先保留在这里，后续真正做小程序登录页时再打开：
-//
-// const SESSION_TOKEN_KEY = 'task_app_cloud_session_token'
-// export const getSessionToken = () => {
-//   try { return Taro.getStorageSync(SESSION_TOKEN_KEY) || '' }
-//   catch { return '' }
-// }
-// export const setSessionToken = (token) => {
-//   try {
-//     if (token) Taro.setStorageSync(SESSION_TOKEN_KEY, token)
-//     else Taro.removeStorageSync(SESSION_TOKEN_KEY)
-//   } catch {}
-// }
-// export const clearSessionToken = () => setSessionToken('')
-// export const register = async ({ username, email, password }) => {
-//   const data = await request('/api/register', 'POST', { username, email, password })
-//   if (data?.token) setSessionToken(data.token)
-//   return data
-// }
-// export const login = async ({ identifier, password }) => {
-//   const data = await request('/api/login', 'POST', { identifier, password })
-//   if (data?.token) setSessionToken(data.token)
-//   return data
-// }
-// export const logout = async () => {
-//   try { await request('/api/logout', 'POST', {}) }
-//   finally { clearSessionToken() }
-// }
-// export const getMe = () => request('/api/me')
+// 小程序固定走个人版 /tasks + API_TOKEN。
 
 function request(path, method = 'GET', data = null) {
   return new Promise((resolve, reject) => {

@@ -233,6 +233,7 @@ def empty_weread_stats():
     return {
         "monthly": {"baseTime": 0, "readDays": 0, "totalReadTime": 0, "dayAverageReadTime": 0, "compare": 0},
         "annual": {"baseTime": 0, "readDays": 0, "totalReadTime": 0, "dayAverageReadTime": 0, "compare": 0},
+        "overall": {"baseTime": 0, "readDays": 0, "totalReadTime": 0, "dayAverageReadTime": 0, "compare": 0},
         "dailyReadTimes": [],
     }
 
@@ -352,6 +353,7 @@ def normalize_weread_stats(stats):
     return {
         "monthly": _normalize_brief(payload.get("monthly")),
         "annual": _normalize_brief(payload.get("annual")),
+        "overall": _normalize_brief(payload.get("overall")),
         "dailyReadTimes": daily_read_times,
     }
 
@@ -360,7 +362,7 @@ def has_weread_stats(stats):
     payload = normalize_weread_stats(stats)
     if payload.get("dailyReadTimes"):
         return True
-    for key in ("monthly", "annual"):
+    for key in ("monthly", "annual", "overall"):
         section = payload.get(key) or {}
         if any(coerce_int_id(section.get(field)) > 0 for field in ("baseTime", "readDays", "totalReadTime", "dayAverageReadTime")):
             return True
@@ -368,6 +370,68 @@ def has_weread_stats(stats):
         if isinstance(compare, (int, float)) and compare != 0:
             return True
     return False
+
+
+def _timestamp_seconds_for_date(date_key):
+    try:
+        return int(datetime.strptime(date_key, "%Y-%m-%d").timestamp())
+    except (TypeError, ValueError, OSError):
+        return 0
+
+
+def derive_weread_time_fields(stats):
+    payload = normalize_weread_stats(stats)
+    current_month = datetime.now().strftime("%Y-%m")
+    week_read_daily = {}
+    daily_read_times = []
+
+    for item in payload.get("dailyReadTimes") or []:
+        date_key = str(item.get("date", "")).strip()
+        seconds = max(0, coerce_int_id(item.get("seconds")))
+        timestamp = coerce_int_id(item.get("timestamp"))
+        if timestamp > 10**11:
+            timestamp = timestamp // 1000
+        if not timestamp and date_key:
+            timestamp = _timestamp_seconds_for_date(date_key)
+        minutes = round(seconds / 60)
+        daily_read_times.append({**item, "timestamp": timestamp, "seconds": seconds, "minutes": minutes})
+        if date_key.startswith(current_month) and minutes > 0 and timestamp:
+            week_read_daily[str(timestamp)] = minutes
+
+    week_read_minutes = sum(week_read_daily.values())
+    total_read_days = (
+        coerce_int_id(payload.get("overall", {}).get("readDays"))
+        or coerce_int_id(payload.get("annual", {}).get("readDays"))
+        or coerce_int_id(payload.get("monthly", {}).get("readDays"))
+    )
+    return {
+        "weekReadDaily": week_read_daily,
+        "weekReadMinutes": week_read_minutes,
+        "totalReadDays": total_read_days,
+        "dailyReadTimes": daily_read_times,
+    }
+
+
+def build_weread_time_data(stats, synced_at=""):
+    payload = normalize_weread_stats(stats)
+    derived = derive_weread_time_fields(payload)
+    return {
+        "source": "weread",
+        "syncedAt": str(synced_at or "").strip(),
+        "monthly": payload.get("monthly", {}),
+        "annual": payload.get("annual", {}),
+        "overall": payload.get("overall", {}),
+        "dailyReadTimes": derived["dailyReadTimes"],
+        "weekReadDaily": derived["weekReadDaily"],
+        "weekReadMinutes": derived["weekReadMinutes"],
+        "totalReadDays": derived["totalReadDays"],
+    }
+
+
+def merge_time_data(existing, weread_stats, weread_synced_at=""):
+    payload = dict(existing) if isinstance(existing, dict) else {}
+    payload["weread"] = build_weread_time_data(weread_stats, weread_synced_at)
+    return payload
 
 
 def normalize_weread_data(data):
@@ -462,7 +526,7 @@ def split_combined_payload(data):
     books = [item for item in (payload.get("books") or []) if isinstance(item, dict)]
     notes = [item for item in (payload.get("notes") or []) if isinstance(item, dict)]
     updates = [item for item in (payload.get("updates") or []) if isinstance(item, dict)]
-    special_keys = {"books", "notes", "updates", "wereadStats", "wereadSyncedAt"}
+    special_keys = {"books", "notes", "updates", "wereadStats", "wereadSyncedAt", "weekReadDaily", "weekReadMinutes", "totalReadDays"}
 
     user_data = {
         **{key: value for key, value in payload.items() if key not in special_keys},
@@ -548,11 +612,15 @@ def merge_weread_store(existing, incoming):
         if len(updates) >= 8:
             break
 
+    stats = fresh.get("stats") if has_weread_stats(fresh.get("stats")) else base.get("stats")
+    if not has_weread_stats(stats):
+        stats = fresh.get("stats") or base.get("stats") or empty_weread_stats()
+
     return {
         "books": books,
         "notes": notes,
         "updates": updates,
-        "stats": fresh.get("stats") or base.get("stats") or empty_weread_stats(),
+        "stats": stats,
         "syncedAt": fresh.get("syncedAt") or base.get("syncedAt", ""),
     }
 
@@ -599,6 +667,9 @@ def merge_app_and_special_data(data, weread, weread_notes_data):
     payload = data if isinstance(data, dict) else {}
     weread_payload = normalize_weread_data(weread)
     weread_notes_payload = normalize_weread_notes_data(weread_notes_data)
+    weread_stats = weread_payload.get("stats") or empty_weread_stats()
+    weread_synced_at = weread_payload.get("syncedAt", "")
+    weread_time = derive_weread_time_fields(weread_stats)
 
     user_books = [dict(item) for item in (payload.get("books") or []) if isinstance(item, dict) and not is_weread_book(item)]
     user_notes = [dict(item) for item in (payload.get("notes") or []) if isinstance(item, dict) and not is_weread_note(item)]
@@ -632,8 +703,12 @@ def merge_app_and_special_data(data, weread, weread_notes_data):
         "books": books,
         "notes": notes,
         "updates": updates,
-        "wereadStats": weread_payload.get("stats") or empty_weread_stats(),
-        "wereadSyncedAt": weread_payload.get("syncedAt", ""),
+        "wereadStats": weread_stats,
+        "wereadSyncedAt": weread_synced_at,
+        "weekReadDaily": weread_time["weekReadDaily"],
+        "weekReadMinutes": weread_time["weekReadMinutes"],
+        "totalReadDays": weread_time["totalReadDays"],
+        "time": merge_time_data(payload.get("time"), weread_stats, weread_synced_at),
     }
 
 
