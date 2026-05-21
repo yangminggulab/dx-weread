@@ -34,6 +34,7 @@ const LEGACY_DIARY_CACHE_KEYS = ['diary_cache_v1']
 
 function getTodayStr() {
   const now = new Date()
+  if (now.getHours() < 5) now.setDate(now.getDate() - 1)
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
 }
 
@@ -250,6 +251,8 @@ export default function TaskPage() {
   const [diaryLoading, setDiaryLoading] = useState(() => !readCachedDiary())
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
+  const [diaryFocused, setDiaryFocused] = useState(false)
+  const diaryFocusTimerRef = useRef(null)
 
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
@@ -264,8 +267,14 @@ export default function TaskPage() {
   const fullscreenTouchRef = useRef({ x: 0, y: 0, time: 0 })
   const diaryRef = useRef(diary)
   const archiveViewDirtyRef = useRef(false)
+  const diaryTodayDirtyRef = useRef(false)
+  const diaryLocalEditAtRef = useRef(0)
+  const diaryFullLoadingRef = useRef(false)
 
   useEffect(() => { diaryRef.current = diary }, [diary])
+  useEffect(() => () => {
+    if (diaryFocusTimerRef.current) clearTimeout(diaryFocusTimerRef.current)
+  }, [])
 
   const applyDiarySnapshot = useCallback((nextDiary) => {
     const normalized = normalizeDiaryPayload(nextDiary)
@@ -312,12 +321,23 @@ export default function TaskPage() {
 
   // 只加载今日日记（轻量，启动/切回时用）
   const loadDiaryToday = useCallback(async () => {
+    const requestStartedAt = Date.now()
     try {
       const d = await getDiaryToday()
       const todayStr = getTodayStr()
       const td = (d && d.today) ? d.today : { date: '', content: '' }
       setDiary(prev => {
-        const updated = { ...prev, today: { date: td.date || todayStr, content: td.content || '' } }
+        if (diaryLocalEditAtRef.current > requestStartedAt) return prev
+        const updated = normalizeDiaryPayload({
+          ...prev,
+          today: {
+            ...prev.today,
+            ...td,
+            date: td.date || todayStr,
+            content: td.content || ''
+          }
+        })
+        diaryRef.current = updated
         persistDiaryCache(updated)
         return updated
       })
@@ -329,6 +349,9 @@ export default function TaskPage() {
   // 加载完整日记（含归档，进入日记 tab 时懒加载）
   const loadDiary = useCallback(async () => {
     if (archiveLoadedRef.current) return
+    if (diaryFullLoadingRef.current) return
+    diaryFullLoadingRef.current = true
+    const requestStartedAt = Date.now()
     try {
       const d = await getDiary()
       const localDiary = normalizeDiaryPayload(diaryRef.current)
@@ -355,6 +378,9 @@ export default function TaskPage() {
       }
 
       data.archive = mergeDiaryArchiveViewMeta(data.archive, localDiary.archive || [])
+      if (diaryLocalEditAtRef.current > requestStartedAt) {
+        data.today = normalizeDiaryPayload(diaryRef.current).today
+      }
 
       let nextDiary = data
       archiveLoadedRef.current = true
@@ -375,6 +401,7 @@ export default function TaskPage() {
       }
     } finally {
       setDiaryLoading(false)
+      diaryFullLoadingRef.current = false
     }
   }, [applyDiarySnapshot, recordArchiveView, syncViewedArchiveIfNeeded])
 
@@ -414,11 +441,14 @@ export default function TaskPage() {
     const normalized = normalizeDiaryPayload(diaryRef.current)
     persistDiaryCache(normalized)
     // 今日内容或观看记录有变更时，都在切后台时补推一次
-    if (normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
+    if (diaryTodayDirtyRef.current || normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
       const hadDirtyViewMeta = archiveViewDirtyRef.current
+      const hadDirtyToday = diaryTodayDirtyRef.current
       if (hadDirtyViewMeta) archiveViewDirtyRef.current = false
+      if (hadDirtyToday) diaryTodayDirtyRef.current = false
       saveDiary(normalized).catch(() => {
         if (hadDirtyViewMeta) archiveViewDirtyRef.current = true
+        if (hadDirtyToday) diaryTodayDirtyRef.current = true
       })
     }
   })
@@ -433,11 +463,14 @@ export default function TaskPage() {
       }
       const normalized = normalizeDiaryPayload(diaryRef.current)
       persistDiaryCache(normalized)
-      if (normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
+      if (diaryTodayDirtyRef.current || normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
         const hadDirtyViewMeta = archiveViewDirtyRef.current
+        const hadDirtyToday = diaryTodayDirtyRef.current
         if (hadDirtyViewMeta) archiveViewDirtyRef.current = false
+        if (hadDirtyToday) diaryTodayDirtyRef.current = false
         saveDiary(normalized).catch(() => {
           if (hadDirtyViewMeta) archiveViewDirtyRef.current = true
+          if (hadDirtyToday) diaryTodayDirtyRef.current = true
         })
       }
     }
@@ -541,8 +574,16 @@ export default function TaskPage() {
   }
 
   function handleDiaryChange(content) {
-    const updated = { ...diary, today: { date: getTodayStr(), content } }
+    const updatedAt = new Date().toISOString()
+    diaryLocalEditAtRef.current = Date.now()
+    diaryTodayDirtyRef.current = true
+    const updated = normalizeDiaryPayload({
+      ...diaryRef.current,
+      today: { ...diaryRef.current.today, date: getTodayStr(), content, updatedAt }
+    })
+    diaryRef.current = updated
     setDiary(updated)
+    persistDiaryCache(updated)
     if (diaryTimerRef.current) clearTimeout(diaryTimerRef.current)
     diaryTimerRef.current = setTimeout(async () => {
       try {
@@ -552,12 +593,50 @@ export default function TaskPage() {
         const normalized = normalizeDiaryPayload(todayPayload)
         persistDiaryCache(normalized)
         await saveDiary(normalized)
+        if (diaryRef.current?.today?.updatedAt === updated.today.updatedAt) {
+          diaryTodayDirtyRef.current = false
+        }
       } catch {
         Taro.showToast({ title: '保存失败', icon: 'error' })
       } finally {
         setDiarySaving(false)
       }
     }, 1500)
+  }
+
+  function showDiaryEditing(delay = 280) {
+    if (diaryFocusTimerRef.current) clearTimeout(diaryFocusTimerRef.current)
+    diaryFocusTimerRef.current = setTimeout(() => {
+      setDiaryFocused(true)
+      diaryFocusTimerRef.current = null
+    }, delay)
+  }
+
+  function hideDiaryEditing() {
+    if (diaryFocusTimerRef.current) {
+      clearTimeout(diaryFocusTimerRef.current)
+      diaryFocusTimerRef.current = null
+    }
+    setDiaryFocused(false)
+  }
+
+  function dismissDiaryKeyboard() {
+    hideDiaryEditing()
+    try { Taro.hideKeyboard() } catch {}
+  }
+
+  function stopDiaryTap(e) {
+    e.stopPropagation()
+  }
+
+  function handleDiaryPageTap() {
+    if (diaryFocused || diaryFocusTimerRef.current) dismissDiaryKeyboard()
+  }
+
+  function handleDiaryKeyboardHeightChange(e) {
+    const height = Number(e.detail?.height || 0)
+    if (height > 0) showDiaryEditing(180)
+    else hideDiaryEditing()
   }
 
   function openFullscreen(idx) {
@@ -639,7 +718,7 @@ export default function TaskPage() {
   const randomEntry = (randomArchiveIdx !== null && archiveLen > 0) ? diary.archive[randomArchiveIdx] : null
 
   // 历史上的今天标签
-  const today = new Date()
+  const today = new Date(`${getTodayStr()}T12:00:00`)
   const todayMmdd = `${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
   const isHistoryToday = randomEntry && randomEntry.date?.slice(5) === todayMmdd
   const historyLabel = isHistoryToday
@@ -682,24 +761,28 @@ export default function TaskPage() {
       {/* ── 日记 Tab ── */}
       {tab === 'diary' && (
         <View className='diary-page'
+          onClick={handleDiaryPageTap}
           onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           {diaryLoading && !diary.today?.date ? (
             <View className='empty'><Text>加载中...</Text></View>
           ) : (
             // key={tab} 让内容在切换回来时重播淡入动画
-            <View key='diary-content' className='diary-content-anim'>
+            <View key='diary-content' className={`diary-content-anim${diaryFocused ? ' diary-editing' : ''}`}>
               {/* 上半：今日日记 */}
               <View className='diary-section-top card'>
                 <View className='diary-header'>
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
                   <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
                 </View>
-                <View className='diary-textarea-wrap'>
+                <View className='diary-textarea-wrap' onClick={stopDiaryTap}>
                   <Textarea
                     className='diary-textarea'
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
+                    onFocus={() => showDiaryEditing()}
+                    onBlur={hideDiaryEditing}
+                    onKeyboardHeightChange={handleDiaryKeyboardHeightChange}
                     adjustPosition={false}
                     cursorSpacing={24}
                     disableDefaultPadding
