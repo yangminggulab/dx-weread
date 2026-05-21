@@ -12,6 +12,9 @@ miniprogram/.swc/
 data/
 
 # 遗留文件（旧路径兼容）
+data.json
+diary.json
+.backups/
 diary.json.bak-*
 .weread_read_template.json
 .weread_notes.json.bak-*
