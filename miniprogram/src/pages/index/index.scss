@@ -366,7 +366,6 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: height 0.3s ease, box-shadow 0.3s ease;
 }
 
 .diary-section-bottom {
@@ -402,7 +401,7 @@
   color: #aaa;
 }
 
-.diary-textarea-scroll {
+.diary-textarea-wrap {
   flex: 1;
   min-height: 0;
   height: 100%;
@@ -421,19 +420,6 @@
   border: none;
   padding: 0;
   box-sizing: border-box;
-}
-
-// 聚焦时：上半扩大到 84%，下半压暗至几乎不可见（0.12 opacity），轻微重叠无感
-.diary-editing {
-  .diary-section-top {
-    height: calc(84% - 8px);
-    z-index: 2;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06);
-  }
-  .diary-section-bottom {
-    opacity: 0.12;
-    pointer-events: none;
-  }
 }
 
 .diary-random-header {

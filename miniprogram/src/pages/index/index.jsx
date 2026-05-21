@@ -251,8 +251,6 @@ export default function TaskPage() {
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
 
-  const [diaryFocused, setDiaryFocused] = useState(false)
-
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
   const archiveLoadedRef     = useRef(false)
@@ -689,28 +687,26 @@ export default function TaskPage() {
             <View className='empty'><Text>加载中...</Text></View>
           ) : (
             // key={tab} 让内容在切换回来时重播淡入动画
-            <View key='diary-content' className={`diary-content-anim${diaryFocused ? ' diary-editing' : ''}`}>
+            <View key='diary-content' className='diary-content-anim'>
               {/* 上半：今日日记 */}
               <View className='diary-section-top card'>
                 <View className='diary-header'>
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
                   <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
                 </View>
-                <ScrollView scrollY className='diary-textarea-scroll'>
+                <View className='diary-textarea-wrap'>
                   <Textarea
                     className='diary-textarea'
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
-                    onFocus={() => setDiaryFocused(true)}
-                    onBlur={() => setDiaryFocused(false)}
                     adjustPosition={false}
                     cursorSpacing={24}
                     disableDefaultPadding
                     showConfirmBar={false}
                     maxlength={10000}
                   />
-                </ScrollView>
+                </View>
               </View>
 
               {/* 下半：历史上的今天 / 往期日记 */}
