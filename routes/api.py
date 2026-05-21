@@ -10,7 +10,7 @@ from services.cloud_sync import pull_from_cloud, push_diary_to_cloud_async
 from services.config import CLOUD_API_TOKEN, ROOT_DIR
 from services.storage import archive_diary_if_needed, empty_weread_stats, load_app_data, write_diary_file
 from services.weread_sync import run_weread_sync, save_combined_data, weread_status_payload
-from weread import WeReadApiError, load_weread_api_key
+from sync.weread import WeReadApiError, load_weread_api_key
 
 
 api = Blueprint("api", __name__)

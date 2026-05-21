@@ -7,7 +7,7 @@ import os
 import threading
 import time
 
-from weread import WeReadApiError, load_weread_api_key, sync_weread_snapshot
+from sync.weread import WeReadApiError, load_weread_api_key, sync_weread_snapshot
 
 from services.cloud_sync import push_to_cloud_sync
 from services.config import (

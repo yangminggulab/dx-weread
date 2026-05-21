@@ -16,7 +16,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from scripts.weread_env import load_dotenv
+from sync.weread_env import load_dotenv
 
 load_dotenv(ROOT_DIR)
 
