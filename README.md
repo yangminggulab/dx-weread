@@ -5,7 +5,7 @@
 ## 模块结构
 
 ```
-sync/          同步脚本（微信读书抓取、云端推送等 Python 脚本）
+sync/          同步脚本（微信读书 API 同步、云端推送等 Python 脚本）
 data/          运行时数据文件（gitignore，不提交）
 web/           本地 Flask 服务器 + dashboard.html 网页源码
 worker/        Cloudflare Worker（云端 API，小程序调这里）
