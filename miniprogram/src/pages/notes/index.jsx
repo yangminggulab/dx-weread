@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import Taro from '@tarojs/taro'
 import { View, Text, ScrollView, Input, Textarea } from '@tarojs/components'
-import { getData, addNote, deleteNote, getDiary } from '../../api/index'
+import { getData, addNote, getDiary } from '../../api/index'
 import './index.scss'
+
+const NOTES_CACHE_KEY = 'notes_cache_v1'
 
 function getTodayStr() {
   const d = new Date()
@@ -19,20 +21,30 @@ function pickRandomNotes(notes, count = 3) {
   return picked
 }
 
+const EMPTY_FORM = { title: '', summary: '', tags: '' }
+
 export default function NotesPage() {
-  const [notes, setNotes]         = useState([])
-  const [diaryEntries, setDiaryEntries] = useState([])  // today + archive 展平
-  const [loading, setLoading]     = useState(true)
+  const [notes, setNotes] = useState(() => {
+    try {
+      const c = Taro.getStorageSync(NOTES_CACHE_KEY)
+      return c?.notes || []
+    } catch { return [] }
+  })
+  const [diaryEntries, setDiaryEntries] = useState([])
+  const [loading, setLoading] = useState(() => {
+    try { return !Taro.getStorageSync(NOTES_CACHE_KEY)?.notes } catch { return true }
+  })
   const [search, setSearch]       = useState('')
   const [showAdd, setShowAdd]     = useState(false)
-  const [form, setForm]           = useState({ title: '', summary: '', tags: '' })
+  const [form, setForm]           = useState(EMPTY_FORM)
   const [fallbackNotes, setFallbackNotes] = useState([])
 
   const loadData = useCallback(async () => {
     try {
-      setLoading(true)
       const [data, diary] = await Promise.all([getData(), getDiary()])
-      setNotes(data.notes || [])
+      const fetchedNotes = data.notes || []
+      setNotes(fetchedNotes)
+      try { Taro.setStorageSync(NOTES_CACHE_KEY, { notes: fetchedNotes }) } catch {}
       const entries = []
       if (diary.today?.date && diary.today?.content?.trim())
         entries.push({ date: diary.today.date, content: diary.today.content })
@@ -60,7 +72,6 @@ export default function NotesPage() {
 
   const displayed = todayNotes.length > 0 ? todayNotes : fallbackNotes
 
-  // 搜索时同时检索笔记和日记
   const filteredNotes = search
     ? notes.filter(n =>
         n.title.includes(search) ||
@@ -86,29 +97,15 @@ export default function NotesPage() {
     }
     try {
       const res = await addNote(newNoteData)
-      setNotes(prev => [res.note, ...prev])
+      const updated = [res.note, ...notes]
+      setNotes(updated)
+      try { Taro.setStorageSync(NOTES_CACHE_KEY, { notes: updated }) } catch {}
       setShowAdd(false)
-      setForm({ title: '', summary: '', tags: '' })
+      setForm(EMPTY_FORM)
       Taro.showToast({ title: '已保存', icon: 'success' })
     } catch {
       Taro.showToast({ title: '保存失败', icon: 'error' })
     }
-  }
-
-  async function handleDelete(id) {
-    Taro.showModal({
-      title: '确认删除',
-      content: '删除后不可恢复',
-      success: async ({ confirm }) => {
-        if (!confirm) return
-        try {
-          await deleteNote(id)
-          setNotes(prev => prev.filter(n => n.id !== id))
-        } catch {
-          Taro.showToast({ title: '删除失败', icon: 'error' })
-        }
-      }
-    })
   }
 
   function stopProp(e) { e.stopPropagation() }
@@ -143,7 +140,6 @@ export default function NotesPage() {
           <View className='empty'><Text>{search ? '无匹配结果' : '暂无笔记 📝'}</Text></View>
         )}
 
-        {/* 笔记卡片 */}
         {filteredNotes.map(note => (
           <View key={`note-${note.id}`} className='note-card card'>
             <View className='note-header'>
@@ -161,7 +157,6 @@ export default function NotesPage() {
           </View>
         ))}
 
-        {/* 日记搜索结果 */}
         {filteredDiary.length > 0 && (
           <>
             {search && filteredNotes.length > 0 && (
@@ -184,6 +179,7 @@ export default function NotesPage() {
         <Text className='fab-icon'>+</Text>
       </View>
 
+      {/* 新建弹窗 */}
       {showAdd && (
         <View className='modal-mask' onClick={() => setShowAdd(false)}>
           <View className='modal-box' onClick={stopProp}>
@@ -214,6 +210,7 @@ export default function NotesPage() {
           </View>
         </View>
       )}
+
     </View>
   )
 }

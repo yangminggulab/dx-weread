@@ -1,7 +1,36 @@
 import Taro from '@tarojs/taro'
-import { API_TOKEN } from '../config'
+import { BASE_URL, API_TOKEN } from '../config'
 
-const BASE_URL = 'https://yangminggu.com/tasks'
+// 多用户云端版暂不使用：小程序先固定走个人版 /tasks + API_TOKEN。
+// 之前的 session/login 接入点先保留在这里，后续真正做小程序登录页时再打开：
+//
+// const SESSION_TOKEN_KEY = 'task_app_cloud_session_token'
+// export const getSessionToken = () => {
+//   try { return Taro.getStorageSync(SESSION_TOKEN_KEY) || '' }
+//   catch { return '' }
+// }
+// export const setSessionToken = (token) => {
+//   try {
+//     if (token) Taro.setStorageSync(SESSION_TOKEN_KEY, token)
+//     else Taro.removeStorageSync(SESSION_TOKEN_KEY)
+//   } catch {}
+// }
+// export const clearSessionToken = () => setSessionToken('')
+// export const register = async ({ username, email, password }) => {
+//   const data = await request('/api/register', 'POST', { username, email, password })
+//   if (data?.token) setSessionToken(data.token)
+//   return data
+// }
+// export const login = async ({ identifier, password }) => {
+//   const data = await request('/api/login', 'POST', { identifier, password })
+//   if (data?.token) setSessionToken(data.token)
+//   return data
+// }
+// export const logout = async () => {
+//   try { await request('/api/logout', 'POST', {}) }
+//   finally { clearSessionToken() }
+// }
+// export const getMe = () => request('/api/me')
 
 function request(path, method = 'GET', data = null) {
   return new Promise((resolve, reject) => {
@@ -58,3 +87,6 @@ export const addNote = (note) => request('/api/notes/add', 'POST', note)
 
 // 删除笔记（原子接口）
 export const deleteNote = (id) => request('/api/notes/delete', 'POST', { id })
+
+// 更新笔记（原子接口）
+export const updateNote = (note) => request('/api/notes/update', 'POST', note)

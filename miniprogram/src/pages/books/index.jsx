@@ -1,16 +1,135 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import Taro, { useDidShow } from '@tarojs/taro'
-import { View, Text, ScrollView } from '@tarojs/components'
+import Taro, { useDidShow, useReady } from '@tarojs/taro'
+import { View, Text, ScrollView, Image, Canvas } from '@tarojs/components'
 import { getData } from '../../api/index'
 import './index.scss'
 
 const BOOKS_CACHE_KEY = 'books_cache_v2'
+const DAY_GOAL_MINUTES = 30 // 30分钟/天
 
 const TABS = [
   { key: 'reading',  label: '在读' },
   { key: 'want',     label: '想读' },
   { key: 'finished', label: '读完' },
 ]
+
+function getTodayMinutes(weekDaily) {
+  const now = new Date()
+  const todayStart = Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000)
+  const todayEnd = todayStart + 86400
+  return Object.entries(weekDaily || {}).reduce((sum, [k, v]) => {
+    const kt = parseInt(k)
+    return sum + (kt >= todayStart && kt < todayEnd ? v : 0)
+  }, 0)
+}
+
+function drawRing2d(ctx, W, H, minutes, goal) {
+  const cx = W / 2, cy = H / 2
+  const sw = 18
+  const r = Math.min(W, H) / 2 - sw / 2 - 2
+  const pct = goal > 0 ? minutes / goal : 0
+  const start = -Math.PI / 2
+
+  ctx.clearRect(0, 0, W, H)
+
+  ctx.beginPath()
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.strokeStyle = '#d4f0dc'
+  ctx.lineWidth = sw
+  ctx.lineCap = 'butt'
+  ctx.stroke()
+
+  if (pct <= 0) return
+
+  if (pct >= 1) {
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.strokeStyle = '#4cd964'
+    ctx.lineWidth = sw
+    ctx.lineCap = 'butt'
+    ctx.stroke()
+    const ov = pct % 1
+    if (ov > 0.005) {
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, start, start + Math.PI * 2 * ov)
+      ctx.strokeStyle = '#7ef587'
+      ctx.lineWidth = sw
+      ctx.lineCap = 'round'
+      ctx.stroke()
+      const tipAngle = start + Math.PI * 2 * ov
+      const tx = cx + r * Math.cos(tipAngle)
+      const ty = cy + r * Math.sin(tipAngle)
+      ctx.beginPath()
+      ctx.arc(tx, ty, sw / 2, 0, Math.PI * 2)
+      ctx.fillStyle = '#7ef587'
+      ctx.fill()
+    }
+  } else {
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, start, start + Math.PI * 2 * pct)
+    ctx.strokeStyle = '#4cd964'
+    ctx.lineWidth = sw
+    ctx.lineCap = 'round'
+    ctx.stroke()
+  }
+}
+
+function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
+  const todayMinutes = getTodayMinutes(weekDaily)
+
+  const execPaint = useCallback((min, goal) => {
+    Taro.createSelectorQuery()
+      .select('#wr-ring')
+      .fields({ node: true, size: true })
+      .exec(([res]) => {
+        if (!res?.node) return
+        const cv = res.node
+        const ctx = cv.getContext('2d')
+        const dpr = Taro.getSystemInfoSync().pixelRatio
+        const W = res.width || 110
+        const H = res.height || 110
+        cv.width = W * dpr
+        cv.height = H * dpr
+        ctx.scale(dpr, dpr)
+        drawRing2d(ctx, W, H, min, goal)
+      })
+  }, [])
+
+  useReady(() => {
+    Taro.nextTick(() => execPaint(todayMinutes, dayGoalMinutes))
+  })
+
+  useEffect(() => {
+    Taro.nextTick(() => execPaint(todayMinutes, dayGoalMinutes))
+    const t = setTimeout(() => execPaint(todayMinutes, dayGoalMinutes), 500)
+    return () => clearTimeout(t)
+  }, [todayMinutes, dayGoalMinutes, execPaint])
+
+  const hrs = Math.floor(todayMinutes / 60)
+  const mins = todayMinutes % 60
+  const todayStr = hrs > 0 ? `${hrs}时${mins}分` : `${mins}分钟`
+
+  return (
+    <View className='rring-card'>
+      <View className='rring-row'>
+        <View className='rring-side'>
+          <Text className='rring-val'>{todayStr}</Text>
+          <Text className='rring-label'>今日阅读</Text>
+        </View>
+        <View className='rring-wrap'>
+          <Canvas type='2d' id='wr-ring' className='rring-canvas' />
+        </View>
+        <View className='rring-side'>
+          <View className='rring-side-top'>
+            <Text className='rring-val rring-val-days'>{totalReadDays}</Text>
+            <Text className='rring-unit'>天</Text>
+          </View>
+          <Text className='rring-label'>累计完成</Text>
+        </View>
+      </View>
+    </View>
+  )
+}
 
 export default function BooksPage() {
   const [books, setBooks] = useState(() => {
@@ -23,6 +142,8 @@ export default function BooksPage() {
     try { return !Taro.getStorageSync(BOOKS_CACHE_KEY)?.books } catch { return true }
   })
   const [tab, setTab] = useState('reading')
+  const [weekDaily, setWeekDaily] = useState({})
+  const [totalReadDays, setTotalReadDays] = useState(0)
   const touchRef = useRef({ x: 0, y: 0, time: 0 })
 
   const loadData = useCallback(async () => {
@@ -30,6 +151,8 @@ export default function BooksPage() {
       const data = await getData()
       const fetched = (data.books || []).filter(b => b.source === 'weread')
       setBooks(fetched)
+      setWeekDaily(data.weekReadDaily || {})
+      setTotalReadDays(data.totalReadDays || 0)
       try { Taro.setStorageSync(BOOKS_CACHE_KEY, { books: fetched }) } catch {}
     } catch {
       Taro.showToast({ title: '加载失败', icon: 'error' })
@@ -41,15 +164,19 @@ export default function BooksPage() {
   useEffect(() => { loadData() }, [loadData])
   useDidShow(() => { loadData() })
 
-  const finished = books.filter(b => (b.progressPercent ?? 0) >= 99)
+  const finished = books.filter(b => b.status === 'finished' || (b.progressPercent ?? 0) >= 90)
   const finishedIds = new Set(finished.map(b => b.id))
 
-  const reading = books
+  const allReading = books
     .filter(b => !finishedIds.has(b.id) && b.status === 'reading')
     .sort((a, b) => (b.readTimestamp || b.sourceUpdatedTimestamp || 0) - (a.readTimestamp || a.sourceUpdatedTimestamp || 0))
-    .slice(0, 3)
+  const reading = allReading.slice(0, 3)
+  const readingRest = allReading.slice(3)
 
-  const want = books.filter(b => !finishedIds.has(b.id) && b.status === 'want')
+  const want = [
+    ...books.filter(b => !finishedIds.has(b.id) && b.status === 'want'),
+    ...readingRest,
+  ]
 
   const listMap = { reading, want, finished }
   const countMap = { reading: reading.length, want: want.length, finished: finished.length }
@@ -96,9 +223,12 @@ export default function BooksPage() {
           return (
             <View key={book.id} className='book-card card'>
               <View className='book-row'>
-                <View className='book-cover' style={{ background: book.accent || '#2d6a4f' }}>
-                  <Text className='book-cover-title'>{book.title.slice(0, 4)}</Text>
-                </View>
+                {book.cover
+                  ? <Image className='book-cover' src={book.cover} mode='aspectFill' />
+                  : <View className='book-cover book-cover-fallback' style={{ background: book.accent || '#2d6a4f' }}>
+                      <Text className='book-cover-title'>{book.title.slice(0, 4)}</Text>
+                    </View>
+                }
                 <View className='book-info'>
                   <Text className='book-title'>{book.title}</Text>
                   {book.author ? <Text className='book-author'>{book.author}</Text> : null}
@@ -120,6 +250,14 @@ export default function BooksPage() {
             </View>
           )
         })}
+
+        {!loading && tab === 'reading' && (
+          <ReadingRing
+            weekDaily={weekDaily}
+            totalReadDays={totalReadDays}
+            dayGoalMinutes={DAY_GOAL_MINUTES}
+          />
+        )}
       </ScrollView>
     </View>
   )

@@ -1,5 +1,4 @@
 .DS_Store
-.backups/
 .claude/
 .idea/
 .venv/
@@ -7,30 +6,23 @@ __pycache__/
 *.pyc
 node_modules/
 .wrangler/
-logs/
-data/
-.daily_reset_date
-diary.json
-diary.json.bak-*
 miniprogram/.swc/
 
-# Local app data
-data.json
-.weread_bridge.json
-.weread_cookie.json
-.weread_data.json
-.weread_notes.json
+# 所有运行时数据（tasks/diary/weread 缓存/备份）
+data/
+
+# 遗留文件（旧路径兼容）
+diary.json.bak-*
 .weread_read_template.json
 .weread_notes.json.bak-*
+.weread_bridge.json
+.weread_cookie.json
 
 # Generated build files
-src/dashboard.js
-public/
-
-# Chrome extension local package/private key
-chrome-extension/weread-sync.crx
-chrome-extension/weread-sync.pem
+web/src/dashboard.js
+web/public/
 
 # 敏感配置（含 API Token，不要提交到 git！）
 .env
 miniprogram/src/config.js
+web/logs/

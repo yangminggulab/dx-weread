@@ -1,0 +1,30 @@
+name: 📖 微信读书 - 自动阅读时长
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: '阅读时长（分钟，默认 30）'
+        required: false
+        default: '30'
+
+jobs:
+  autoread:
+    name: 积累阅读时长
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: 自动阅读
+        env:
+          WEREAD_COOKIE: ${{ secrets.WEREAD_COOKIE }}
+          READ_DURATION_MINUTES: ${{ github.event.inputs.duration_minutes || '30' }}
+        run: python scripts/auto_read.py

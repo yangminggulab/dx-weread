@@ -109,6 +109,9 @@
   border-radius: 6px;
   flex-shrink: 0;
   margin-right: 24px;
+}
+
+.book-cover-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -320,3 +323,61 @@
 }
 .btn-cancel { background: #f5f5f5; color: #666; margin-right: 20px; }
 .btn-confirm { background: #2d6a4f; color: #fff; }
+
+// ── 今日阅读圆环 ──────────────────────────────────────
+.rring-card {
+  margin: 0 0 24px;
+  padding: 32px 0;
+}
+
+.rring-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rring-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.rring-side-top {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.rring-wrap {
+  width: 220px;
+  height: 220px;
+  flex-shrink: 0;
+}
+
+.rring-canvas {
+  width: 220px;
+  height: 220px;
+}
+
+.rring-val {
+  font-size: 44px;
+  font-weight: 700;
+  color: #4cd964;
+  line-height: 1;
+}
+
+.rring-val-days {
+  font-size: 44px;
+}
+
+.rring-unit {
+  font-size: 24px;
+  color: #888;
+}
+
+.rring-label {
+  font-size: 22px;
+  color: #aaa;
+}
