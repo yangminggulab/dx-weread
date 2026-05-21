@@ -179,6 +179,14 @@ def allocate_id(used_ids, preferred=0):
     return next_id
 
 
+def preserve_or_allocate_id(used_ids, preferred=0, matched_existing=False):
+    preferred = coerce_int_id(preferred)
+    if preferred and matched_existing:
+        used_ids.add(preferred)
+        return preferred
+    return allocate_id(used_ids, preferred)
+
+
 def merge_weread_store(existing, incoming):
     base = normalize_weread_data(existing)
     fresh = normalize_weread_data(incoming)
@@ -192,7 +200,7 @@ def merge_weread_store(existing, incoming):
             None,
         )
         item = normalize_weread_book({**(existing_book or {}), **wb, "id": (existing_book or {}).get("id") or wb.get("id")})
-        item["id"] = allocate_id(book_ids, coerce_int_id(item.get("id")))
+        item["id"] = preserve_or_allocate_id(book_ids, item.get("id"), matched_existing=bool(existing_book))
         books.append(item)
 
     remaining_notes = [dict(item) for item in base["notes"]]
@@ -210,12 +218,12 @@ def merge_weread_store(existing, incoming):
         )
         existing_note = remaining_notes.pop(idx) if idx >= 0 else {}
         item = normalize_weread_note({**existing_note, **wn, "id": existing_note.get("id") or wn.get("id")})
-        item["id"] = allocate_id(note_ids, coerce_int_id(item.get("id")))
+        item["id"] = preserve_or_allocate_id(note_ids, item.get("id"), matched_existing=bool(existing_note))
         notes.append(item)
 
     for note in remaining_notes:
         item = normalize_weread_note(note)
-        item["id"] = allocate_id(note_ids, coerce_int_id(item.get("id")))
+        item["id"] = preserve_or_allocate_id(note_ids, item.get("id"), matched_existing=True)
         notes.append(item)
 
     updates = []
@@ -265,12 +273,12 @@ def merge_weread_notes_store(existing, incoming):
         )
         existing_note = remaining.pop(idx) if idx >= 0 else {}
         item = normalize_weread_note({**existing_note, **rn, "id": existing_note.get("id") or rn.get("id")})
-        item["id"] = allocate_id(note_ids, coerce_int_id(item.get("id")))
+        item["id"] = preserve_or_allocate_id(note_ids, item.get("id"), matched_existing=bool(existing_note))
         notes.append(item)
 
     for note in remaining:
         item = normalize_weread_note(note)
-        item["id"] = allocate_id(note_ids, coerce_int_id(item.get("id")))
+        item["id"] = preserve_or_allocate_id(note_ids, item.get("id"), matched_existing=True)
         notes.append(item)
 
     return {
