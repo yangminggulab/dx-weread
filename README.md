@@ -27,6 +27,7 @@ data/weread_notes.json
 data/time.json
 data/tasks.json
 data/diary.json
+local_backups/
       │
       ├──→ 推送 ──→ Cloudflare Worker KV ──→ 小程序读取
       │
@@ -83,6 +84,6 @@ npm run deploy
 | `data/time.json` | 时间模块数据，目前包含 `weread` 阅读时长 |
 | `data/weread_data.json` | 微信读书书架、统计 |
 | `data/weread_notes.json` | 微信读书笔记 |
-| `data/.backups/` | 每次写入前的自动备份 |
+| `local_backups/` | 每次写入前的本地自动备份 |
 
 `data/` 整个目录已加入 `.gitignore`，不提交到 git。
