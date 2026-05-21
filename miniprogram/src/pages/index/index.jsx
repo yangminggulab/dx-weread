@@ -252,7 +252,6 @@ export default function TaskPage() {
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
   const [diaryFocused, setDiaryFocused] = useState(false)
-  const diaryFocusDelayRef = useRef(null)
 
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
@@ -735,14 +734,8 @@ export default function TaskPage() {
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
-                    onFocus={() => {
-                      if (diaryFocusDelayRef.current) clearTimeout(diaryFocusDelayRef.current)
-                      diaryFocusDelayRef.current = setTimeout(() => setDiaryFocused(true), 350)
-                    }}
-                    onBlur={() => {
-                      if (diaryFocusDelayRef.current) clearTimeout(diaryFocusDelayRef.current)
-                      setDiaryFocused(false)
-                    }}
+                    onFocus={() => setDiaryFocused(true)}
+                    onBlur={() => setDiaryFocused(false)}
                     adjustPosition={false}
                     cursorSpacing={24}
                     maxlength={10000}
