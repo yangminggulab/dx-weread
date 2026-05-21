@@ -28,7 +28,7 @@ cat > "$PLIST_PATH" << EOF
     <key>ProgramArguments</key>
     <array>
         <string>${PYTHON}</string>
-        <string>${PROJECT_DIR}/server.py</string>
+        <string>${PROJECT_DIR}/web/server.py</string>
     </array>
 
     <key>WorkingDirectory</key>
