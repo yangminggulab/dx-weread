@@ -797,26 +797,38 @@ async function runBatched(items, batchSize, fn) {
 
 async function wrFetchStats(apiKey) {
   const now = Math.floor(Date.now() / 1000);
-  const [monthlyResult, annualResult] = await Promise.allSettled([
+
+  // monthly: weekReadDaily / weekReadMinutes 来源
+  // overall: totalReadDays（累计）
+  const [monthlyResult, overallResult] = await Promise.allSettled([
     wrCall(apiKey, "/readdata/detail", { mode: "monthly" }),
-    wrCall(apiKey, "/readdata/detail", { mode: "annually", baseTime: now }),
+    wrCall(apiKey, "/readdata/detail", { mode: "overall" }),
   ]);
   const monthly = monthlyResult.status === "fulfilled" ? monthlyResult.value : {};
-  const annual  = annualResult.status  === "fulfilled" ? annualResult.value  : {};
+  const overall = overallResult.status === "fulfilled" ? overallResult.value : {};
 
-  // 年度数据用 dailyReadTimes，月度数据用 readTimes，格式都是 {ts_str: seconds}
-  const rawTimes = annual.dailyReadTimes || monthly.readTimes || {};
-
-  // 热力图用：按日期聚合，{date, timestamp, seconds}[]
-  const dateMap = {};
-  for (const [ts, secs] of Object.entries(rawTimes)) {
-    const t = Number(ts);
-    if (!t) continue;
-    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" })
-      .format(new Date(t > 1e11 ? t : t * 1000));
-    dateMap[dateKey] = (dateMap[dateKey] || 0) + Math.max(0, Number(secs) || 0);
+  // 热力图：18 周的 weekly 数据，每次 6 个并发
+  const weekOffsets = Array.from({ length: 18 }, (_, i) => i * 7 * 86400);
+  const fetchWeek = async (offset) => {
+    try {
+      const d = await wrCall(apiKey, "/readdata/detail", { mode: "weekly", baseTime: now - offset });
+      return d.readTimes || {};
+    } catch { return {}; }
+  };
+  const dailyMap = {};
+  for (let i = 0; i < weekOffsets.length; i += 6) {
+    const batch = await Promise.all(weekOffsets.slice(i, i + 6).map(fetchWeek));
+    for (const readTimes of batch) {
+      for (const [ts, secs] of Object.entries(readTimes)) {
+        const t = Number(ts);
+        if (!t) continue;
+        const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" })
+          .format(new Date(t > 1e11 ? t : t * 1000));
+        dailyMap[dateKey] = (dailyMap[dateKey] || 0) + Math.max(0, Number(secs) || 0);
+      }
+    }
   }
-  const dailyReadTimes = Object.entries(dateMap)
+  const dailyReadTimes = Object.entries(dailyMap)
     .map(([date, seconds]) => ({
       date,
       timestamp: Math.floor(new Date(`${date}T00:00:00+08:00`).getTime() / 1000),
@@ -824,14 +836,14 @@ async function wrFetchStats(apiKey) {
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // 小程序阅读环用：{ts_str: minutes}，用月度 readTimes
+  // 小程序阅读环：月度 readTimes → {ts_str: minutes}
   const weekReadDaily = {};
   for (const [ts, secs] of Object.entries(monthly.readTimes || {})) {
     const mins = Math.round(Number(secs) / 60);
     if (mins > 0) weekReadDaily[ts] = mins;
   }
   const weekReadMinutes = Object.values(weekReadDaily).reduce((a, b) => a + b, 0);
-  const totalReadDays   = Number(annual.readDays || monthly.readDays || 0);
+  const totalReadDays   = Number(overall.readDays || monthly.readDays || 0);
 
   return {
     wereadStats: {
@@ -842,9 +854,9 @@ async function wrFetchStats(apiKey) {
         baseTime: now,
       },
       annual: {
-        readDays:           Number(annual.readDays           || 0),
-        totalReadTime:      Number(annual.totalReadTime      || 0),
-        dayAverageReadTime: Number(annual.dayAverageReadTime || 0),
+        readDays:           Number(overall.readDays           || 0),
+        totalReadTime:      Number(overall.totalReadTime      || 0),
+        dayAverageReadTime: Number(overall.dayAverageReadTime || 0),
         baseTime: now,
       },
       dailyReadTimes,
