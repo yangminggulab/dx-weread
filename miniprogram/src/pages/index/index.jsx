@@ -733,7 +733,10 @@ export default function TaskPage() {
         {TYPE_TABS.map(t => (
           <View key={t.key}
             className={`tab-item ${tab === t.key ? 'tab-active' : ''}`}
-            onClick={() => setTab(t.key)}>
+            onClick={() => {
+              if (diaryFocused) finishDiaryEditing()
+              setTab(t.key)
+            }}>
             <Text>{t.label}</Text>
           </View>
         ))}
@@ -749,10 +752,7 @@ export default function TaskPage() {
             // key={tab} 让内容在切换回来时重播淡入动画
             <View key='diary-content' className={`diary-content-anim${diaryFocused ? ' diary-editing' : ''}`}>
               {/* 上半：今日日记 */}
-              <View
-                className='diary-section-top card'
-                style={diaryFocused ? { bottom: `${diaryKeyboardHeight + 12}px` } : {}}
-              >
+              <View className='diary-section-top card'>
                 <View className='diary-header'>
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
                   <Text className={`diary-status${diaryFocused ? ' diary-done' : ''}`} onClick={diaryFocused ? finishDiaryEditing : undefined}>
@@ -772,9 +772,8 @@ export default function TaskPage() {
                       setDiaryKeyboardHeight(h)
                       if (h === 0) setDiaryFocused(false)
                     }}
-                    adjustPosition={false}
-                    fixed
-                    cursorSpacing={16}
+                    adjustPosition
+                    cursorSpacing={80}
                     maxlength={10000}
                   />
                 </View>
