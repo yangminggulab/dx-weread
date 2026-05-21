@@ -597,7 +597,7 @@ function Header({ onAdd, personalMode }) {
 
 function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onClick }) {
   const focus = useMemo(() =>
-    tasks.filter(t => t.taskType === 'daily' && t.status !== 'completed').slice(0, 2)
+    tasks.filter(t => t.taskType === 'daily' && t.status !== 'completed').slice(0, 3)
   , [tasks]);
 
   const dateStr = new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'});
@@ -666,7 +666,10 @@ function PlanSection({ tasks, onToggle, onTask, onAdd }) {
     if (pd !== 0) return pd;
     return (b.createdAt||'') > (a.createdAt||'') ? 1 : -1;
   });
-  const daily    = byTime(tasks.filter(t => t.taskType === 'daily'    && t.status !== 'completed'));
+  const focusedIds = new Set(
+    tasks.filter(t => t.taskType === 'daily' && t.status !== 'completed').slice(0, 3).map(t => t.id)
+  );
+  const daily    = byTime(tasks.filter(t => t.taskType === 'daily'    && t.status !== 'completed' && !focusedIds.has(t.id)));
   const weekly   = byTime(tasks.filter(t => t.taskType === 'weekly'   && t.status !== 'completed'));
   const longterm = byTime(tasks.filter(t => t.taskType === 'longterm' && t.status !== 'completed'));
   const dailyDone  = tasks.filter(t => t.taskType === 'daily'  && t.status === 'completed').length;
