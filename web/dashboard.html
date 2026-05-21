@@ -100,38 +100,17 @@ const INIT_UPDATES = [
 
 const BOOK_ACCENTS = ['#2d6a4f', '#4a4a6a', '#6a4a2a', '#3a6a5a', '#5a3a6a'];
 const PERSONAL_ROUTE_PREFIX = '/tasks';
-const CLOUD_ROUTE_PREFIX = '/tasks-cloud';
-// 多用户云端版暂不使用：前端保留登录页代码，但入口逻辑强制关闭。
-const MULTIUSER_CLOUD_ENABLED = false;
 const detectAppBasePath = () => {
-  if (/^\/tasks-cloud(\/|$)/.test(window.location.pathname)) return CLOUD_ROUTE_PREFIX;
   if (/^\/tasks(\/|$)/.test(window.location.pathname)) return PERSONAL_ROUTE_PREFIX;
   return '';
 };
 const APP_BASE_PATH = detectAppBasePath();
-const CLOUD_MODE = MULTIUSER_CLOUD_ENABLED && APP_BASE_PATH === CLOUD_ROUTE_PREFIX;
 const PERSONAL_MODE = APP_BASE_PATH === PERSONAL_ROUTE_PREFIX;
-const CLOUD_AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000;
 const PERSONAL_API_TOKEN = 'ef7a6f5bedf74c2f20c3966c38f40809679644abf07ee776048f50623362ed99';
-const CLOUD_SESSION_TOKEN_KEY = 'task_app_cloud_session_token';
-const readCloudSessionToken = () => {
-  try { return localStorage.getItem(CLOUD_SESSION_TOKEN_KEY) || ''; }
-  catch { return ''; }
-};
-const writeCloudSessionToken = (token='') => {
-  try {
-    if (token) localStorage.setItem(CLOUD_SESSION_TOKEN_KEY, token);
-    else localStorage.removeItem(CLOUD_SESSION_TOKEN_KEY);
-  } catch {}
-};
-const clearCloudSessionToken = () => writeCloudSessionToken('');
 const apiUrl = (path='') => `${APP_BASE_PATH}${path.startsWith('/') ? path : `/${path}`}`;
 const apiFetch = (path, options={}) => {
   const headers = { 'Content-Type': 'application/json', ...(options.headers||{}) };
-  if (CLOUD_MODE) {
-    const token = readCloudSessionToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-  } else if (PERSONAL_MODE) {
+  if (PERSONAL_MODE) {
     headers['Authorization'] = `Bearer ${PERSONAL_API_TOKEN}`;
   }
   return fetch(apiUrl(path), { ...options, headers });
@@ -197,10 +176,6 @@ const getWereadShelfMetaText = (book) => {
   const progressText = getWereadProgressText(book);
   if (pageText && progressText) return `${pageText} · ${progressText}`;
   return pageText || progressText || '已同步阅读进度';
-};
-const getUserBadgeText = (user) => {
-  const seed = String(user?.username || user?.email || '我').trim();
-  return seed ? seed.slice(0, 1).toUpperCase() : '我';
 };
 const getFullNoteText = (summary='') =>
   String(summary || '')
@@ -564,191 +539,8 @@ function NoteModal({ note, books, onSave, onClose }) {
 ═══════════════════════════════════════════════════════════ */
 
 
-function CloudAuthGate({ onSuccess, notice='' }) {
-  const [mode, setMode] = useState('login');
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(notice);
-  const [loginForm, setLoginForm] = useState({ identifier: '', password: '' });
-  const [registerForm, setRegisterForm] = useState({ username: '', email: '', password: '', confirmPassword: '' });
-
-  useEffect(() => {
-    setError(notice || '');
-  }, [notice]);
-
-  const submitLogin = async () => {
-    if (!loginForm.identifier.trim() || !loginForm.password) {
-      setError('请输入用户名/邮箱和密码');
-      return;
-    }
-    setPending(true);
-    setError('');
-    try {
-      const data = await apiRequest('/api/login', {
-        method: 'POST',
-        body: JSON.stringify(loginForm),
-      });
-      writeCloudSessionToken(data.token || '');
-      await onSuccess(data.user || null);
-    } catch (err) {
-      setError(err.message || '登录失败');
-    } finally {
-      setPending(false);
-    }
-  };
-
-  const submitRegister = async () => {
-    if (!registerForm.username.trim() || !registerForm.email.trim() || !registerForm.password) {
-      setError('请完整填写注册信息');
-      return;
-    }
-    if (registerForm.password !== registerForm.confirmPassword) {
-      setError('两次输入的密码不一致');
-      return;
-    }
-    setPending(true);
-    setError('');
-    try {
-      const data = await apiRequest('/api/register', {
-        method: 'POST',
-        body: JSON.stringify({
-          username: registerForm.username.trim(),
-          email: registerForm.email.trim(),
-          password: registerForm.password,
-        }),
-      });
-      writeCloudSessionToken(data.token || '');
-      await onSuccess(data.user || null);
-    } catch (err) {
-      setError(err.message || '注册失败');
-    } finally {
-      setPending(false);
-    }
-  };
-
-  const inputCls = 'w-full px-3 py-2.5 bg-white border border-[#dfd7ca] rounded-xl text-sm text-[#1c1c1c]';
-  const tabCls = (active) => `px-3 py-1.5 rounded-full text-sm border transition-colors ${active ? 'bg-[#2d6a4f] text-white border-[#2d6a4f]' : 'bg-white text-[#666] border-[#dfd7ca] hover:border-[#b9ae9c]'}`;
-
-  return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#efe7d7,_#f7f5f0_48%,_#f3efe7_100%)] px-6 py-10">
-      <div className="max-w-5xl mx-auto grid lg:grid-cols-[1.1fr_0.9fr] gap-8 items-stretch">
-        <section className="rounded-[28px] border border-[#e6dfd2] bg-white/80 backdrop-blur-sm p-8 lg:p-10 shadow-[0_24px_80px_rgba(73,59,34,0.08)]">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#f0f4f1] text-[#2d6a4f] text-xs font-medium border border-[#dce8df]">
-            云端版
-          </div>
-          <h1 className="serif text-3xl lg:text-4xl text-[#1f1c17] mt-5 leading-tight">给朋友也能一起用，但每个人的数据各自独立。</h1>
-          <p className="text-[15px] leading-7 text-[#6c6358] mt-5 max-w-xl">
-            现在登录后，任务、书架、笔记和日记都会按账号单独存到云端。你继续保留现在这套界面，朋友只需要注册自己的账号就能开始用。
-          </p>
-          <div className="grid sm:grid-cols-3 gap-4 mt-8">
-            <div className="rounded-2xl bg-[#f7f4ee] border border-[#ece4d8] p-4">
-              <div className="text-sm font-medium text-[#2d6a4f]">独立账号</div>
-              <div className="text-xs text-[#7a7267] mt-2 leading-6">每个人登录后只会看到自己的任务和日记。</div>
-            </div>
-            <div className="rounded-2xl bg-[#f7f4ee] border border-[#ece4d8] p-4">
-              <div className="text-sm font-medium text-[#2d6a4f]">云端同步</div>
-              <div className="text-xs text-[#7a7267] mt-2 leading-6">换设备后直接登录即可，不再依赖本地文件。</div>
-            </div>
-            <div className="rounded-2xl bg-[#f7f4ee] border border-[#ece4d8] p-4">
-              <div className="text-sm font-medium text-[#2d6a4f]">继续保留微信读书桥接</div>
-              <div className="text-xs text-[#7a7267] mt-2 leading-6">通过脚本定时同步微信读书，书架和热力图自动更新。</div>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-[28px] border border-[#e6dfd2] bg-white p-7 lg:p-8 shadow-[0_24px_80px_rgba(73,59,34,0.08)]">
-          <div className="flex items-center gap-2 mb-6">
-            <button className={tabCls(mode === 'login')} onClick={() => { setMode('login'); setError(''); }}>登录</button>
-            <button className={tabCls(mode === 'register')} onClick={() => { setMode('register'); setError(''); }}>注册</button>
-          </div>
-
-          {mode === 'login' ? (
-            <div className="space-y-4">
-              <div>
-                <div className="text-xs text-[#70675d] mb-1.5">用户名或邮箱</div>
-                <input
-                  value={loginForm.identifier}
-                  onChange={e => setLoginForm(prev => ({ ...prev, identifier: e.target.value }))}
-                  className={inputCls}
-                  placeholder="输入用户名或邮箱"
-                />
-              </div>
-              <div>
-                <div className="text-xs text-[#70675d] mb-1.5">密码</div>
-                <input
-                  type="password"
-                  value={loginForm.password}
-                  onChange={e => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                  className={inputCls}
-                  placeholder="输入密码"
-                />
-              </div>
-              {error && <div className="text-sm text-[#b13f3f] bg-[#fff4f2] border border-[#f4d2cb] rounded-xl px-3 py-2.5">{error}</div>}
-              <button
-                onClick={submitLogin}
-                disabled={pending}
-                className="w-full px-4 py-3 rounded-xl bg-[#2d6a4f] hover:bg-[#1e4d38] disabled:opacity-60 text-white text-sm font-medium transition-colors"
-              >
-                {pending ? '登录中...' : '登录云端账号'}
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <div className="text-xs text-[#70675d] mb-1.5">用户名</div>
-                <input
-                  value={registerForm.username}
-                  onChange={e => setRegisterForm(prev => ({ ...prev, username: e.target.value }))}
-                  className={inputCls}
-                  placeholder="给自己起一个名字"
-                />
-              </div>
-              <div>
-                <div className="text-xs text-[#70675d] mb-1.5">邮箱</div>
-                <input
-                  value={registerForm.email}
-                  onChange={e => setRegisterForm(prev => ({ ...prev, email: e.target.value }))}
-                  className={inputCls}
-                  placeholder="you@example.com"
-                />
-              </div>
-              <div>
-                <div className="text-xs text-[#70675d] mb-1.5">密码</div>
-                <input
-                  type="password"
-                  value={registerForm.password}
-                  onChange={e => setRegisterForm(prev => ({ ...prev, password: e.target.value }))}
-                  className={inputCls}
-                  placeholder="至少 8 位"
-                />
-              </div>
-              <div>
-                <div className="text-xs text-[#70675d] mb-1.5">确认密码</div>
-                <input
-                  type="password"
-                  value={registerForm.confirmPassword}
-                  onChange={e => setRegisterForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                  className={inputCls}
-                  placeholder="再输一遍密码"
-                />
-              </div>
-              {error && <div className="text-sm text-[#b13f3f] bg-[#fff4f2] border border-[#f4d2cb] rounded-xl px-3 py-2.5">{error}</div>}
-              <button
-                onClick={submitRegister}
-                disabled={pending}
-                className="w-full px-4 py-3 rounded-xl bg-[#2d6a4f] hover:bg-[#1e4d38] disabled:opacity-60 text-white text-sm font-medium transition-colors"
-              >
-                {pending ? '注册中...' : '创建云端账号'}
-              </button>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
-}
-
-function Header({ onAdd, cloudMode, personalMode, user, onLogout }) {
-  const editionLabel = cloudMode ? '云端版' : personalMode ? '个人版' : '本地版';
+function Header({ onAdd, personalMode }) {
+  const editionLabel = personalMode ? '个人版' : '本地版';
   return (
     <header className="sticky top-0 z-40 bg-[#f7f5f0]/96 backdrop-blur-sm border-b border-[#e8e4dc]">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
@@ -759,7 +551,7 @@ function Header({ onAdd, cloudMode, personalMode, user, onLogout }) {
             </svg>
           </div>
           <span className="serif font-semibold text-[15px] tracking-wide text-[#1c1c1c]">My Project Library</span>
-          <span className={`px-2 py-0.5 rounded-full text-[11px] border ${(cloudMode || personalMode) ? 'bg-[#f0f4f1] text-[#2d6a4f] border-[#dce8df]' : 'bg-white text-[#777] border-[#e0d9cc]'}`}>
+          <span className={`px-2 py-0.5 rounded-full text-[11px] border ${personalMode ? 'bg-[#f0f4f1] text-[#2d6a4f] border-[#dce8df]' : 'bg-white text-[#777] border-[#e0d9cc]'}`}>
             {editionLabel}
           </span>
         </div>
@@ -774,22 +566,7 @@ function Header({ onAdd, cloudMode, personalMode, user, onLogout }) {
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
             新增任务
           </button>
-          {cloudMode && user ? (
-            <div className="flex items-center gap-2 ml-1">
-              <div className="hidden sm:block text-right leading-tight">
-                <div className="text-[12px] text-[#4f463d] font-medium">{user.username}</div>
-                <div className="text-[11px] text-[#9a9083]">{user.email}</div>
-              </div>
-              <div className="w-7 h-7 rounded-full bg-[#2d6a4f] flex items-center justify-center text-white text-xs font-semibold">
-                {getUserBadgeText(user)}
-              </div>
-              <button onClick={onLogout} className="px-2.5 py-1.5 text-[12px] text-[#6a6257] hover:text-[#1e4d38] hover:bg-white border border-[#e0d9cc] rounded-lg transition-colors">
-                退出
-              </button>
-            </div>
-          ) : (
-            <div className="w-7 h-7 rounded-full bg-[#2d6a4f] flex items-center justify-center text-white text-xs font-semibold ml-1">我</div>
-          )}
+          <div className="w-7 h-7 rounded-full bg-[#2d6a4f] flex items-center justify-center text-white text-xs font-semibold ml-1">我</div>
         </div>
       </div>
     </header>
@@ -1403,8 +1180,6 @@ function WereadRecent({ notes, updates }) {
 
 function App() {
   const [ready,    setReady]   = useState(false);
-  const [cloudUser, setCloudUser] = useState(null);
-  const [cloudNotice, setCloudNotice] = useState('');
   const [tasks,    setTasks]   = useState(INIT_TASKS);
   const [books,    setBooks]   = useState(INIT_BOOKS);
   const [notes,    setNotes]   = useState(INIT_NOTES);
@@ -1424,24 +1199,6 @@ function App() {
   const learningBooks = useMemo(() => books.filter(b => !isWereadBook(b)), [books]);
   const wereadBooks = useMemo(() => books.filter(b => isWereadBook(b)), [books]);
   const wereadNotes = useMemo(() => notes.filter(n => isWereadNote(n)), [notes]);
-  const resetWorkspace = useCallback(() => {
-    setTasks(INIT_TASKS);
-    setBooks(INIT_BOOKS);
-    setNotes(INIT_NOTES);
-    setUpdates(INIT_UPDATES);
-    setWereadMeta({ stats: cloneWereadStats(), syncedAt: '' });
-    setSelectedWereadDate('');
-    setDiary({ today: { date: '', content: '' }, archive: [] });
-    setDiarySaving(false);
-    if (diaryTimerRef.current) clearTimeout(diaryTimerRef.current);
-    setModal(null);
-    setDetail(null);
-    setProjectModal(null);
-    setNoteModal(null);
-    uid.current = Math.max(0, ...INIT_TASKS.map(x => x.id)) + 1;
-    puid.current = Math.max(0, ...INIT_BOOKS.map(x => x.id)) + 1;
-    nuid.current = Math.max(0, ...INIT_NOTES.map(x => x.id)) + 1;
-  }, []);
   const applyServerPayload = useCallback((d) => {
     const hasSrv = d.tasks || d.books || d.notes;
     if (!hasSrv) return false;
@@ -1462,40 +1219,16 @@ function App() {
     nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;
     return true;
   }, []);
-  const handleCloudSessionLost = useCallback((message='登录已失效，请重新登录') => {
-    clearCloudSessionToken();
-    setCloudUser(null);
-    setCloudNotice(message);
-    resetWorkspace();
-  }, [resetWorkspace]);
-  const guardedApiRequest = useCallback(async (path, options={}) => {
-    try {
-      return await apiRequest(path, options);
-    } catch (err) {
-      if (CLOUD_MODE && err?.status === 401) {
-        handleCloudSessionLost(err.message || '登录已失效，请重新登录');
-      }
-      throw err;
-    }
-  }, [handleCloudSessionLost]);
-  const loadCloudWorkspace = useCallback(async () => {
-    const [data, diaryData] = await Promise.all([
-      guardedApiRequest('/api/data'),
-      guardedApiRequest('/api/diary'),
-    ]);
-    applyServerPayload(data);
-    if (diaryData?.today !== undefined) setDiary(diaryData);
-  }, [applyServerPayload, guardedApiRequest]);
   const refreshFromServer = useCallback(() =>
-    guardedApiRequest('/api/data')
+    apiRequest('/api/data')
       .then(d => applyServerPayload(d))
       .catch(() => false)
-  , [applyServerPayload, guardedApiRequest]);
+  , [applyServerPayload]);
 
   useEffect(() => {
     let cancelled = false;
 
-    const bootLocalMode = async () => {
+    const bootApp = async () => {
       const ls = k => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
       try {
         const data = await apiRequest('/api/data');
@@ -1526,41 +1259,15 @@ function App() {
       if (!cancelled) setReady(true);
     };
 
-    const bootCloudMode = async () => {
-      const token = readCloudSessionToken();
-      if (!token) {
-        if (!cancelled) {
-          resetWorkspace();
-          setCloudUser(null);
-          setReady(true);
-        }
-        return;
-      }
-
-      try {
-        const me = await apiRequest('/api/me');
-        if (cancelled) return;
-        setCloudUser(me.user || null);
-        await loadCloudWorkspace();
-      } catch (err) {
-        if (!cancelled) {
-          handleCloudSessionLost(err?.message || '请重新登录');
-        }
-      } finally {
-        if (!cancelled) setReady(true);
-      }
-    };
-
-    if (CLOUD_MODE) bootCloudMode();
-    else bootLocalMode();
+    bootApp();
 
     return () => {
       cancelled = true;
     };
-  }, [handleCloudSessionLost, loadCloudWorkspace, resetWorkspace]);
+  }, []);
 
   useEffect(() => {
-    if (!ready || (CLOUD_MODE && !cloudUser)) return;
+    if (!ready) return;
     const onFocus = () => { refreshFromServer(); };
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
@@ -1573,18 +1280,18 @@ function App() {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [cloudUser, ready, refreshFromServer]);
+  }, [ready, refreshFromServer]);
 
   useEffect(() => {
-    if (!ready || (CLOUD_MODE && !cloudUser)) return;
+    if (!ready) return;
     const t = setTimeout(() => {
-      guardedApiRequest('/api/data', {
+      apiRequest('/api/data', {
         method: 'POST',
         body: JSON.stringify({ tasks, books, notes, updates, diary }),
       }).catch(() => {});
     }, 800);
     return () => clearTimeout(t);
-  }, [cloudUser, diary, guardedApiRequest, notes, ready, tasks, books, updates]);
+  }, [diary, notes, ready, tasks, books, updates]);
 
   const handleDiaryChange = useCallback((content) => {
     const updated = { ...diary, today: { ...diary.today, content } };
@@ -1592,36 +1299,11 @@ function App() {
     if (diaryTimerRef.current) clearTimeout(diaryTimerRef.current);
     diaryTimerRef.current = setTimeout(() => {
       setDiarySaving(true);
-      guardedApiRequest('/api/diary', { method: 'POST', body: JSON.stringify(updated) })
+      apiRequest('/api/diary', { method: 'POST', body: JSON.stringify(updated) })
         .catch(() => {})
         .finally(() => setDiarySaving(false));
     }, 1500);
-  }, [diary, guardedApiRequest]);
-
-  const handleCloudAuthSuccess = useCallback(async (user) => {
-    setCloudNotice('');
-    setCloudUser(user);
-    resetWorkspace();
-    setReady(false);
-    try {
-      await loadCloudWorkspace();
-    } catch (_) {
-      return;
-    } finally {
-      setReady(true);
-    }
-  }, [loadCloudWorkspace, resetWorkspace]);
-
-  const handleCloudLogout = useCallback(async () => {
-    try {
-      await apiRequest('/api/logout', { method: 'POST' });
-    } catch (_) {}
-    clearCloudSessionToken();
-    setCloudNotice('');
-    setCloudUser(null);
-    resetWorkspace();
-    setReady(true);
-  }, [resetWorkspace]);
+  }, [diary]);
 
   const log = (type, text) =>
     setUpdates(u => [{ id: Date.now(), type, text, time:'刚刚' }, ...u].slice(0, 8));
@@ -1699,19 +1381,11 @@ function App() {
     </div>
   );
 
-  if (CLOUD_MODE && !cloudUser) {
-    return <CloudAuthGate onSuccess={handleCloudAuthSuccess} notice={cloudNotice} />;
-  }
-
   return (
     <div className="min-h-screen">
       <Header
         onAdd={()=>setModal('add')}
-
-        cloudMode={CLOUD_MODE}
         personalMode={PERSONAL_MODE}
-        user={cloudUser}
-        onLogout={handleCloudLogout}
       />
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-10 pb-20">
