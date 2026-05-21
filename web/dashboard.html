@@ -1014,7 +1014,7 @@ function WeReadHeatmap({ stats, notes, syncedAt, selectedDate, onSelectDate }) {
     <section>
       <SectionHead
         title="阅读热力"
-        sub={`最近 18 周 · 色块越深表示读得越久，金点代表当天有微信读书笔记${syncedAt ? ` · 同步于 ${String(syncedAt).replace('T', ' ').slice(0, 16)}` : ''}`}
+        sub="最近 18 周 · 色块越深表示读得越久，金点代表当天有微信读书笔记"
       />
       <div className="space-y-4">
         <div className="bg-white rounded-xl border border-[#e8e4dc] p-4">
