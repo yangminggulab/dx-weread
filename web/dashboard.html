@@ -597,7 +597,7 @@ function Header({ onAdd, personalMode }) {
 
 function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onClick }) {
   const focus = useMemo(() =>
-    tasks.filter(t => t.taskType === 'daily' && t.status !== 'completed').slice(0, 2)
+    tasks.filter(t => t.taskType === 'daily' && t.status !== 'completed').slice(0, 3)
   , [tasks]);
 
   const dateStr = new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'});
@@ -610,7 +610,7 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
         sub={`${dateStr} · ${focus.length} 项待处理`}
       />
       <div className="grid md:grid-cols-2 gap-4 items-stretch">
-        {/* 左栏：今日任务（紧凑行） */}
+        {/* 左栏：今日任务 */}
         <div className="bg-white rounded-2xl border border-[#e8e4dc] overflow-hidden">
           {focus.length === 0 ? (
             <div className="p-8 text-center text-[#ccc] text-sm">今日无待处理任务，好好休息 ☕</div>
@@ -637,8 +637,9 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
           )}
         </div>
 
-        {/* 右栏：今日日记（与左栏等高） */}
-        <div className="bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col">
+        {/* 右栏：今日日记（底部与左栏对齐） */}
+        <div className="flex flex-col justify-end">
+        <div className="bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col" style={{height:'180px'}}>
           <div className="flex items-center justify-between mb-2">
             <span className="serif text-sm font-semibold text-[#1c1c1c]">今日日记</span>
             <span className="text-xs text-[#bbb]">{diarySaving ? '保存中...' : (todayContent ? '已自动保存' : '')}</span>
@@ -649,6 +650,7 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
             value={todayContent}
             onChange={e => onDiaryChange(e.target.value)}
           />
+        </div>
         </div>
       </div>
     </section>
@@ -666,7 +668,10 @@ function PlanSection({ tasks, onToggle, onTask, onAdd }) {
     if (pd !== 0) return pd;
     return (b.createdAt||'') > (a.createdAt||'') ? 1 : -1;
   });
-  const daily    = byTime(tasks.filter(t => t.taskType === 'daily'    && t.status !== 'completed'));
+  const focusedIds = new Set(
+    tasks.filter(t => t.taskType === 'daily' && t.status !== 'completed').slice(0, 3).map(t => t.id)
+  );
+  const daily    = byTime(tasks.filter(t => t.taskType === 'daily'    && t.status !== 'completed' && !focusedIds.has(t.id)));
   const weekly   = byTime(tasks.filter(t => t.taskType === 'weekly'   && t.status !== 'completed'));
   const longterm = byTime(tasks.filter(t => t.taskType === 'longterm' && t.status !== 'completed'));
   const dailyDone  = tasks.filter(t => t.taskType === 'daily'  && t.status === 'completed').length;
