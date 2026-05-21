@@ -69,7 +69,7 @@ def upsert_env_value(env_path: Path, key: str, value: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Sync local API_TOKEN and WeRead cookie to GitHub Actions secrets."
+        description="Sync local API_TOKEN and WEREAD_API_KEY to GitHub Actions secrets."
     )
     parser.add_argument(
         "--check",
