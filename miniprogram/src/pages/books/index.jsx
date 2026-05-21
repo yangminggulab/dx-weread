@@ -165,16 +165,17 @@ export default function BooksPage() {
   useDidShow(() => { loadData() })
 
   const finished = books.filter(b => b.status === 'finished' || (b.progressPercent ?? 0) >= 90)
-  const finishedIds = new Set(finished.map(b => b.id))
+  const bookKey = (b) => b._bookId || b.id
+  const finishedIds = new Set(finished.map(bookKey))
 
   const allReading = books
-    .filter(b => !finishedIds.has(b.id) && b.status === 'reading')
+    .filter(b => !finishedIds.has(bookKey(b)) && b.status === 'reading')
     .sort((a, b) => (b.readTimestamp || b.sourceUpdatedTimestamp || 0) - (a.readTimestamp || a.sourceUpdatedTimestamp || 0))
   const reading = allReading.slice(0, 3)
   const readingRest = allReading.slice(3)
 
   const want = [
-    ...books.filter(b => !finishedIds.has(b.id) && b.status === 'want'),
+    ...books.filter(b => !finishedIds.has(bookKey(b)) && b.status === 'want'),
     ...readingRest,
   ]
 
@@ -221,7 +222,7 @@ export default function BooksPage() {
         {!loading && listMap[tab].map(book => {
           const pct = book.progressPercent ?? 0
           return (
-            <View key={book.id} className='book-card card'>
+            <View key={bookKey(book)} className='book-card card'>
               <View className='book-row'>
                 {book.cover
                   ? <Image className='book-cover' src={book.cover} mode='aspectFill' />

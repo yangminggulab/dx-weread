@@ -246,6 +246,7 @@ function wrNormalizeBook(item, progressPayload) {
   return {
     source: "weread",
     _bookId: bookId,
+    id: bookId,
     title: b.title || "",
     author: b.author || "",
     cover: b.cover || "",
