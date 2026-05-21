@@ -616,30 +616,20 @@ async function syncWeRead(env, options = {}) {
   const rawBooks = (shelf.books || []).filter((b) => b && typeof b === "object");
   console.log(`[weread-cron] 书架 ${rawBooks.length} 本，笔记本 ${notebookBooks.length} 本`);
 
-  // 现有数据：用于进度兜底 + 最终保存
+  // 现有数据：保留已有阅读进度（不再单独调 progress API，节省 subrequest 给热力图）
   const existing = await loadData(env.TASKS_KV);
   const existingProgressMap = Object.fromEntries(
     (existing.books || []).filter(b => b?.source === "weread")
       .map(b => [String(b._bookId || b.id || ""), b.progressPercent || 0])
   );
 
-  // 只拉最近 3 本的进度（书架展示也只取前 3，节省 subrequest）
-  const top3Raw = [...rawBooks]
-    .sort((a, b) => wrEpochMs(b.readUpdateTime || b.updateTime) - wrEpochMs(a.readUpdateTime || a.updateTime))
-    .slice(0, 3);
-  const top3Progress = await runBatched(top3Raw, 3, (b) => wrFetchProgress(apiKey, b));
-  const progressMap = {};
-  top3Raw.forEach((b, i) => { progressMap[String(b.bookId || "").trim()] = top3Progress[i] || {}; });
-
   const books = rawBooks
     .map((b) => {
       const bookId = String(b.bookId || "").trim();
-      const book = wrNormalizeBook(b, progressMap[bookId] || {});
-      // 兜底：API 返回 0% 但历史有进度时保留
-      if (book.progressPercent === 0 && (existingProgressMap[bookId] || 0) > 0) {
-        return { ...book, progressPercent: existingProgressMap[bookId] };
-      }
-      return book;
+      const book = wrNormalizeBook(b, {});
+      // 保留历史进度，不用 progress API
+      const kept = existingProgressMap[bookId] || 0;
+      return kept > 0 ? { ...book, progressPercent: kept } : book;
     })
     .sort((a, b) => (b.readTimestamp || 0) - (a.readTimestamp || 0));
 
