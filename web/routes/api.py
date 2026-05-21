@@ -6,6 +6,7 @@ import logging
 
 from services.cloud_sync import pull_from_cloud, push_diary_to_cloud_async
 from services.config import CLOUD_API_TOKEN
+from services.diary_store import load_diary_file, merge_diary_update
 from services.storage import archive_diary_if_needed, empty_weread_stats, load_app_data, write_diary_file
 from services.weread_sync import run_weread_sync, save_combined_data, weread_status_payload
 from sync.weread import WeReadApiError, load_weread_api_key
@@ -32,7 +33,7 @@ def handle_request(method, path, body):
             return 200, diary
 
         if method == "POST" and path == "/api/diary":
-            diary = archive_diary_if_needed(body or {})
+            diary = merge_diary_update(load_diary_file(), body or {})
             write_diary_file(diary)
             return 200, {"ok": True}
 

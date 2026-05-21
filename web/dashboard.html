@@ -28,6 +28,7 @@
     .kcard { transition: transform .15s ease, box-shadow .15s ease; }
     .kcard:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.09); }
     input:focus, select:focus, textarea:focus { outline: 2px solid #2d6a4f !important; outline-offset: -1px; }
+    .diary-textarea:focus { outline: none !important; box-shadow: none !important; }
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-thumb { background: #d4cfc4; border-radius: 4px; }
     @keyframes fadeIn  { from { opacity:0 } to { opacity:1 } }
@@ -645,7 +646,7 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
             <span className="text-xs text-[#bbb]">{diarySaving ? '保存中...' : (todayContent ? '已自动保存' : '')}</span>
           </div>
           <textarea
-            className="flex-1 resize-none text-sm text-[#1c1c1c] leading-relaxed placeholder-[#ccc] bg-transparent border-none outline-none"
+            className="diary-textarea flex-1 resize-none text-sm text-[#1c1c1c] leading-relaxed placeholder-[#ccc] bg-transparent border-none outline-none"
             placeholder="今天发生了什么，记录下来..."
             value={todayContent}
             onChange={e => onDiaryChange(e.target.value)}
@@ -876,49 +877,40 @@ function WeReadShelf({ books }) {
    WEREAD NOTES
 ═══════════════════════════════════════════════════════════ */
 
-function WeReadNotes({ notes, selectedDate, onClearDate }) {
+function WeReadNotes({ notes }) {
   const orderedNotes = React.useMemo(
     () => [...notes].sort((a, b) => (b.sourceUpdatedTimestamp || 0) - (a.sourceUpdatedTimestamp || 0)),
     [notes]
   );
   const visibleNotes = React.useMemo(
-    () => selectedDate ? orderedNotes.filter(note => getWereadNoteDate(note) === selectedDate) : orderedNotes,
-    [orderedNotes, selectedDate]
+    () => orderedNotes.slice(0, 3),
+    [orderedNotes]
   );
   const [sel, setSel] = React.useState(visibleNotes[0] || null);
 
   React.useEffect(() => {
     if (!visibleNotes.length) { setSel(null); return; }
-    if (!sel || !visibleNotes.some(n => n.id === sel.id)) setSel(visibleNotes[0]);
+    if (!sel || !visibleNotes.some(n => (n.id || n.sourceItemId) === (sel.id || sel.sourceItemId))) setSel(visibleNotes[0]);
   }, [visibleNotes, sel]);
 
-  const noteSub = selectedDate
-    ? `${formatCalendarDate(selectedDate)} · ${visibleNotes.length} 条笔记`
-    : (orderedNotes.length ? `已同步 ${orderedNotes.length} 条划线与评论` : '同步后的划线和评论会显示在这里');
+  const noteSub = orderedNotes.length
+    ? `最新 ${Math.min(3, orderedNotes.length)} 条 · 已同步 ${orderedNotes.length} 条划线与评论`
+    : '同步后的最新划线和评论会显示在这里';
 
   return (
     <section>
       <SectionHead
         title="微信读书笔记"
         sub={noteSub}
-        right={selectedDate ? (
-          <button
-            type="button"
-            onClick={onClearDate}
-            className="text-xs text-[#8f887d] hover:text-[#2d6a4f] transition-colors"
-          >
-            查看全部
-          </button>
-        ) : null}
       />
       <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden flex" style={{height:320}}>
         <div className="w-52 shrink-0 border-r border-[#e8e4dc] overflow-y-auto">
           {visibleNotes.length === 0
-            ? <div className="p-4 text-xs text-[#ccc] text-center mt-8">{selectedDate ? '这一天还没有同步到微信读书笔记' : '还没有同步笔记'}</div>
+            ? <div className="p-4 text-xs text-[#ccc] text-center mt-8">还没有同步笔记</div>
             : visibleNotes.map(n => (
-              <div key={n.id} onClick={() => setSel(n)}
-                className={`px-4 py-3 cursor-pointer border-b border-[#f5f2eb] last:border-0 transition-colors ${sel?.id === n.id ? 'bg-[#f0f4f1]' : 'hover:bg-[#faf9f6]'}`}>
-                <div className={`text-sm font-medium leading-snug mb-1.5 ${sel?.id === n.id ? 'text-[#2d6a4f] serif' : 'text-[#1c1c1c]'}`}>{n.title}</div>
+              <div key={n.id || n.sourceItemId} onClick={() => setSel(n)}
+                className={`px-4 py-3 cursor-pointer border-b border-[#f5f2eb] last:border-0 transition-colors ${(sel?.id || sel?.sourceItemId) === (n.id || n.sourceItemId) ? 'bg-[#f0f4f1]' : 'hover:bg-[#faf9f6]'}`}>
+                <div className={`text-sm font-medium leading-snug mb-1.5 ${(sel?.id || sel?.sourceItemId) === (n.id || n.sourceItemId) ? 'text-[#2d6a4f] serif' : 'text-[#1c1c1c]'}`}>{n.title}</div>
                 {n.bookTitle && <div className="text-xs text-[#8f887d] mb-1 truncate">{n.bookTitle}</div>}
                 <div className="flex gap-1 flex-wrap mb-1">
                   {(n.tags || []).map(t => <span key={t} className="text-xs bg-[#f2f2ef] text-[#999] px-1.5 py-0.5 rounded-full">{t}</span>)}
@@ -929,7 +921,7 @@ function WeReadNotes({ notes, selectedDate, onClearDate }) {
           }
         </div>
         <div className="flex-1 p-5 overflow-y-auto">
-          {sel && visibleNotes.find(n => n.id === sel.id) ? (
+          {sel && visibleNotes.find(n => (n.id || n.sourceItemId) === (sel.id || sel.sourceItemId)) ? (
             <>
               <div className="flex items-start justify-between mb-3">
                 <h4 className="serif font-semibold text-base text-[#1c1c1c] leading-snug flex-1 pr-3">{sel.title}</h4>
@@ -1022,7 +1014,7 @@ function WeReadHeatmap({ stats, notes, syncedAt, selectedDate, onSelectDate }) {
     <section>
       <SectionHead
         title="阅读热力"
-        sub={`最近 18 周 · 色块越深表示读得越久，金点代表当天有微信读书笔记${syncedAt ? ` · 同步于 ${String(syncedAt).replace('T', ' ').slice(0, 16)}` : ''}`}
+        sub="最近 18 周 · 色块越深表示读得越久，金点代表当天有微信读书笔记"
       />
       <div className="space-y-4">
         <div className="bg-white rounded-xl border border-[#e8e4dc] p-4">
@@ -1163,10 +1155,13 @@ function WereadRecent({ notes, updates }) {
 
   React.useEffect(() => {
     if (noteEntries.length <= 1) return;
-    const timer = setInterval(() => {
-      setOffset(prev => (prev + 1) % noteEntries.length);
-    }, 3500);
-    return () => clearInterval(timer);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        setOffset(prev => (prev + 4) % noteEntries.length);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [noteEntries.length]);
 
   const displayEntries = React.useMemo(() => {
@@ -1239,11 +1234,18 @@ function App() {
     nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;
     return true;
   }, []);
-  const refreshFromServer = useCallback(() =>
-    apiRequest('/api/data')
-      .then(d => applyServerPayload(d))
-      .catch(() => false)
-  , [applyServerPayload]);
+  const refreshFromServer = useCallback(async () => {
+    try {
+      const d = await apiRequest('/api/data');
+      applyServerPayload(d);
+    } catch (_) {}
+    try {
+      if (!diaryTimerRef.current) {
+        const diaryData = await apiRequest('/api/diary');
+        if (diaryData?.today !== undefined) setDiary(diaryData);
+      }
+    } catch (_) {}
+  }, [applyServerPayload]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1411,15 +1413,12 @@ function App() {
         <Books books={learningBooks} onAdd={()=>setProjectModal('add')} onEdit={b=>setProjectModal(b)} onDelete={handleDeleteBook} />
         <WeReadShelf books={wereadBooks} />
         {/* Bottom 2-col */}
-        <div className="grid md:grid-cols-5 gap-6">
+        <div className="grid md:grid-cols-5 gap-6 items-start">
           <div className="md:col-span-3 space-y-6">
-            <WeReadNotes
-              notes={wereadNotes}
-              selectedDate={selectedWereadDate}
-              onClearDate={() => setSelectedWereadDate('')}
-            />
+            <WeReadNotes notes={wereadNotes} />
+            <WereadRecent notes={wereadNotes} updates={updates} />
           </div>
-          <div className="md:col-span-2 space-y-6">
+          <div className="md:col-span-2">
             <WeReadHeatmap
               stats={wereadMeta.stats}
               notes={wereadNotes}
@@ -1427,7 +1426,6 @@ function App() {
               selectedDate={selectedWereadDate}
               onSelectDate={setSelectedWereadDate}
             />
-            <WereadRecent notes={wereadNotes} updates={updates} />
           </div>
         </div>
       </main>

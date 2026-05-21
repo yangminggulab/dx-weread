@@ -25,6 +25,12 @@ function todayInShanghai() {
   return nowInShanghai().toISOString().slice(0, 10);
 }
 
+function effectiveDiaryDateInShanghai() {
+  const now = nowInShanghai();
+  if (now.getHours() < 5) now.setDate(now.getDate() - 1);
+  return now.toISOString().slice(0, 10);
+}
+
 function normalizeArrayItems(value) {
   return Array.isArray(value) ? value.filter((item) => item && typeof item === "object") : [];
 }
@@ -190,8 +196,57 @@ function normalizeDiaryData(payload) {
     today: {
       date: String(today.date || ""),
       content: String(today.content || ""),
+      updatedAt: String(today.updatedAt || ""),
     },
     archive,
+  };
+}
+
+function mergeDiaryArchiveList(entries = []) {
+  const archiveMap = {};
+  for (const entry of entries || []) {
+    const normalized = normalizeDiaryArchiveEntry(entry);
+    if (!normalized?.date) continue;
+    archiveMap[normalized.date] = mergeDiaryArchiveEntries(archiveMap[normalized.date], normalized);
+  }
+  return Object.values(archiveMap)
+    .filter((entry) => String(entry.content || "").trim())
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+function archiveDiaryIfNeeded(diary) {
+  const normalized = normalizeDiaryData(diary);
+  const date = effectiveDiaryDateInShanghai();
+  const today = normalized.today || {};
+  let archive = mergeDiaryArchiveList(normalized.archive || []);
+  if (today.date && today.date !== date) {
+    if (String(today.content || "").trim()) {
+      archive = mergeDiaryArchiveList([{ ...today }, ...archive]);
+    }
+    return { today: { date, content: "", updatedAt: "" }, archive };
+  }
+  if (!today.date) return { today: { ...today, date }, archive };
+  return normalized;
+}
+
+function shouldAcceptIncomingToday(incoming, stored) {
+  const incomingUpdatedAt = String(incoming?.updatedAt || "").trim();
+  const storedUpdatedAt = String(stored?.updatedAt || "").trim();
+  if (incomingUpdatedAt && storedUpdatedAt) return incomingUpdatedAt >= storedUpdatedAt;
+  if (incomingUpdatedAt) return true;
+  return Boolean(String(incoming?.content || "").trim() || !String(stored?.content || "").trim());
+}
+
+function mergeDiaryUpdate(storedDiary, incomingDiary, incomingHadToday = true) {
+  const stored = archiveDiaryIfNeeded(storedDiary);
+  const incoming = archiveDiaryIfNeeded(incomingDiary);
+
+  const today = incomingHadToday && shouldAcceptIncomingToday(incoming.today, stored.today)
+    ? { ...stored.today, ...incoming.today }
+    : stored.today;
+  return {
+    today,
+    archive: mergeDiaryArchiveList([...(stored.archive || []), ...(incoming.archive || [])]),
   };
 }
 
@@ -223,6 +278,13 @@ async function saveDiary(kv, diary) {
   await kv.put("diary_data", JSON.stringify(normalizeDiaryData(diary)));
 }
 
+async function loadCurrentDiary(kv) {
+  const stored = await loadDiary(kv);
+  const current = archiveDiaryIfNeeded(stored);
+  if (JSON.stringify(current) !== JSON.stringify(stored)) await saveDiary(kv, current);
+  return current;
+}
+
 function isPersonalAuthorized(request, env) {
   const auth = request.headers.get("Authorization") || "";
   const token = auth.replace(/^Bearer\s+/i, "").trim();
@@ -238,20 +300,11 @@ function resolveRoute(pathname) {
 
 async function runDailyReset(env) {
   const kv = env.TASKS_KV;
-  const today = todayInShanghai();
+  const today = effectiveDiaryDateInShanghai();
   const lastRun = await kv.get("daily_reset_date");
   if (lastRun === today) return { skipped: true };
 
-  const diary = await loadDiary(kv);
-  const todayEntry = diary.today || {};
-  if (todayEntry.content && (!todayEntry.date || todayEntry.date !== today)) {
-    const yesterday = new Date(nowInShanghai());
-    yesterday.setDate(yesterday.getDate() - 1);
-    const archiveDate = todayEntry.date || yesterday.toISOString().slice(0, 10);
-    diary.archive = [{ ...todayEntry, date: archiveDate }, ...(diary.archive || [])];
-    diary.today = { date: today, content: "" };
-    await saveDiary(kv, diary);
-  }
+  await loadCurrentDiary(kv);
 
   const data = await loadData(kv);
   data.tasks = (data.tasks || []).filter((task) => task.status !== "completed");
@@ -592,17 +645,20 @@ async function wrActivityChanged(apiKey, kv) {
   return { changed: false };
 }
 
-async function syncWeRead(env) {
+async function syncWeRead(env, options = {}) {
   const apiKey = String(env.WEREAD_API_KEY || "").trim();
   if (!apiKey) { console.log("[weread-cron] 跳过：未配置 WEREAD_API_KEY"); return; }
 
-  const activityCheck = await wrActivityChanged(apiKey, env.TASKS_KV).catch(() => ({ changed: true }));
+  const force = Boolean(options.force);
+  const activityCheck = force
+    ? { changed: true, monthly: await wrCall(apiKey, "/readdata/detail", { mode: "monthly" }).catch(() => null) }
+    : await wrActivityChanged(apiKey, env.TASKS_KV).catch(() => ({ changed: true }));
   if (!activityCheck.changed) {
     console.log("[weread-cron] 跳过：本月阅读数据无变化");
     return;
   }
 
-  console.log("[weread-cron] 检测到新活动，开始同步...");
+  console.log(force ? "[weread-cron] 手动强制同步..." : "[weread-cron] 检测到新活动，开始同步...");
   const [shelf, allNotebookBooks] = await Promise.all([
     wrCall(apiKey, "/shelf/sync"),
     wrPageNotebooks(apiKey),
@@ -613,9 +669,21 @@ async function syncWeRead(env) {
   const rawBooks = (shelf.books || []).filter((b) => b && typeof b === "object");
   console.log(`[weread-cron] 书架 ${rawBooks.length} 本，笔记本 ${notebookBooks.length} 本`);
 
-  // 跳过单本 progress API（每本 1 个 subrequest，Free 计划上限 50 不够用）
+  // 现有数据：保留已有阅读进度（不再单独调 progress API，节省 subrequest 给热力图）
+  const existing = await loadData(env.TASKS_KV);
+  const existingProgressMap = Object.fromEntries(
+    (existing.books || []).filter(b => b?.source === "weread")
+      .map(b => [String(b._bookId || b.id || ""), b.progressPercent || 0])
+  );
+
   const books = rawBooks
-    .map((b) => wrNormalizeBook(b, {}))
+    .map((b) => {
+      const bookId = String(b.bookId || "").trim();
+      const book = wrNormalizeBook(b, {});
+      // 保留历史进度，不用 progress API
+      const kept = existingProgressMap[bookId] || 0;
+      return kept > 0 ? { ...book, progressPercent: kept } : book;
+    })
     .sort((a, b) => (b.readTimestamp || 0) - (a.readTimestamp || 0));
 
   const noteLists = await runBatched(notebookBooks, 4, (b) => wrFetchNotes(apiKey, b));
@@ -629,8 +697,6 @@ async function syncWeRead(env) {
     console.error(`[weread-cron] 阅读统计获取失败：${e}`);
     return null;
   });
-
-  const existing = await loadData(env.TASKS_KV);
   await saveData(env.TASKS_KV, {
     tasks:   (existing.tasks  || []).filter((t) => t && typeof t === "object"),
     books:   [...(existing.books  || []).filter((b) => b?.source !== "weread"), ...books],
@@ -777,7 +843,7 @@ export default {
       }
 
       if (path === "/api/diary" && request.method === "GET") {
-        const diary = await loadDiary(env.TASKS_KV);
+        const diary = await loadCurrentDiary(env.TASKS_KV);
         if (url.searchParams.get("today") === "1") {
           return json({ today: diary.today || { date: "", content: "" }, archive: [] });
         }
@@ -785,33 +851,11 @@ export default {
       }
 
       if (path === "/api/diary" && request.method === "POST") {
-        const body = normalizeDiaryData(await request.json().catch(() => ({})));
-        const incoming = body.today || {};
-        const stored = await loadDiary(env.TASKS_KV);
-        const storedToday = stored.today || {};
-        if (
-          storedToday.date === incoming.date
-          && storedToday.content?.trim()
-          && !incoming.content?.trim()
-        ) {
-          return json({ ok: true, skipped: true });
-        }
-
-        const archiveMap = {};
-        for (const entry of stored.archive || []) {
-          const normalized = normalizeDiaryArchiveEntry(entry);
-          if (normalized?.date) archiveMap[normalized.date] = normalized;
-        }
-        for (const entry of body.archive || []) {
-          const normalized = normalizeDiaryArchiveEntry(entry);
-          if (!normalized?.date) continue;
-          archiveMap[normalized.date] = mergeDiaryArchiveEntries(
-            archiveMap[normalized.date],
-            normalized,
-          );
-        }
-        body.archive = Object.values(archiveMap).sort((a, b) => (a.date < b.date ? -1 : 1));
-        await saveDiary(env.TASKS_KV, body);
+        const rawBody = await request.json().catch(() => ({}));
+        const body = normalizeDiaryData(rawBody);
+        const stored = await loadCurrentDiary(env.TASKS_KV);
+        const incomingHadToday = Boolean(rawBody?.today && typeof rawBody.today === "object");
+        await saveDiary(env.TASKS_KV, mergeDiaryUpdate(stored, body, incomingHadToday));
         return json({ ok: true });
       }
 
@@ -823,7 +867,7 @@ export default {
         if (!isPersonalAuthorized(request, env))
           return json({ error: "unauthorized" }, 401);
         try {
-          await syncWeRead(env);
+          await syncWeRead(env, { force: true });
           const data = await loadData(env.TASKS_KV);
           return json({ ok: true, dailyReadTimesCount: data.wereadStats?.dailyReadTimes?.length ?? 0, totalReadDays: data.totalReadDays ?? 0 });
         } catch (e) {

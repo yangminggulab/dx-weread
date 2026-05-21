@@ -421,7 +421,7 @@
   min-height: 200px;
 }
 
-// 聚焦时：上半扩大到 84%，下半压暗至几乎不可见（0.12 opacity），轻微重叠无感
+// 聚焦后延迟进入编辑态，避开 iOS 键盘弹起瞬间的原生 textarea 重排失焦
 .diary-editing {
   .diary-section-top {
     height: calc(84% - 8px);

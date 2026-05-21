@@ -72,6 +72,16 @@ def _merge_diary_archive_entry(left, right):
     }
 
 
+def _timestamp_order(incoming, stored):
+    incoming_updated_at = str((incoming or {}).get("updatedAt", "") or "").strip()
+    stored_updated_at = str((stored or {}).get("updatedAt", "") or "").strip()
+    if incoming_updated_at and stored_updated_at:
+        return incoming_updated_at >= stored_updated_at
+    if incoming_updated_at:
+        return True
+    return None
+
+
 def _normalize_diary(diary):
     if not isinstance(diary, dict):
         return empty_diary()
@@ -125,6 +135,38 @@ def archive_diary_if_needed(diary=None):
         today = {"date": today_str, "content": ""}
 
     return {"today": today, "archive": archive}
+
+
+def merge_diary_update(stored_diary: dict, incoming_diary: dict) -> dict:
+    stored_diary = archive_diary_if_needed(stored_diary)
+    incoming_has_today = isinstance((incoming_diary or {}).get("today"), dict)
+    incoming_diary = archive_diary_if_needed(incoming_diary)
+
+    archive_map = {}
+    for entry in [*stored_diary["archive"], *incoming_diary["archive"]]:
+        date = entry.get("date")
+        if not date:
+            continue
+        archive_map[date] = _merge_diary_archive_entry(archive_map.get(date), entry)
+
+    stored_today = stored_diary["today"]
+    incoming_today = incoming_diary["today"]
+    merged_today = stored_today
+    if incoming_has_today:
+        timestamp_wins = _timestamp_order(incoming_today, stored_today)
+        incoming_content = str(incoming_today.get("content", "") or "")
+        stored_content = str(stored_today.get("content", "") or "")
+        if timestamp_wins is True:
+            merged_today = {**stored_today, **incoming_today}
+        elif timestamp_wins is None and (incoming_content.strip() or not stored_content.strip()):
+            merged_today = {**stored_today, **incoming_today}
+
+    valid_archive = [
+        entry
+        for entry in (_normalize_diary_archive_entry(value) for value in archive_map.values())
+        if entry and str(entry.get("content", "")).strip()
+    ]
+    return {"today": merged_today, "archive": sorted(valid_archive, key=lambda item: item.get("date", ""))}
 
 
 def merge_diary(local_diary: dict, cloud_diary: dict) -> dict:

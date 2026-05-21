@@ -34,6 +34,7 @@ const LEGACY_DIARY_CACHE_KEYS = ['diary_cache_v1']
 
 function getTodayStr() {
   const now = new Date()
+  if (now.getHours() < 5) now.setDate(now.getDate() - 1)
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
 }
 
@@ -149,7 +150,9 @@ function readCachedDiary() {
 
 function persistDiaryCache(diary) {
   try {
-    Taro.setStorageSync(DIARY_CACHE_KEY, diary)
+    // 只缓存当天日记，归档从服务端拉取，避免 storage 超限闪退
+    const safe = diary && typeof diary === 'object' ? diary : {}
+    Taro.setStorageSync(DIARY_CACHE_KEY, { today: safe.today || {}, archive: [] })
     for (const key of LEGACY_DIARY_CACHE_KEYS) {
       Taro.removeStorageSync(key)
     }
@@ -248,7 +251,6 @@ export default function TaskPage() {
   const [diaryLoading, setDiaryLoading] = useState(() => !readCachedDiary())
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
-
   const [diaryFocused, setDiaryFocused] = useState(false)
 
   // 历史上的今天
@@ -264,6 +266,9 @@ export default function TaskPage() {
   const fullscreenTouchRef = useRef({ x: 0, y: 0, time: 0 })
   const diaryRef = useRef(diary)
   const archiveViewDirtyRef = useRef(false)
+  const diaryTodayDirtyRef = useRef(false)
+  const diaryLocalEditAtRef = useRef(0)
+  const diaryFullLoadingRef = useRef(false)
 
   useEffect(() => { diaryRef.current = diary }, [diary])
 
@@ -312,12 +317,23 @@ export default function TaskPage() {
 
   // 只加载今日日记（轻量，启动/切回时用）
   const loadDiaryToday = useCallback(async () => {
+    const requestStartedAt = Date.now()
     try {
       const d = await getDiaryToday()
       const todayStr = getTodayStr()
       const td = (d && d.today) ? d.today : { date: '', content: '' }
       setDiary(prev => {
-        const updated = { ...prev, today: { date: td.date || todayStr, content: td.content || '' } }
+        if (diaryLocalEditAtRef.current > requestStartedAt) return prev
+        const updated = normalizeDiaryPayload({
+          ...prev,
+          today: {
+            ...prev.today,
+            ...td,
+            date: td.date || todayStr,
+            content: td.content || ''
+          }
+        })
+        diaryRef.current = updated
         persistDiaryCache(updated)
         return updated
       })
@@ -329,6 +345,9 @@ export default function TaskPage() {
   // 加载完整日记（含归档，进入日记 tab 时懒加载）
   const loadDiary = useCallback(async () => {
     if (archiveLoadedRef.current) return
+    if (diaryFullLoadingRef.current) return
+    diaryFullLoadingRef.current = true
+    const requestStartedAt = Date.now()
     try {
       const d = await getDiary()
       const localDiary = normalizeDiaryPayload(diaryRef.current)
@@ -355,6 +374,9 @@ export default function TaskPage() {
       }
 
       data.archive = mergeDiaryArchiveViewMeta(data.archive, localDiary.archive || [])
+      if (diaryLocalEditAtRef.current > requestStartedAt) {
+        data.today = normalizeDiaryPayload(diaryRef.current).today
+      }
 
       let nextDiary = data
       archiveLoadedRef.current = true
@@ -375,6 +397,7 @@ export default function TaskPage() {
       }
     } finally {
       setDiaryLoading(false)
+      diaryFullLoadingRef.current = false
     }
   }, [applyDiarySnapshot, recordArchiveView, syncViewedArchiveIfNeeded])
 
@@ -414,11 +437,14 @@ export default function TaskPage() {
     const normalized = normalizeDiaryPayload(diaryRef.current)
     persistDiaryCache(normalized)
     // 今日内容或观看记录有变更时，都在切后台时补推一次
-    if (normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
+    if (diaryTodayDirtyRef.current || normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
       const hadDirtyViewMeta = archiveViewDirtyRef.current
+      const hadDirtyToday = diaryTodayDirtyRef.current
       if (hadDirtyViewMeta) archiveViewDirtyRef.current = false
+      if (hadDirtyToday) diaryTodayDirtyRef.current = false
       saveDiary(normalized).catch(() => {
         if (hadDirtyViewMeta) archiveViewDirtyRef.current = true
+        if (hadDirtyToday) diaryTodayDirtyRef.current = true
       })
     }
   })
@@ -433,11 +459,14 @@ export default function TaskPage() {
       }
       const normalized = normalizeDiaryPayload(diaryRef.current)
       persistDiaryCache(normalized)
-      if (normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
+      if (diaryTodayDirtyRef.current || normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
         const hadDirtyViewMeta = archiveViewDirtyRef.current
+        const hadDirtyToday = diaryTodayDirtyRef.current
         if (hadDirtyViewMeta) archiveViewDirtyRef.current = false
+        if (hadDirtyToday) diaryTodayDirtyRef.current = false
         saveDiary(normalized).catch(() => {
           if (hadDirtyViewMeta) archiveViewDirtyRef.current = true
+          if (hadDirtyToday) diaryTodayDirtyRef.current = true
         })
       }
     }
@@ -541,16 +570,22 @@ export default function TaskPage() {
   }
 
   function handleDiaryChange(content) {
-    const updated = { ...diary, today: { date: getTodayStr(), content } }
+    diaryLocalEditAtRef.current = Date.now()
+    diaryTodayDirtyRef.current = true
+    const updated = { ...diaryRef.current, today: { ...diaryRef.current.today, date: getTodayStr(), content } }
+    diaryRef.current = updated
     setDiary(updated)
-    persistDiaryCache(updated)
     if (diaryTimerRef.current) clearTimeout(diaryTimerRef.current)
     diaryTimerRef.current = setTimeout(async () => {
       try {
         setDiarySaving(true)
-        const normalized = normalizeDiaryPayload(updated)
+        const todayPayload = { today: updated.today, archive: [] }
+        const normalized = normalizeDiaryPayload(todayPayload)
         persistDiaryCache(normalized)
         await saveDiary(normalized)
+        if (diaryRef.current?.today?.content === updated.today.content) {
+          diaryTodayDirtyRef.current = false
+        }
       } catch {
         Taro.showToast({ title: '保存失败', icon: 'error' })
       } finally {
@@ -638,7 +673,7 @@ export default function TaskPage() {
   const randomEntry = (randomArchiveIdx !== null && archiveLen > 0) ? diary.archive[randomArchiveIdx] : null
 
   // 历史上的今天标签
-  const today = new Date()
+  const today = new Date(`${getTodayStr()}T12:00:00`)
   const todayMmdd = `${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
   const isHistoryToday = randomEntry && randomEntry.date?.slice(5) === todayMmdd
   const historyLabel = isHistoryToday
