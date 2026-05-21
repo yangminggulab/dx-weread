@@ -18,6 +18,8 @@ data.json
 diary.json
 .backups/
 diary.json.bak-*
+.weread_data.json
+.weread_notes.json
 .weread_read_template.json
 .weread_notes.json.bak-*
 .weread_bridge.json
