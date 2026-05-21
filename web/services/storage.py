@@ -60,7 +60,6 @@ def load_base_app_data():
 
 
 def write_base_app_data(data):
-    backup_file(DATA_FILE, "data")
     write_json_file(DATA_FILE, data)
 
 
@@ -184,7 +183,6 @@ def load_time_data():
 
 
 def write_time_data(data):
-    backup_file(TIME_FILE, "time")
     write_json_file(TIME_FILE, normalize_time_data(data))
 
 
@@ -404,6 +402,22 @@ def has_weread_stats(stats):
     return False
 
 
+def has_weread_brief_stats(section):
+    payload = section if isinstance(section, dict) else {}
+    return any(coerce_int_id(payload.get(field)) > 0 for field in ("baseTime", "readDays", "totalReadTime", "dayAverageReadTime"))
+
+
+def merge_weread_stats(primary, fallback):
+    left = normalize_weread_stats(primary)
+    right = normalize_weread_stats(fallback)
+    return {
+        "monthly": left["monthly"] if has_weread_brief_stats(left["monthly"]) else right["monthly"],
+        "annual": left["annual"] if has_weread_brief_stats(left["annual"]) else right["annual"],
+        "overall": left["overall"] if has_weread_brief_stats(left["overall"]) else right["overall"],
+        "dailyReadTimes": left["dailyReadTimes"] or right["dailyReadTimes"],
+    }
+
+
 def _timestamp_seconds_for_date(date_key):
     try:
         return int(datetime.strptime(date_key, "%Y-%m-%d").timestamp())
@@ -505,7 +519,6 @@ def load_weread_data():
 
 
 def write_weread_data(data):
-    backup_file(WEREAD_DATA_FILE, "weread-data")
     payload = normalize_weread_data(data)
     payload["notes"] = []
     write_json_file(WEREAD_DATA_FILE, payload)
@@ -699,10 +712,11 @@ def merge_app_and_special_data(data, weread, weread_notes_data, time_data=None):
     payload = data if isinstance(data, dict) else {}
     weread_payload = normalize_weread_data(weread)
     weread_notes_payload = normalize_weread_notes_data(weread_notes_data)
-    weread_stats = weread_payload.get("stats") or empty_weread_stats()
-    weread_synced_at = weread_payload.get("syncedAt", "")
-    weread_time = derive_weread_time_fields(weread_stats)
     existing_time = normalize_time_data(time_data if isinstance(time_data, dict) else payload.get("time"))
+    time_weread = existing_time.get("weread") if isinstance(existing_time.get("weread"), dict) else {}
+    weread_stats = merge_weread_stats(weread_payload.get("stats"), time_weread)
+    weread_synced_at = weread_payload.get("syncedAt", "") or time_weread.get("syncedAt", "")
+    weread_time = derive_weread_time_fields(weread_stats)
 
     user_books = [dict(item) for item in (payload.get("books") or []) if isinstance(item, dict) and not is_weread_book(item)]
     user_notes = [dict(item) for item in (payload.get("notes") or []) if isinstance(item, dict) and not is_weread_note(item)]

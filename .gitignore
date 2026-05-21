@@ -11,6 +11,7 @@ miniprogram/.swc/
 # 所有运行时数据（tasks/diary/weread 缓存/备份）
 data/
 local_backups/
+本地备份/
 
 # 遗留文件（旧路径兼容）
 data.json
