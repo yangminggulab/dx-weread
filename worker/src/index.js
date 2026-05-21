@@ -30,27 +30,86 @@ function normalizeArrayItems(value) {
 }
 
 function normalizeWereadStats(stats) {
-  if (!stats || typeof stats !== "object") return { monthly: {}, annual: {}, dailyReadTimes: [] };
+  if (!stats || typeof stats !== "object") return { monthly: {}, annual: {}, overall: {}, dailyReadTimes: [] };
   const daily = Array.isArray(stats.dailyReadTimes)
     ? stats.dailyReadTimes.filter(item => item && item.date && typeof item.seconds === "number")
     : [];
-  return { monthly: stats.monthly || {}, annual: stats.annual || {}, dailyReadTimes: daily };
+  return { monthly: stats.monthly || {}, annual: stats.annual || {}, overall: stats.overall || {}, dailyReadTimes: daily };
+}
+
+function timestampSecondsForDate(dateKey) {
+  const value = Date.parse(`${dateKey}T00:00:00+08:00`);
+  return Number.isFinite(value) ? Math.floor(value / 1000) : 0;
+}
+
+function deriveWereadTimeFields(stats) {
+  const normalized = normalizeWereadStats(stats);
+  const monthKey = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+  }).format(new Date());
+  const weekReadDaily = {};
+  const dailyReadTimes = normalized.dailyReadTimes.map((item) => {
+    const date = String(item.date || "").trim();
+    let timestamp = Number(item.timestamp || 0);
+    if (timestamp > 1e11) timestamp = Math.floor(timestamp / 1000);
+    if (!timestamp && date) timestamp = timestampSecondsForDate(date);
+    const seconds = Math.max(0, Number(item.seconds) || 0);
+    const minutes = Math.round(seconds / 60);
+    if (date.startsWith(monthKey) && minutes > 0 && timestamp) {
+      weekReadDaily[String(timestamp)] = minutes;
+    }
+    return { ...item, timestamp, seconds, minutes };
+  });
+  const weekReadMinutes = Object.values(weekReadDaily).reduce((sum, value) => sum + value, 0);
+  const totalReadDays = Number(
+    normalized.overall?.readDays || normalized.annual?.readDays || normalized.monthly?.readDays || 0,
+  );
+  return { dailyReadTimes, weekReadDaily, weekReadMinutes, totalReadDays };
+}
+
+function buildWereadTimeData(stats, syncedAt = "") {
+  const normalized = normalizeWereadStats(stats);
+  const derived = deriveWereadTimeFields(normalized);
+  return {
+    source: "weread",
+    syncedAt: String(syncedAt || ""),
+    monthly: normalized.monthly || {},
+    annual: normalized.annual || {},
+    overall: normalized.overall || {},
+    dailyReadTimes: derived.dailyReadTimes,
+    weekReadDaily: derived.weekReadDaily,
+    weekReadMinutes: derived.weekReadMinutes,
+    totalReadDays: derived.totalReadDays,
+  };
 }
 
 function normalizeAppData(payload) {
   const data = payload && typeof payload === "object" ? payload : {};
+  const wereadStats = data.wereadStats ? normalizeWereadStats(data.wereadStats) : null;
+  const wereadTime = wereadStats ? buildWereadTimeData(wereadStats, data.wereadSyncedAt) : null;
   const result = {
     tasks:   normalizeArrayItems(data.tasks),
     books:   normalizeArrayItems(data.books),
     notes:   normalizeArrayItems(data.notes),
     updates: normalizeArrayItems(data.updates),
   };
-  if (data.wereadStats)             result.wereadStats      = normalizeWereadStats(data.wereadStats);
-  if (data.weekReadDaily)           result.weekReadDaily    = data.weekReadDaily;
-  if (data.weekReadMinutes != null) result.weekReadMinutes  = data.weekReadMinutes;
-  if (data.totalReadDays   != null) result.totalReadDays    = data.totalReadDays;
+  if (wereadStats)                  result.wereadStats      = wereadStats;
+  if (data.weekReadDaily || wereadTime) result.weekReadDaily = data.weekReadDaily || wereadTime.weekReadDaily;
+  if (data.weekReadMinutes != null || wereadTime) result.weekReadMinutes = data.weekReadMinutes ?? wereadTime.weekReadMinutes;
+  if (data.totalReadDays   != null || wereadTime) result.totalReadDays   = data.totalReadDays ?? wereadTime.totalReadDays;
   if (data.wereadSyncedAt)          result.wereadSyncedAt   = data.wereadSyncedAt;
+  if (data.time || wereadTime)      result.time             = { ...(data.time || {}), ...(wereadTime ? { weread: wereadTime } : {}) };
   return result;
+}
+
+function mergeDataForFullSave(existing, incoming) {
+  const data = incoming && typeof incoming === "object" ? { ...incoming } : {};
+  for (const key of ["wereadStats", "weekReadDaily", "weekReadMinutes", "totalReadDays", "wereadSyncedAt", "time"]) {
+    if (data[key] == null && existing?.[key] != null) data[key] = existing[key];
+  }
+  return data;
 }
 
 function coerceDiaryViewCount(value) {
@@ -445,6 +504,7 @@ async function wrFetchStats(apiKey, cachedMonthly = null) {
   }
   const weekReadMinutes = Object.values(weekReadDaily).reduce((a, b) => a + b, 0);
   const totalReadDays   = Number(overall.readDays || monthly.readDays || 0);
+  const syncedAt = new Date().toISOString();
 
   return {
     wereadStats: {
@@ -460,12 +520,26 @@ async function wrFetchStats(apiKey, cachedMonthly = null) {
         dayAverageReadTime: Number(overall.dayAverageReadTime || 0),
         baseTime: now,
       },
+      overall: {
+        readDays:           Number(overall.readDays           || 0),
+        totalReadTime:      Number(overall.totalReadTime      || 0),
+        dayAverageReadTime: Number(overall.dayAverageReadTime || 0),
+        baseTime: 0,
+      },
       dailyReadTimes,
     },
     weekReadDaily,
     weekReadMinutes,
     totalReadDays,
-    wereadSyncedAt: new Date().toISOString(),
+    wereadSyncedAt: syncedAt,
+    time: {
+      weread: buildWereadTimeData({
+        monthly,
+        annual: overall,
+        overall,
+        dailyReadTimes,
+      }, syncedAt),
+    },
   };
 }
 
@@ -581,7 +655,8 @@ export default {
 
       if (path === "/api/data" && request.method === "POST") {
         const body = await request.json().catch(() => ({}));
-        await saveData(env.TASKS_KV, body);
+        const existing = await loadData(env.TASKS_KV);
+        await saveData(env.TASKS_KV, mergeDataForFullSave(existing, body));
         return json({ ok: true });
       }
 

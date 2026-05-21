@@ -147,9 +147,12 @@ def run_weread_sync(label: str):
 
 def save_combined_data(data):
     migrate_embedded_special_data()
+    current_base = load_base_app_data()
     current_weread = load_weread_data()
     current_weread_notes = load_weread_notes_data()
     user_data, weread_data, weread_notes_data = split_combined_payload(data)
+    if "time" not in data and isinstance(current_base.get("time"), dict):
+        user_data["time"] = current_base["time"]
     write_base_app_data(user_data)
     if has_weread_content(weread_data):
         if "wereadStats" not in data or not has_weread_stats(weread_data.get("stats")):

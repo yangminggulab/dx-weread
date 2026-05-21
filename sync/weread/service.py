@@ -381,6 +381,7 @@ def sync_weread_snapshot(existing_notes_store: dict[str, Any] | None = None) -> 
     _log(f"笔记本概览读取完成：notebook_books={len(notebook_books)}")
     stats = client.call("/readdata/detail", mode="monthly")
     annual_stats = client.call("/readdata/detail", mode="annually", baseTime=int(datetime.now().timestamp()))
+    overall_stats = client.call("/readdata/detail", mode="overall")
     daily_read_times = _normalize_daily_read_times(annual_stats.get("dailyReadTimes"))
     if not daily_read_times:
         daily_read_times = _normalize_daily_read_times(stats.get("readTimes"))
@@ -441,6 +442,7 @@ def sync_weread_snapshot(existing_notes_store: dict[str, Any] | None = None) -> 
         "stats": {
             "monthly": _normalize_readdata_brief(stats),
             "annual": _normalize_readdata_brief(annual_stats),
+            "overall": _normalize_readdata_brief(overall_stats),
             "dailyReadTimes": daily_read_times,
         },
         "summary": {
