@@ -595,6 +595,30 @@ export default function TaskPage() {
     }, 1500)
   }
 
+  function handleDiaryFocus(e) {
+    setDiaryFocused(true)
+    const h = Number(e.detail?.height || 0)
+    if (h > 0) setDiaryKeyboardHeight(h)
+  }
+
+  function handleDiaryBlur() {
+    setDiaryFocused(false)
+    setDiaryKeyboardHeight(0)
+  }
+
+  function finishDiaryEditing() {
+    try {
+      Taro.hideKeyboard({
+        complete: () => {
+          setDiaryFocused(false)
+          setDiaryKeyboardHeight(0)
+        }
+      })
+    } catch {
+      handleDiaryBlur()
+    }
+  }
+
   function openFullscreen(idx) {
     setFullscreenIdx(idx)
     setFsHistory([])
@@ -654,6 +678,7 @@ export default function TaskPage() {
   }
 
   function handleTouchEnd(e) {
+    if (diaryFocused) return
     const t = e.changedTouches[0]
     const dx = t.clientX - touchStartRef.current.x
     const dy = t.clientY - touchStartRef.current.y
@@ -717,7 +742,6 @@ export default function TaskPage() {
       {/* ── 日记 Tab ── */}
       {tab === 'diary' && (
         <View className='diary-page'
-          style={diaryKeyboardHeight > 0 ? { height: `calc(100vh - 340px - ${diaryKeyboardHeight}px)` } : {}}
           onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           {diaryLoading && !diary.today?.date ? (
             <View className='empty'><Text>加载中...</Text></View>
@@ -725,10 +749,15 @@ export default function TaskPage() {
             // key={tab} 让内容在切换回来时重播淡入动画
             <View key='diary-content' className={`diary-content-anim${diaryFocused ? ' diary-editing' : ''}`}>
               {/* 上半：今日日记 */}
-              <View className='diary-section-top card'>
+              <View
+                className='diary-section-top card'
+                style={diaryFocused ? { bottom: `${diaryKeyboardHeight + 12}px` } : {}}
+              >
                 <View className='diary-header'>
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
-                  <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
+                  <Text className={`diary-status${diaryFocused ? ' diary-done' : ''}`} onClick={diaryFocused ? finishDiaryEditing : undefined}>
+                    {diaryFocused ? (diarySaving ? '保存中...' : '完成') : (diarySaving ? '保存中...' : '自动保存')}
+                  </Text>
                 </View>
                 <View className='diary-textarea-scroll'>
                   <Textarea
@@ -736,14 +765,15 @@ export default function TaskPage() {
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
-                    onFocus={() => setDiaryFocused(true)}
-                    onBlur={() => { setDiaryFocused(false); setDiaryKeyboardHeight(0) }}
+                    onFocus={handleDiaryFocus}
+                    onBlur={handleDiaryBlur}
                     onKeyboardHeightChange={e => {
                       const h = Number(e.detail?.height || 0)
                       setDiaryKeyboardHeight(h)
                       if (h === 0) setDiaryFocused(false)
                     }}
                     adjustPosition={false}
+                    fixed
                     cursorSpacing={16}
                     maxlength={10000}
                   />
