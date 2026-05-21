@@ -807,26 +807,16 @@ async function wrFetchStats(apiKey) {
   const monthly = monthlyResult.status === "fulfilled" ? monthlyResult.value : {};
   const overall = overallResult.status === "fulfilled" ? overallResult.value : {};
 
-  // 热力图：18 周的 weekly 数据，每次 6 个并发
-  const weekOffsets = Array.from({ length: 18 }, (_, i) => i * 7 * 86400);
-  const fetchWeek = async (offset) => {
-    try {
-      const d = await wrCall(apiKey, "/readdata/detail", { mode: "weekly", baseTime: now - offset });
-      return d.readTimes || {};
-    } catch { return {}; }
-  };
+  // 热力图：annually 一次拿全年数据，格式 {ts_str: seconds}
+  const annualResult = await wrCall(apiKey, "/readdata/detail", { mode: "annually", baseTime: now }).catch(() => ({}));
+  const rawAnnual = annualResult.dailyReadTimes || annualResult.readTimes || {};
   const dailyMap = {};
-  for (let i = 0; i < weekOffsets.length; i += 6) {
-    const batch = await Promise.all(weekOffsets.slice(i, i + 6).map(fetchWeek));
-    for (const readTimes of batch) {
-      for (const [ts, secs] of Object.entries(readTimes)) {
-        const t = Number(ts);
-        if (!t) continue;
-        const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" })
-          .format(new Date(t > 1e11 ? t : t * 1000));
-        dailyMap[dateKey] = (dailyMap[dateKey] || 0) + Math.max(0, Number(secs) || 0);
-      }
-    }
+  for (const [ts, secs] of Object.entries(rawAnnual)) {
+    const t = Number(ts);
+    if (!t) continue;
+    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" })
+      .format(new Date(t > 1e11 ? t : t * 1000));
+    dailyMap[dateKey] = (dailyMap[dateKey] || 0) + Math.max(0, Number(secs) || 0);
   }
   const dailyReadTimes = Object.entries(dailyMap)
     .map(([date, seconds]) => ({
@@ -1262,7 +1252,15 @@ export default {
       }
 
       if (path === "/api/weread/sync" && request.method === "POST") {
-        return json({ error: CLOUD_WEREAD_MESSAGE, cloudMode: true }, 501);
+        if (!isPersonalAuthorized(request, env))
+          return json({ error: "unauthorized" }, 401);
+        try {
+          await syncWeRead(env);
+          const data = await loadSharedData(env.TASKS_KV);
+          return json({ ok: true, dailyReadTimesCount: data.wereadStats?.dailyReadTimes?.length ?? 0, totalReadDays: data.totalReadDays ?? 0 });
+        } catch (e) {
+          return json({ error: String(e) }, 500);
+        }
       }
 
       return json({ error: "not found" }, 404);

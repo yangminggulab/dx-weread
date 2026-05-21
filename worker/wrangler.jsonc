@@ -21,5 +21,8 @@
   ],
   "triggers": {
     "crons": ["0 * * * *"]
+  },
+  "limits": {
+    "subrequests": 1000
   }
 }
