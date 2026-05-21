@@ -863,21 +863,19 @@ async function syncWeRead(env) {
   if (!apiKey) { console.log("[weread-cron] 跳过：未配置 WEREAD_API_KEY"); return; }
 
   console.log("[weread-cron] 开始同步...");
-  const [shelf, notebookBooks] = await Promise.all([
+  const [shelf, allNotebookBooks] = await Promise.all([
     wrCall(apiKey, "/shelf/sync"),
     wrPageNotebooks(apiKey),
   ]);
+  // 每本笔记 2 个 subrequest（bookmarklist + review），Free 计划上限 50，最多取 20 本
+  const notebookBooks = allNotebookBooks.slice(0, 20);
 
   const rawBooks = (shelf.books || []).filter((b) => b && typeof b === "object");
   console.log(`[weread-cron] 书架 ${rawBooks.length} 本，笔记本 ${notebookBooks.length} 本`);
 
-  const progressList = await runBatched(rawBooks, 6, (b) => wrFetchProgress(apiKey, b));
-  const progressMap = Object.fromEntries(
-    rawBooks.map((b, i) => [String(b.bookId || "").trim(), progressList[i]])
-  );
-
+  // 跳过单本 progress API（每本 1 个 subrequest，Free 计划上限 50 不够用）
   const books = rawBooks
-    .map((b) => wrNormalizeBook(b, progressMap[String(b.bookId || "").trim()]))
+    .map((b) => wrNormalizeBook(b, {}))
     .sort((a, b) => (b.readTimestamp || 0) - (a.readTimestamp || 0));
 
   const noteLists = await runBatched(notebookBooks, 4, (b) => wrFetchNotes(apiKey, b));
