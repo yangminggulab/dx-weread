@@ -543,7 +543,6 @@ export default function TaskPage() {
   function handleDiaryChange(content) {
     const updated = { ...diary, today: { date: getTodayStr(), content } }
     setDiary(updated)
-    persistDiaryCache(updated)
     if (diaryTimerRef.current) clearTimeout(diaryTimerRef.current)
     diaryTimerRef.current = setTimeout(async () => {
       try {
