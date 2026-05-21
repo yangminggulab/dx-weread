@@ -45,7 +45,7 @@ jobs:
           node-version: "20"
 
       - name: Install Node dependencies
-        run: npm --prefix web install
+        run: npm --prefix worker install
 
       - name: Worker syntax check
-        run: npm --prefix web run check:worker
+        run: npm --prefix worker run check:worker

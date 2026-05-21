@@ -1,11 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const rootDir = path.join(__dirname, '..');
-const dashboardPath = path.join(rootDir, 'dashboard.html');
+const workerDir = path.join(__dirname, '..');
+const dashboardPath = path.join(__dirname, '../../web/dashboard.html');
 const staleFiles = [
-  path.join(rootDir, 'public/tasks/index.html'),
-  path.join(rootDir, 'src/dashboard.js'),
+  path.join(workerDir, 'public/tasks/index.html'),
+  path.join(workerDir, 'src/dashboard.js'),
 ];
 
 if (!fs.existsSync(dashboardPath)) {
