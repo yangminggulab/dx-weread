@@ -795,6 +795,67 @@ async function runBatched(items, batchSize, fn) {
   return results;
 }
 
+async function wrFetchStats(apiKey) {
+  const now = Math.floor(Date.now() / 1000);
+  const [monthlyResult, annualResult] = await Promise.allSettled([
+    wrCall(apiKey, "/readdata/detail", { mode: "monthly" }),
+    wrCall(apiKey, "/readdata/detail", { mode: "annually", baseTime: now }),
+  ]);
+  const monthly = monthlyResult.status === "fulfilled" ? monthlyResult.value : {};
+  const annual  = annualResult.status  === "fulfilled" ? annualResult.value  : {};
+
+  // 年度数据用 dailyReadTimes，月度数据用 readTimes，格式都是 {ts_str: seconds}
+  const rawTimes = annual.dailyReadTimes || monthly.readTimes || {};
+
+  // 热力图用：按日期聚合，{date, timestamp, seconds}[]
+  const dateMap = {};
+  for (const [ts, secs] of Object.entries(rawTimes)) {
+    const t = Number(ts);
+    if (!t) continue;
+    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" })
+      .format(new Date(t > 1e11 ? t : t * 1000));
+    dateMap[dateKey] = (dateMap[dateKey] || 0) + Math.max(0, Number(secs) || 0);
+  }
+  const dailyReadTimes = Object.entries(dateMap)
+    .map(([date, seconds]) => ({
+      date,
+      timestamp: Math.floor(new Date(`${date}T00:00:00+08:00`).getTime() / 1000),
+      seconds,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // 小程序阅读环用：{ts_str: minutes}，用月度 readTimes
+  const weekReadDaily = {};
+  for (const [ts, secs] of Object.entries(monthly.readTimes || {})) {
+    const mins = Math.round(Number(secs) / 60);
+    if (mins > 0) weekReadDaily[ts] = mins;
+  }
+  const weekReadMinutes = Object.values(weekReadDaily).reduce((a, b) => a + b, 0);
+  const totalReadDays   = Number(annual.readDays || monthly.readDays || 0);
+
+  return {
+    wereadStats: {
+      monthly: {
+        readDays:           Number(monthly.readDays           || 0),
+        totalReadTime:      Number(monthly.totalReadTime      || 0),
+        dayAverageReadTime: Number(monthly.dayAverageReadTime || 0),
+        baseTime: now,
+      },
+      annual: {
+        readDays:           Number(annual.readDays           || 0),
+        totalReadTime:      Number(annual.totalReadTime      || 0),
+        dayAverageReadTime: Number(annual.dayAverageReadTime || 0),
+        baseTime: now,
+      },
+      dailyReadTimes,
+    },
+    weekReadDaily,
+    weekReadMinutes,
+    totalReadDays,
+    wereadSyncedAt: new Date().toISOString(),
+  };
+}
+
 async function syncWeRead(env) {
   const apiKey = String(env.WEREAD_API_KEY || "").trim();
   if (!apiKey) { console.log("[weread-cron] 跳过：未配置 WEREAD_API_KEY"); return; }
@@ -824,19 +885,26 @@ async function syncWeRead(env) {
 
   console.log(`[weread-cron] 同步完成：books=${books.length} notes=${allNotes.length}`);
 
+  const stats = await wrFetchStats(apiKey).catch((e) => {
+    console.error(`[weread-cron] 阅读统计获取失败：${e}`);
+    return null;
+  });
+
   const existing = await loadSharedData(env.TASKS_KV);
   await saveSharedData(env.TASKS_KV, {
-    tasks:           (existing.tasks || []).filter((t) => t && typeof t === "object"),
-    books:           [...(existing.books || []).filter((b) => b?.source !== "weread"), ...books],
-    notes:           [...(existing.notes || []).filter((n) => n?.source !== "weread"), ...allNotes],
-    updates:         (existing.updates || []).filter((u) => u?.type !== "weread"),
-    wereadStats:     existing.wereadStats,
-    weekReadMinutes: existing.weekReadMinutes,
-    weekReadDaily:   existing.weekReadDaily,
-    totalReadDays:   existing.totalReadDays,
-    wereadSyncedAt:  existing.wereadSyncedAt,
+    tasks:   (existing.tasks  || []).filter((t) => t && typeof t === "object"),
+    books:   [...(existing.books  || []).filter((b) => b?.source !== "weread"), ...books],
+    notes:   [...(existing.notes  || []).filter((n) => n?.source !== "weread"), ...allNotes],
+    updates: (existing.updates || []).filter((u) => u?.type !== "weread"),
+    ...(stats ?? {
+      wereadStats:     existing.wereadStats,
+      weekReadMinutes: existing.weekReadMinutes,
+      weekReadDaily:   existing.weekReadDaily,
+      totalReadDays:   existing.totalReadDays,
+      wereadSyncedAt:  existing.wereadSyncedAt,
+    }),
   });
-  console.log("[weread-cron] ✅ 已写入 KV");
+  console.log(`[weread-cron] ✅ 已写入 KV${stats ? `（热力图 ${stats.wereadStats.dailyReadTimes.length} 天，本月 ${stats.weekReadMinutes} 分钟）` : "（统计跳过）"}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
