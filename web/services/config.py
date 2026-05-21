@@ -6,14 +6,15 @@ import os
 
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+DATA_DIR = os.path.join(ROOT_DIR, "data")
 
-DATA_FILE = os.path.join(ROOT_DIR, "data.json")
-DIARY_FILE = os.path.join(ROOT_DIR, "diary.json")
-BACKUP_DIR = os.path.join(ROOT_DIR, ".backups")
-RESET_FLAG_FILE = os.path.join(ROOT_DIR, ".daily_reset_date")
+DATA_FILE = os.path.join(DATA_DIR, "tasks.json")
+DIARY_FILE = os.path.join(DATA_DIR, "diary.json")
+BACKUP_DIR = os.path.join(DATA_DIR, ".backups")
+RESET_FLAG_FILE = os.path.join(DATA_DIR, ".daily_reset_date")
 ENV_FILE = os.path.join(ROOT_DIR, ".env")
-WEREAD_DATA_FILE = os.path.join(ROOT_DIR, ".weread_data.json")
-WEREAD_NOTES_FILE = os.path.join(ROOT_DIR, ".weread_notes.json")
+WEREAD_DATA_FILE = os.path.join(DATA_DIR, "weread_data.json")
+WEREAD_NOTES_FILE = os.path.join(DATA_DIR, "weread_notes.json")
 
 BOOK_ACCENTS = ["#2d6a4f", "#4a4a6a", "#6a4a2a", "#3a6a5a", "#5a3a6a"]
 LOCAL_BRIDGE_ALLOWED_ORIGINS = {

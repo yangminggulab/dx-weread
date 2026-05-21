@@ -45,7 +45,7 @@ def normalize_base_url(raw: str) -> str:
 
 
 def push_diary(base_url: str, token: str) -> dict:
-    diary_path = Path(__file__).parent.parent / "diary.json"
+    diary_path = Path(__file__).parent.parent / "data" / "diary.json"
     if not diary_path.exists():
         raise FileNotFoundError(f"找不到 diary.json：{diary_path}")
 

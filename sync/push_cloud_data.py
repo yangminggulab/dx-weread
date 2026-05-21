@@ -34,7 +34,11 @@ def load_env_file():
 
 load_env_file()
 
-import server
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
+sys.path.insert(0, str(_ROOT / "web"))
+
+from services.storage import load_app_data
 
 
 def normalize_base_url(raw: str) -> str:
@@ -45,7 +49,7 @@ def normalize_base_url(raw: str) -> str:
 
 
 def push_cloud_data(base_url: str, token: str) -> dict:
-    payload = server.load_app_data()
+    payload = load_app_data()
     endpoint = urljoin(base_url, "api/data")
     headers = {
         "Content-Type": "application/json",

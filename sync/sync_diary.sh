@@ -4,7 +4,7 @@ set -e
 
 API_TOKEN="yhRvd9AGngE6Q2KvbQkP2aJMwDHVyFeChzsZJ7yo8S4"
 CLOUD="https://yangminggu.com/tasks"
-DIARY_FILE="$(dirname "$0")/diary.json"
+DIARY_FILE="$(dirname "$0")/../data/diary.json"
 
 echo "📥 Step 1: 从云端拉取日记..."
 CLOUD_DIARY=$(curl -s "$CLOUD/api/diary" -H "Authorization: Bearer $API_TOKEN")
