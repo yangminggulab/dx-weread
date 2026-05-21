@@ -29,9 +29,11 @@ from services.storage import (
     has_weread_stats,
     load_app_data,
     load_base_app_data,
+    load_time_data,
     load_weread_data,
     load_weread_notes_data,
     merge_app_and_special_data,
+    merge_time_data,
     merge_weread_store,
     migrate_embedded_special_data,
     normalize_weread_note,
@@ -41,6 +43,7 @@ from services.storage import (
     pick_book_accent,
     split_combined_payload,
     write_base_app_data,
+    write_time_data,
     write_weread_data,
     write_weread_notes_data,
 )
@@ -114,6 +117,7 @@ def persist_weread_sync_payload(payload):
     notes_store = normalize_weread_notes_data({"notes": payload.get("notes", []), "meta": payload.get("notesMeta", {})})
     write_weread_data(merged)
     write_weread_notes_data(notes_store)
+    write_time_data(merge_time_data(load_time_data(), merged.get("stats"), merged.get("syncedAt", "")))
     return {
         "books": len(payload.get("books") or []),
         "notes": len(payload.get("notes") or []),
@@ -136,6 +140,7 @@ def run_weread_sync(label: str):
         load_base_app_data(),
         payload,
         {"notes": payload.get("notes", []), "meta": payload.get("notesMeta", {})},
+        load_time_data(),
     )
     cloud_result = push_to_cloud_sync(label, app_data=cloud_app_data)
     print(
@@ -147,13 +152,12 @@ def run_weread_sync(label: str):
 
 def save_combined_data(data):
     migrate_embedded_special_data()
-    current_base = load_base_app_data()
     current_weread = load_weread_data()
     current_weread_notes = load_weread_notes_data()
     user_data, weread_data, weread_notes_data = split_combined_payload(data)
-    if "time" not in data and isinstance(current_base.get("time"), dict):
-        user_data["time"] = current_base["time"]
     write_base_app_data(user_data)
+    if isinstance(data.get("time"), dict):
+        write_time_data(data.get("time"))
     if has_weread_content(weread_data):
         if "wereadStats" not in data or not has_weread_stats(weread_data.get("stats")):
             weread_data["stats"] = current_weread.get("stats", empty_weread_stats())

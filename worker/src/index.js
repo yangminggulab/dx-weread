@@ -32,9 +32,37 @@ function normalizeArrayItems(value) {
 function normalizeWereadStats(stats) {
   if (!stats || typeof stats !== "object") return { monthly: {}, annual: {}, overall: {}, dailyReadTimes: [] };
   const daily = Array.isArray(stats.dailyReadTimes)
-    ? stats.dailyReadTimes.filter(item => item && item.date && typeof item.seconds === "number")
+    ? stats.dailyReadTimes
+        .filter(item => item && item.date && Number.isFinite(Number(item.seconds)))
+        .map(item => ({ ...item, seconds: Math.max(0, Number(item.seconds) || 0) }))
     : [];
   return { monthly: stats.monthly || {}, annual: stats.annual || {}, overall: stats.overall || {}, dailyReadTimes: daily };
+}
+
+function hasWereadBriefStats(section) {
+  if (!section || typeof section !== "object") return false;
+  return ["baseTime", "readDays", "totalReadTime", "dayAverageReadTime"].some((key) => Number(section[key]) > 0);
+}
+
+function hasWereadStatsData(stats) {
+  const normalized = normalizeWereadStats(stats);
+  return Boolean(
+    normalized.dailyReadTimes.length
+    || hasWereadBriefStats(normalized.monthly)
+    || hasWereadBriefStats(normalized.annual)
+    || hasWereadBriefStats(normalized.overall)
+  );
+}
+
+function mergeWereadStats(primary, fallback) {
+  const p = normalizeWereadStats(primary);
+  const f = normalizeWereadStats(fallback);
+  return {
+    monthly: hasWereadBriefStats(p.monthly) ? p.monthly : f.monthly,
+    annual: hasWereadBriefStats(p.annual) ? p.annual : f.annual,
+    overall: hasWereadBriefStats(p.overall) ? p.overall : f.overall,
+    dailyReadTimes: p.dailyReadTimes.length ? p.dailyReadTimes : f.dailyReadTimes,
+  };
 }
 
 function timestampSecondsForDate(dateKey) {
@@ -87,19 +115,24 @@ function buildWereadTimeData(stats, syncedAt = "") {
 
 function normalizeAppData(payload) {
   const data = payload && typeof payload === "object" ? payload : {};
-  const wereadStats = data.wereadStats ? normalizeWereadStats(data.wereadStats) : null;
-  const wereadTime = wereadStats ? buildWereadTimeData(wereadStats, data.wereadSyncedAt) : null;
+  const timeWeread = data.time && typeof data.time === "object" && data.time.weread && typeof data.time.weread === "object"
+    ? data.time.weread
+    : null;
+  const wereadStats = mergeWereadStats(data.wereadStats, timeWeread);
+  const hasWereadStats = hasWereadStatsData(wereadStats);
+  const wereadSyncedAt = data.wereadSyncedAt || timeWeread?.syncedAt || "";
+  const wereadTime = hasWereadStats ? buildWereadTimeData(wereadStats, wereadSyncedAt) : null;
   const result = {
     tasks:   normalizeArrayItems(data.tasks),
     books:   normalizeArrayItems(data.books),
     notes:   normalizeArrayItems(data.notes),
     updates: normalizeArrayItems(data.updates),
   };
-  if (wereadStats)                  result.wereadStats      = wereadStats;
+  if (hasWereadStats)               result.wereadStats      = wereadStats;
   if (data.weekReadDaily || wereadTime) result.weekReadDaily = data.weekReadDaily || wereadTime.weekReadDaily;
   if (data.weekReadMinutes != null || wereadTime) result.weekReadMinutes = data.weekReadMinutes ?? wereadTime.weekReadMinutes;
   if (data.totalReadDays   != null || wereadTime) result.totalReadDays   = data.totalReadDays ?? wereadTime.totalReadDays;
-  if (data.wereadSyncedAt)          result.wereadSyncedAt   = data.wereadSyncedAt;
+  if (wereadSyncedAt)               result.wereadSyncedAt   = wereadSyncedAt;
   if (data.time || wereadTime)      result.time             = { ...(data.time || {}), ...(wereadTime ? { weread: wereadTime } : {}) };
   return result;
 }

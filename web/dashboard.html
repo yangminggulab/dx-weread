@@ -193,6 +193,24 @@ const cloneWereadStats = (stats) => ({
   annual: { ...EMPTY_WEREAD_STATS.annual, ...(stats?.annual || {}) },
   dailyReadTimes: Array.isArray(stats?.dailyReadTimes) ? stats.dailyReadTimes : [],
 });
+const hasWereadBriefStats = (section) =>
+  Boolean(section && ['baseTime', 'readDays', 'totalReadTime', 'dayAverageReadTime'].some(key => Number(section[key]) > 0));
+const mergeWereadStats = (primary, fallback) => {
+  const p = cloneWereadStats(primary);
+  const f = cloneWereadStats(fallback);
+  return {
+    monthly: hasWereadBriefStats(p.monthly) ? p.monthly : f.monthly,
+    annual: hasWereadBriefStats(p.annual) ? p.annual : f.annual,
+    dailyReadTimes: p.dailyReadTimes.length > 0 ? p.dailyReadTimes : f.dailyReadTimes,
+  };
+};
+const getWereadMetaFromPayload = (payload={}) => {
+  const timeWeread = payload?.time?.weread && typeof payload.time.weread === 'object' ? payload.time.weread : null;
+  return {
+    stats: mergeWereadStats(payload?.wereadStats, timeWeread),
+    syncedAt: payload?.wereadSyncedAt || timeWeread?.syncedAt || '',
+  };
+};
 const formatLocalDateKey = (date) => {
   if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
   const y = date.getFullYear();
@@ -1210,10 +1228,7 @@ function App() {
     setBooks(b);
     setNotes(n);
     setUpdates(u);
-    setWereadMeta({
-      stats: cloneWereadStats(d.wereadStats),
-      syncedAt: d.wereadSyncedAt || '',
-    });
+    setWereadMeta(getWereadMetaFromPayload(d));
     uid.current  = Math.max(0, ...t.map(x=>x.id)) + 1;
     puid.current = Math.max(0, ...b.map(x=>x.id)) + 1;
     nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;
@@ -1242,10 +1257,7 @@ function App() {
         setBooks(b);
         setNotes(n);
         setUpdates(u);
-        setWereadMeta({
-          stats: cloneWereadStats(hasSrv ? data.wereadStats : null),
-          syncedAt: hasSrv ? (data.wereadSyncedAt || '') : '',
-        });
+        setWereadMeta(hasSrv ? getWereadMetaFromPayload(data) : { stats: cloneWereadStats(), syncedAt: '' });
         uid.current  = Math.max(0, ...t.map(x=>x.id)) + 1;
         puid.current = Math.max(0, ...b.map(x=>x.id)) + 1;
         nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;

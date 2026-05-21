@@ -7,7 +7,7 @@ import json
 import math
 import os
 
-from services.config import BACKUP_DIR, BOOK_ACCENTS, DATA_FILE, DIARY_FILE, WEREAD_DATA_FILE, WEREAD_NOTES_FILE
+from services.config import BACKUP_DIR, BOOK_ACCENTS, DATA_FILE, DIARY_FILE, TIME_FILE, WEREAD_DATA_FILE, WEREAD_NOTES_FILE
 
 
 def load_json_file(path, default):
@@ -60,7 +60,6 @@ def load_base_app_data():
 
 
 def write_base_app_data(data):
-    backup_file(DATA_FILE, "data")
     write_json_file(DATA_FILE, data)
 
 
@@ -152,8 +151,39 @@ def load_diary_file():
 
 
 def write_diary_file(diary):
-    backup_file(DIARY_FILE, "diary")
+    backup_file(DIARY_FILE, "diary", keep=1)
     write_json_file(DIARY_FILE, _normalize_diary(diary))
+
+
+def empty_time_data():
+    return {}
+
+
+def normalize_time_data(data):
+    payload = data if isinstance(data, dict) else {}
+    result = dict(payload)
+    if "weread" in result:
+        weread = result.get("weread") if isinstance(result.get("weread"), dict) else {}
+        result["weread"] = {
+            "source": "weread",
+            "syncedAt": str(weread.get("syncedAt", "")).strip(),
+            "monthly": normalize_weread_stats({"monthly": weread.get("monthly")}).get("monthly", {}),
+            "annual": normalize_weread_stats({"annual": weread.get("annual")}).get("annual", {}),
+            "overall": normalize_weread_stats({"overall": weread.get("overall")}).get("overall", {}),
+            "dailyReadTimes": normalize_weread_stats({"dailyReadTimes": weread.get("dailyReadTimes")}).get("dailyReadTimes", []),
+            "weekReadDaily": weread.get("weekReadDaily") if isinstance(weread.get("weekReadDaily"), dict) else {},
+            "weekReadMinutes": coerce_int_id(weread.get("weekReadMinutes")),
+            "totalReadDays": coerce_int_id(weread.get("totalReadDays")),
+        }
+    return result
+
+
+def load_time_data():
+    return normalize_time_data(load_json_file(TIME_FILE, empty_time_data()))
+
+
+def write_time_data(data):
+    write_json_file(TIME_FILE, normalize_time_data(data))
 
 
 def effective_diary_date():
@@ -372,6 +402,22 @@ def has_weread_stats(stats):
     return False
 
 
+def has_weread_brief_stats(section):
+    payload = section if isinstance(section, dict) else {}
+    return any(coerce_int_id(payload.get(field)) > 0 for field in ("baseTime", "readDays", "totalReadTime", "dayAverageReadTime"))
+
+
+def merge_weread_stats(primary, fallback):
+    left = normalize_weread_stats(primary)
+    right = normalize_weread_stats(fallback)
+    return {
+        "monthly": left["monthly"] if has_weread_brief_stats(left["monthly"]) else right["monthly"],
+        "annual": left["annual"] if has_weread_brief_stats(left["annual"]) else right["annual"],
+        "overall": left["overall"] if has_weread_brief_stats(left["overall"]) else right["overall"],
+        "dailyReadTimes": left["dailyReadTimes"] or right["dailyReadTimes"],
+    }
+
+
 def _timestamp_seconds_for_date(date_key):
     try:
         return int(datetime.strptime(date_key, "%Y-%m-%d").timestamp())
@@ -473,7 +519,6 @@ def load_weread_data():
 
 
 def write_weread_data(data):
-    backup_file(WEREAD_DATA_FILE, "weread-data")
     payload = normalize_weread_data(data)
     payload["notes"] = []
     write_json_file(WEREAD_DATA_FILE, payload)
@@ -484,7 +529,7 @@ def load_weread_notes_data():
 
 
 def write_weread_notes_data(data):
-    backup_file(WEREAD_NOTES_FILE, "weread-notes")
+    backup_file(WEREAD_NOTES_FILE, "weread-notes", keep=1)
     write_json_file(WEREAD_NOTES_FILE, normalize_weread_notes_data(data))
 
 
@@ -526,7 +571,7 @@ def split_combined_payload(data):
     books = [item for item in (payload.get("books") or []) if isinstance(item, dict)]
     notes = [item for item in (payload.get("notes") or []) if isinstance(item, dict)]
     updates = [item for item in (payload.get("updates") or []) if isinstance(item, dict)]
-    special_keys = {"books", "notes", "updates", "wereadStats", "wereadSyncedAt", "weekReadDaily", "weekReadMinutes", "totalReadDays"}
+    special_keys = {"books", "notes", "updates", "wereadStats", "wereadSyncedAt", "weekReadDaily", "weekReadMinutes", "totalReadDays", "time"}
 
     user_data = {
         **{key: value for key, value in payload.items() if key not in special_keys},
@@ -663,12 +708,14 @@ def merge_weread_notes_store(existing, incoming):
     }
 
 
-def merge_app_and_special_data(data, weread, weread_notes_data):
+def merge_app_and_special_data(data, weread, weread_notes_data, time_data=None):
     payload = data if isinstance(data, dict) else {}
     weread_payload = normalize_weread_data(weread)
     weread_notes_payload = normalize_weread_notes_data(weread_notes_data)
-    weread_stats = weread_payload.get("stats") or empty_weread_stats()
-    weread_synced_at = weread_payload.get("syncedAt", "")
+    existing_time = normalize_time_data(time_data if isinstance(time_data, dict) else payload.get("time"))
+    time_weread = existing_time.get("weread") if isinstance(existing_time.get("weread"), dict) else {}
+    weread_stats = merge_weread_stats(weread_payload.get("stats"), time_weread)
+    weread_synced_at = weread_payload.get("syncedAt", "") or time_weread.get("syncedAt", "")
     weread_time = derive_weread_time_fields(weread_stats)
 
     user_books = [dict(item) for item in (payload.get("books") or []) if isinstance(item, dict) and not is_weread_book(item)]
@@ -708,7 +755,7 @@ def merge_app_and_special_data(data, weread, weread_notes_data):
         "weekReadDaily": weread_time["weekReadDaily"],
         "weekReadMinutes": weread_time["weekReadMinutes"],
         "totalReadDays": weread_time["totalReadDays"],
-        "time": merge_time_data(payload.get("time"), weread_stats, weread_synced_at),
+        "time": merge_time_data(existing_time, weread_stats, weread_synced_at),
     }
 
 
@@ -717,6 +764,9 @@ def migrate_embedded_special_data():
     existing_weread = load_weread_data()
     existing_weread_notes = load_weread_notes_data()
     cleaned_base, embedded_weread, embedded_weread_notes = split_combined_payload(base)
+
+    if isinstance(base.get("time"), dict):
+        write_time_data({**load_time_data(), **normalize_time_data(base.get("time"))})
 
     stored_weread_notes = normalize_weread_notes_data({"notes": existing_weread.get("notes") or []})
     if has_weread_notes_content(stored_weread_notes) or has_weread_notes_content(embedded_weread_notes):
@@ -738,4 +788,4 @@ def migrate_embedded_special_data():
 
 def load_app_data():
     migrate_embedded_special_data()
-    return merge_app_and_special_data(load_base_app_data(), load_weread_data(), load_weread_notes_data())
+    return merge_app_and_special_data(load_base_app_data(), load_weread_data(), load_weread_notes_data(), load_time_data())
