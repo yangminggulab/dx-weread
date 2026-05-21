@@ -25,6 +25,8 @@ jobs:
       - name: Flask smoke check
         run: |
           python - <<'PY'
+          import sys
+          sys.path.insert(0, 'web')
           import server
 
           client = server.app.test_client()
@@ -43,10 +45,7 @@ jobs:
           node-version: "20"
 
       - name: Install Node dependencies
-        run: npm install
+        run: npm --prefix web install
 
-      - name: Chrome extension syntax check
-        run: |
-          node --check chrome-extension/weread-sync/background.js
-          node --check chrome-extension/weread-sync/popup.js
-          npm run check:worker
+      - name: Worker syntax check
+        run: npm --prefix web run check:worker
