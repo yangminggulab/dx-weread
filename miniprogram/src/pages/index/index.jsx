@@ -692,17 +692,20 @@ export default function TaskPage() {
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
                   <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
                 </View>
-                <Textarea
-                  className='diary-textarea'
-                  placeholder='今天发生了什么...'
-                  value={diary.today?.content || ''}
-                  onInput={e => handleDiaryChange(e.detail.value)}
-                  onFocus={() => setDiaryFocused(true)}
-                  onBlur={() => setDiaryFocused(false)}
-                  adjustPosition
-                  showConfirmBar={false}
-                  maxlength={10000}
-                />
+                <ScrollView scrollY className='diary-textarea-scroll'>
+                  <Textarea
+                    className='diary-textarea'
+                    placeholder='今天发生了什么...'
+                    value={diary.today?.content || ''}
+                    onInput={e => handleDiaryChange(e.detail.value)}
+                    onFocus={() => setDiaryFocused(true)}
+                    onBlur={() => setDiaryFocused(false)}
+                    autoHeight
+                    adjustPosition={false}
+                    showConfirmBar={false}
+                    maxlength={10000}
+                  />
+                </ScrollView>
               </View>
 
               {/* 下半：历史上的今天 / 往期日记 */}
