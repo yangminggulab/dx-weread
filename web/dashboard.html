@@ -605,15 +605,15 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
 
   return (
     <section>
-      <SectionHead
-        title="今日聚焦"
-        sub={`${dateStr} · ${focus.length} 项待处理`}
-      />
       <div className="grid md:grid-cols-2 gap-4 items-stretch" style={{minHeight:'200px'}}>
-        {/* 左栏：今日任务（紧凑行） */}
-        <div className="bg-white rounded-2xl border border-[#e8e4dc] overflow-hidden">
+        {/* 左栏：今日聚焦 */}
+        <div className="bg-white rounded-2xl border border-[#e8e4dc] overflow-hidden flex flex-col">
+          <div className="px-4 py-3 border-b border-[#f0ede8] flex items-center justify-between shrink-0">
+            <span className="serif text-sm font-semibold text-[#1c1c1c]">今日聚焦</span>
+            <span className="text-xs text-[#bbb]">{dateStr} · {focus.length} 项待处理</span>
+          </div>
           {focus.length === 0 ? (
-            <div className="p-8 text-center text-[#ccc] text-sm">今日无待处理任务，好好休息 ☕</div>
+            <div className="flex-1 flex items-center justify-center text-[#ccc] text-sm">今日无待处理任务，好好休息 ☕</div>
           ) : (
             focus.map((task, i) => {
               const near = isNear(task.deadline), over = isOver(task.deadline, task.status);
@@ -637,14 +637,14 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
           )}
         </div>
 
-        {/* 右栏：今日日记（与左栏等高） */}
-        <div className="bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col">
-          <div className="flex items-center justify-between mb-2">
+        {/* 右栏：今日日记 */}
+        <div className="bg-white rounded-2xl border border-[#e8e4dc] overflow-hidden flex flex-col">
+          <div className="px-4 py-3 border-b border-[#f0ede8] flex items-center justify-between shrink-0">
             <span className="serif text-sm font-semibold text-[#1c1c1c]">今日日记</span>
             <span className="text-xs text-[#bbb]">{diarySaving ? '保存中...' : (todayContent ? '已自动保存' : '')}</span>
           </div>
           <textarea
-            className="flex-1 resize-none text-sm text-[#1c1c1c] leading-relaxed placeholder-[#ccc] bg-transparent border-none outline-none"
+            className="flex-1 resize-none text-sm text-[#1c1c1c] leading-relaxed placeholder-[#ccc] bg-transparent border-none outline-none p-4"
             placeholder="今天发生了什么，记录下来..."
             value={todayContent}
             onChange={e => onDiaryChange(e.target.value)}
