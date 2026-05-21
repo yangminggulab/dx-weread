@@ -795,13 +795,13 @@ async function runBatched(items, batchSize, fn) {
   return results;
 }
 
-async function wrFetchStats(apiKey) {
+async function wrFetchStats(apiKey, cachedMonthly = null) {
   const now = Math.floor(Date.now() / 1000);
 
-  // monthly: weekReadDaily / weekReadMinutes 来源
+  // monthly: weekReadDaily / weekReadMinutes 来源（activity check 已拉过就直接复用）
   // overall: totalReadDays（累计）
   const [monthlyResult, overallResult] = await Promise.allSettled([
-    wrCall(apiKey, "/readdata/detail", { mode: "monthly" }),
+    cachedMonthly ? Promise.resolve(cachedMonthly) : wrCall(apiKey, "/readdata/detail", { mode: "monthly" }),
     wrCall(apiKey, "/readdata/detail", { mode: "overall" }),
   ]);
   const monthly = monthlyResult.status === "fulfilled" ? monthlyResult.value : {};
@@ -858,11 +858,33 @@ async function wrFetchStats(apiKey) {
   };
 }
 
+async function wrActivityChanged(apiKey, kv) {
+  const snapshotRaw = await kv.get("weread_activity_snapshot");
+  let snapshot = null;
+  try { snapshot = snapshotRaw ? JSON.parse(snapshotRaw) : null; } catch { /* ignore */ }
+
+  const monthly = await wrCall(apiKey, "/readdata/detail", { mode: "monthly" }).catch(() => null);
+  if (!monthly) return true; // 拉不到就保守地认为有变化
+
+  const curTime = Number(monthly.totalReadTime || 0);
+  const curDays = Number(monthly.readDays || 0);
+  if (!snapshot || curTime !== snapshot.monthlyReadTime || curDays !== snapshot.monthlyReadDays) {
+    return { changed: true, monthly };
+  }
+  return { changed: false };
+}
+
 async function syncWeRead(env) {
   const apiKey = String(env.WEREAD_API_KEY || "").trim();
   if (!apiKey) { console.log("[weread-cron] 跳过：未配置 WEREAD_API_KEY"); return; }
 
-  console.log("[weread-cron] 开始同步...");
+  const activityCheck = await wrActivityChanged(apiKey, env.TASKS_KV).catch(() => ({ changed: true }));
+  if (!activityCheck.changed) {
+    console.log("[weread-cron] 跳过：本月阅读数据无变化");
+    return;
+  }
+
+  console.log("[weread-cron] 检测到新活动，开始同步...");
   const [shelf, allNotebookBooks] = await Promise.all([
     wrCall(apiKey, "/shelf/sync"),
     wrPageNotebooks(apiKey),
@@ -885,7 +907,7 @@ async function syncWeRead(env) {
 
   console.log(`[weread-cron] 同步完成：books=${books.length} notes=${allNotes.length}`);
 
-  const stats = await wrFetchStats(apiKey).catch((e) => {
+  const stats = await wrFetchStats(apiKey, activityCheck.monthly).catch((e) => {
     console.error(`[weread-cron] 阅读统计获取失败：${e}`);
     return null;
   });
@@ -904,6 +926,13 @@ async function syncWeRead(env) {
       wereadSyncedAt:  existing.wereadSyncedAt,
     }),
   });
+
+  if (stats) {
+    await env.TASKS_KV.put("weread_activity_snapshot", JSON.stringify({
+      monthlyReadTime: stats.wereadStats.monthly.totalReadTime,
+      monthlyReadDays: stats.wereadStats.monthly.readDays,
+    }));
+  }
   console.log(`[weread-cron] ✅ 已写入 KV${stats ? `（热力图 ${stats.wereadStats.dailyReadTimes.length} 天，本月 ${stats.weekReadMinutes} 分钟）` : "（统计跳过）"}`);
 }
 
