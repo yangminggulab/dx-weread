@@ -798,25 +798,31 @@ async function runBatched(items, batchSize, fn) {
 async function wrFetchStats(apiKey, cachedMonthly = null) {
   const now = Math.floor(Date.now() / 1000);
 
-  // monthly: weekReadDaily / weekReadMinutes 来源（activity check 已拉过就直接复用）
-  // overall: totalReadDays（累计）
-  const [monthlyResult, overallResult] = await Promise.allSettled([
-    cachedMonthly ? Promise.resolve(cachedMonthly) : wrCall(apiKey, "/readdata/detail", { mode: "monthly" }),
-    wrCall(apiKey, "/readdata/detail", { mode: "overall" }),
-  ]);
-  const monthly = monthlyResult.status === "fulfilled" ? monthlyResult.value : {};
-  const overall = overallResult.status === "fulfilled" ? overallResult.value : {};
+  // 当月数据 activity check 已拿过直接复用；overall 拿累计天数
+  const monthly = cachedMonthly || await wrCall(apiKey, "/readdata/detail", { mode: "monthly" }).catch(() => ({}));
+  const overall  = await wrCall(apiKey, "/readdata/detail", { mode: "overall" }).catch(() => ({}));
 
-  // 热力图：annually 一次拿全年数据，格式 {ts_str: seconds}
-  const annualResult = await wrCall(apiKey, "/readdata/detail", { mode: "annually", baseTime: now }).catch(() => ({}));
-  const rawAnnual = annualResult.dailyReadTimes || annualResult.readTimes || {};
+  // 热力图：当月 + 前 4 个月，共 5 个月的每日数据（mode=annually 只返回月粒度，不能用）
+  // 每次 monthly 调用 1 个 subrequest，当前月复用，共 4 次额外请求
+  const prevMonthlyList = [];
+  for (let i = 1; i <= 4; i++) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    d.setDate(15); // 取月中避免边界问题
+    const baseTime = Math.floor(d.getTime() / 1000);
+    const data = await wrCall(apiKey, "/readdata/detail", { mode: "monthly", baseTime }).catch(() => null);
+    if (data) prevMonthlyList.push(data);
+  }
+
   const dailyMap = {};
-  for (const [ts, secs] of Object.entries(rawAnnual)) {
-    const t = Number(ts);
-    if (!t) continue;
-    const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" })
-      .format(new Date(t > 1e11 ? t : t * 1000));
-    dailyMap[dateKey] = (dailyMap[dateKey] || 0) + Math.max(0, Number(secs) || 0);
+  for (const m of [monthly, ...prevMonthlyList]) {
+    for (const [ts, secs] of Object.entries(m?.readTimes || {})) {
+      const t = Number(ts);
+      if (!t) continue;
+      const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" })
+        .format(new Date(t > 1e11 ? t : t * 1000));
+      dailyMap[dateKey] = (dailyMap[dateKey] || 0) + Math.max(0, Number(secs) || 0);
+    }
   }
   const dailyReadTimes = Object.entries(dailyMap)
     .map(([date, seconds]) => ({
@@ -826,7 +832,7 @@ async function wrFetchStats(apiKey, cachedMonthly = null) {
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // 小程序阅读环：月度 readTimes → {ts_str: minutes}
+  // 小程序阅读环：当月每日分钟数
   const weekReadDaily = {};
   for (const [ts, secs] of Object.entries(monthly.readTimes || {})) {
     const mins = Math.round(Number(secs) / 60);
