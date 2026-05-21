@@ -26,6 +26,7 @@ const PRIORITY_LABEL = { high: '高', medium: '中', low: '低' }
 
 const EMPTY_FORM  = { title: '', taskType: 'weekly', priority: 'medium', category: 'study' }
 const EMPTY_DIARY = { today: { date: '', content: '' }, archive: [] }
+const DIARY_VIEW_WINDOW_DAYS = 30
 
 const TASKS_CACHE_KEY = 'tasks_cache_v1'
 const DIARY_CACHE_KEY = 'diary_cache_v2'
@@ -77,6 +78,11 @@ function cleanDiaryContent(text = '') {
   return /^-+$/.test(normalized) ? '' : normalized
 }
 
+function coerceDiaryViewCount(value) {
+  const count = Number.parseInt(value, 10)
+  return Number.isFinite(count) && count > 0 ? count : 0
+}
+
 function normalizeDiaryEntry(entry) {
   if (!entry || typeof entry !== 'object') return null
   const date = String(entry.date || '').trim()
@@ -84,8 +90,35 @@ function normalizeDiaryEntry(entry) {
   return {
     ...entry,
     date,
-    content: cleanDiaryContent(entry.content || '')
+    content: cleanDiaryContent(entry.content || ''),
+    viewCount: coerceDiaryViewCount(entry.viewCount),
+    lastViewedAt: String(entry.lastViewedAt || '').trim()
   }
+}
+
+function mergeDiaryEntryViewMeta(baseEntry, overlayEntry) {
+  const normalizedBase = normalizeDiaryEntry(baseEntry)
+  const normalizedOverlay = normalizeDiaryEntry(overlayEntry)
+  if (!normalizedBase || !normalizedOverlay) return normalizedBase || normalizedOverlay
+  return {
+    ...normalizedBase,
+    viewCount: Math.max(normalizedBase.viewCount || 0, normalizedOverlay.viewCount || 0),
+    lastViewedAt: [normalizedBase.lastViewedAt || '', normalizedOverlay.lastViewedAt || ''].sort().slice(-1)[0] || ''
+  }
+}
+
+function mergeDiaryArchiveViewMeta(baseArchive = [], overlayArchive = []) {
+  const overlayMap = new Map(
+    overlayArchive
+      .map(normalizeDiaryEntry)
+      .filter(Boolean)
+      .map(entry => [entry.date, entry])
+  )
+
+  return baseArchive
+    .map(normalizeDiaryEntry)
+    .filter(Boolean)
+    .map(entry => mergeDiaryEntryViewMeta(entry, overlayMap.get(entry.date)))
 }
 
 function normalizeDiaryPayload(payload) {
@@ -123,24 +156,54 @@ function persistDiaryCache(diary) {
   } catch {}
 }
 
-// 优先显示"历史上的今天"，否则降级到同月，再降级到纯随机
-function pickTodayInHistoryIdx(archive) {
+function wasViewedRecently(entry, days = DIARY_VIEW_WINDOW_DAYS) {
+  const lastViewedAt = String(entry?.lastViewedAt || '').trim()
+  if (!lastViewedAt) return false
+  const viewedAt = new Date(lastViewedAt).getTime()
+  if (Number.isNaN(viewedAt)) return false
+  return (Date.now() - viewedAt) < days * 24 * 60 * 60 * 1000
+}
+
+function isTodayInHistoryEntry(entry, mmdd, yyyy) {
+  return entry?.date?.slice(5) === mmdd && entry?.date?.slice(0, 4) !== yyyy
+}
+
+// 优先显示最近一个月没看过的；同一优先级内仍优先"历史上的今天"
+function pickPreferredArchiveIdx(archive) {
   if (!archive?.length) return null
   const today  = new Date()
   const yyyy   = String(today.getFullYear())
   const mm     = String(today.getMonth() + 1).padStart(2, '0')
   const dd     = String(today.getDate()).padStart(2, '0')
   const mmdd   = `${mm}-${dd}`
-
-  // 精确同月同日（不含今年）
-  const sameDay = archive.reduce((acc, e, i) => {
-    if (e.date?.slice(5) === mmdd && e.date?.slice(0, 4) !== yyyy) acc.push(i)
+  const recentUnviewed = archive.reduce((acc, entry, idx) => {
+    if (!wasViewedRecently(entry)) acc.push(idx)
     return acc
   }, [])
-  if (sameDay.length) return sameDay[Math.floor(Math.random() * sameDay.length)]
+  const candidatePool = recentUnviewed.length
+    ? recentUnviewed
+    : archive.map((_, idx) => idx)
+  const todayInHistoryPool = candidatePool.filter(idx => isTodayInHistoryEntry(archive[idx], mmdd, yyyy))
+  const pool = todayInHistoryPool.length ? todayInHistoryPool : candidatePool
+  return pool[Math.floor(Math.random() * pool.length)]
+}
 
-  // 完全随机
-  return Math.floor(Math.random() * archive.length)
+function stampArchiveEntryViewed(diary, idx, viewedAt = new Date().toISOString()) {
+  const normalized = normalizeDiaryPayload(diary)
+  const current = normalized.archive[idx]
+  if (!current) return normalized
+
+  const nextArchive = normalized.archive.slice()
+  nextArchive[idx] = {
+    ...current,
+    viewCount: coerceDiaryViewCount(current.viewCount) + 1,
+    lastViewedAt: viewedAt
+  }
+
+  return {
+    ...normalized,
+    archive: nextArchive
+  }
 }
 
 // 骨架屏卡片
@@ -199,6 +262,37 @@ export default function TaskPage() {
   const [fullscreenIdx, setFullscreenIdx]     = useState(0)
   const [fsHistory, setFsHistory]             = useState([])
   const fullscreenTouchRef = useRef({ x: 0, y: 0, time: 0 })
+  const diaryRef = useRef(diary)
+  const archiveViewDirtyRef = useRef(false)
+
+  useEffect(() => { diaryRef.current = diary }, [diary])
+
+  const applyDiarySnapshot = useCallback((nextDiary) => {
+    const normalized = normalizeDiaryPayload(nextDiary)
+    diaryRef.current = normalized
+    setDiary(normalized)
+    persistDiaryCache(normalized)
+    return normalized
+  }, [])
+
+  const syncViewedArchiveIfNeeded = useCallback(async (nextDiary) => {
+    if (!archiveLoadedRef.current || !archiveViewDirtyRef.current) return
+    archiveViewDirtyRef.current = false
+    try {
+      await saveDiary(normalizeDiaryPayload(nextDiary))
+    } catch {
+      archiveViewDirtyRef.current = true
+    }
+  }, [])
+
+  const recordArchiveView = useCallback((sourceDiary, idx, { syncIfReady = false } = {}) => {
+    const normalized = normalizeDiaryPayload(sourceDiary)
+    if (idx === null || idx === undefined || !normalized.archive[idx]) return normalized
+    archiveViewDirtyRef.current = true
+    const updated = applyDiarySnapshot(stampArchiveEntryViewed(normalized, idx))
+    if (syncIfReady) syncViewedArchiveIfNeeded(updated)
+    return updated
+  }, [applyDiarySnapshot, syncViewedArchiveIfNeeded])
 
   // ── 数据加载（缓存已在 useState 初始值读取，这里只做后台刷新）──────────────────
   const loadData = useCallback(async () => {
@@ -237,6 +331,7 @@ export default function TaskPage() {
     if (archiveLoadedRef.current) return
     try {
       const d = await getDiary()
+      const localDiary = normalizeDiaryPayload(diaryRef.current)
       const data = normalizeDiaryPayload(d || EMPTY_DIARY)
       const todayStr = getTodayStr()
       const td = data.today || {}
@@ -258,18 +353,25 @@ export default function TaskPage() {
         const cached = readCachedDiary()
         if (cached?.archive?.length) data.archive = cached.archive
       }
-      setDiary(data)
-      persistDiaryCache(data)
-      archiveLoadedRef.current = true  // setDiary 之后才标记，防止数据未渲染就跳过
+
+      data.archive = mergeDiaryArchiveViewMeta(data.archive, localDiary.archive || [])
+
+      let nextDiary = data
+      archiveLoadedRef.current = true
       // 首次加载时初始化往期日记（useDidShow 若已有 archive 会提前设好随机值并置 true）
       if (!archiveInitializedRef.current && data.archive?.length > 0) {
         archiveInitializedRef.current = true
-        setRandomArchiveIdx(pickTodayInHistoryIdx(data.archive))
+        const nextIdx = pickPreferredArchiveIdx(data.archive)
+        setRandomArchiveIdx(nextIdx)
+        nextDiary = recordArchiveView(data, nextIdx, { syncIfReady: true })
+      } else {
+        nextDiary = applyDiarySnapshot(data)
+        if (archiveViewDirtyRef.current) syncViewedArchiveIfNeeded(nextDiary)
       }
     } catch {} finally {
       setDiaryLoading(false)
     }
-  }, [])
+  }, [applyDiarySnapshot, recordArchiveView, syncViewedArchiveIfNeeded])
 
   useEffect(() => { loadData() }, [loadData])
   useEffect(() => { loadDiaryToday() }, [loadDiaryToday])
@@ -285,19 +387,20 @@ export default function TaskPage() {
     loadDiaryToday()
     loadDiary()
     loadData()
-    // 每次回到 app 纯随机换一条；archive 未加载时让 loadDiary 回调负责首次初始化
+    // 每次回到 app 优先换到最近一个月没看过的；服务端回包后再补一次持久化
     const archive = diaryRef.current?.archive
     if (archive?.length > 0) {
       archiveInitializedRef.current = true  // 阻止 loadDiary 回调再次覆盖
-      setRandomArchiveIdx(Math.floor(Math.random() * archive.length))
+      const nextIdx = pickPreferredArchiveIdx(archive)
+      setRandomArchiveIdx(nextIdx)
+      recordArchiveView(diaryRef.current, nextIdx)
     } else {
       archiveInitializedRef.current = false
+      setRandomArchiveIdx(null)
     }
   })
 
   // 小程序切后台/关闭时立即保存日记
-  const diaryRef = useRef(diary)
-  useEffect(() => { diaryRef.current = diary }, [diary])
   useDidHide(() => {
     if (diaryTimerRef.current) {
       clearTimeout(diaryTimerRef.current)
@@ -305,9 +408,13 @@ export default function TaskPage() {
     }
     const normalized = normalizeDiaryPayload(diaryRef.current)
     persistDiaryCache(normalized)
-    // 只有今日内容非空且 archive 已加载完才推送
-    if (normalized.today?.content?.trim() && archiveLoadedRef.current) {
-      saveDiary(normalized).catch(() => {})
+    // 今日内容或观看记录有变更时，都在切后台时补推一次
+    if ((normalized.today?.content?.trim() || archiveViewDirtyRef.current) && archiveLoadedRef.current) {
+      const hadDirtyViewMeta = archiveViewDirtyRef.current
+      if (hadDirtyViewMeta) archiveViewDirtyRef.current = false
+      saveDiary(normalized).catch(() => {
+        if (hadDirtyViewMeta) archiveViewDirtyRef.current = true
+      })
     }
   })
 
@@ -318,15 +425,19 @@ export default function TaskPage() {
       if (diaryTimerRef.current) {
         clearTimeout(diaryTimerRef.current)
         diaryTimerRef.current = null
-        const normalized = normalizeDiaryPayload(diary)
-        persistDiaryCache(normalized)
-        if (normalized.today?.content?.trim()) {
-          saveDiary(normalized).catch(() => {})
-        }
+      }
+      const normalized = normalizeDiaryPayload(diaryRef.current)
+      persistDiaryCache(normalized)
+      if (normalized.today?.content?.trim() || archiveViewDirtyRef.current) {
+        const hadDirtyViewMeta = archiveViewDirtyRef.current
+        if (hadDirtyViewMeta) archiveViewDirtyRef.current = false
+        saveDiary(normalized).catch(() => {
+          if (hadDirtyViewMeta) archiveViewDirtyRef.current = true
+        })
       }
     }
     prevTabRef.current = tab
-  }, [tab, diary])
+  }, [tab])
 
   const active    = tasks.filter(t => t.taskType === tab && normalizeStatus(t.status) !== 'completed')
   const completed = tasks.filter(t => t.taskType === tab && normalizeStatus(t.status) === 'completed')
@@ -462,12 +573,15 @@ export default function TaskPage() {
     const next = fsPickRandom(fullscreenIdx, diary.archive)
     setFsHistory(h => [...h, fullscreenIdx])
     setFullscreenIdx(next)
+    recordArchiveView(diaryRef.current, next, { syncIfReady: true })
   }
 
   function fsGoBack() {
     if (fsHistory.length === 0) return
-    setFullscreenIdx(fsHistory[fsHistory.length - 1])
+    const prevIdx = fsHistory[fsHistory.length - 1]
+    setFullscreenIdx(prevIdx)
     setFsHistory(h => h.slice(0, -1))
+    recordArchiveView(diaryRef.current, prevIdx, { syncIfReady: true })
   }
 
   function handleFsTouchStart(e) {

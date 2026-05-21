@@ -59,6 +59,38 @@ def _format_timestamp(ms: int, with_time: bool = True) -> str:
         return ""
 
 
+def _normalize_readdata_brief(payload: dict[str, Any] | None) -> dict[str, Any]:
+    data = payload if isinstance(payload, dict) else {}
+    return {
+        "baseTime": _coerce_int(data.get("baseTime")),
+        "readDays": _coerce_int(data.get("readDays")),
+        "totalReadTime": _coerce_int(data.get("totalReadTime")),
+        "dayAverageReadTime": _coerce_int(data.get("dayAverageReadTime")),
+        "compare": data.get("compare") if isinstance(data.get("compare"), (int, float)) else 0,
+    }
+
+
+def _normalize_daily_read_times(raw_map: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_map, dict):
+        return []
+
+    items: list[dict[str, Any]] = []
+    for raw_ts, raw_seconds in raw_map.items():
+        ts = _as_epoch_ms(raw_ts)
+        seconds = max(0, _coerce_int(raw_seconds))
+        date = _format_timestamp(ts, with_time=False)
+        if not date or seconds <= 0:
+            continue
+        items.append({
+            "date": date,
+            "timestamp": ts,
+            "seconds": seconds,
+        })
+
+    items.sort(key=lambda item: item["timestamp"])
+    return items
+
+
 def _shorten_text(text: str, limit: int = 18) -> str:
     compact = " ".join(str(text or "").split())
     if len(compact) <= limit:
@@ -348,9 +380,15 @@ def sync_weread_snapshot(existing_notes_store: dict[str, Any] | None = None) -> 
     notebook_books = _page_notebooks(client)
     _log(f"笔记本概览读取完成：notebook_books={len(notebook_books)}")
     stats = client.call("/readdata/detail", mode="monthly")
+    annual_stats = client.call("/readdata/detail", mode="annually", baseTime=int(datetime.now().timestamp()))
+    daily_read_times = _normalize_daily_read_times(annual_stats.get("dailyReadTimes"))
+    if not daily_read_times:
+        daily_read_times = _normalize_daily_read_times(stats.get("readTimes"))
     _log(
         "阅读统计读取完成："
-        f"readDays={_coerce_int(stats.get('readDays'))} totalReadTime={_coerce_int(stats.get('totalReadTime'))}s"
+        f"monthlyReadDays={_coerce_int(stats.get('readDays'))} "
+        f"monthlyTotalReadTime={_coerce_int(stats.get('totalReadTime'))}s "
+        f"heatmapDays={len(daily_read_times)}"
     )
 
     existing_notes_by_book: dict[str, list[dict[str, Any]]] = {}
@@ -400,7 +438,11 @@ def sync_weread_snapshot(existing_notes_store: dict[str, Any] | None = None) -> 
     return {
         "books": books,
         "notes": notes,
-        "stats": stats,
+        "stats": {
+            "monthly": _normalize_readdata_brief(stats),
+            "annual": _normalize_readdata_brief(annual_stats),
+            "dailyReadTimes": daily_read_times,
+        },
         "summary": {
             "shelfBookCount": len(raw_books),
             "shelfEntryCount": len(raw_books) + len(shelf.get("albums") or []) + (1 if shelf.get("mp") else 0),

@@ -1,77 +1,62 @@
 import Taro from '@tarojs/taro'
-import { BASE_URL } from '../config'
+import { BASE_URL, API_TOKEN } from '../config'
 
-const SESSION_TOKEN_KEY = 'task_app_cloud_session_token'
-
-export const getSessionToken = () => {
-  try {
-    return Taro.getStorageSync(SESSION_TOKEN_KEY) || ''
-  } catch {
-    return ''
-  }
-}
-
-export const setSessionToken = (token) => {
-  try {
-    if (token) Taro.setStorageSync(SESSION_TOKEN_KEY, token)
-    else Taro.removeStorageSync(SESSION_TOKEN_KEY)
-  } catch {}
-}
-
-export const clearSessionToken = () => setSessionToken('')
+// 多用户云端版暂不使用：小程序先固定走个人版 /tasks + API_TOKEN。
+// 之前的 session/login 接入点先保留在这里，后续真正做小程序登录页时再打开：
+//
+// const SESSION_TOKEN_KEY = 'task_app_cloud_session_token'
+// export const getSessionToken = () => {
+//   try { return Taro.getStorageSync(SESSION_TOKEN_KEY) || '' }
+//   catch { return '' }
+// }
+// export const setSessionToken = (token) => {
+//   try {
+//     if (token) Taro.setStorageSync(SESSION_TOKEN_KEY, token)
+//     else Taro.removeStorageSync(SESSION_TOKEN_KEY)
+//   } catch {}
+// }
+// export const clearSessionToken = () => setSessionToken('')
+// export const register = async ({ username, email, password }) => {
+//   const data = await request('/api/register', 'POST', { username, email, password })
+//   if (data?.token) setSessionToken(data.token)
+//   return data
+// }
+// export const login = async ({ identifier, password }) => {
+//   const data = await request('/api/login', 'POST', { identifier, password })
+//   if (data?.token) setSessionToken(data.token)
+//   return data
+// }
+// export const logout = async () => {
+//   try { await request('/api/logout', 'POST', {}) }
+//   finally { clearSessionToken() }
+// }
+// export const getMe = () => request('/api/me')
 
 function request(path, method = 'GET', data = null) {
   return new Promise((resolve, reject) => {
-    const token = getSessionToken()
-    const headers = {
-      'Content-Type': 'application/json'
-    }
-    if (token) {
-      headers.Authorization = `Bearer ${token}`
-    }
     Taro.request({
       url: `${BASE_URL}${path}`,
       method,
       data: data || undefined,
-      header: headers,
+      header: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_TOKEN}`
+      },
       success: (res) => {
         if (res.statusCode === 401) {
-          clearSessionToken()
-          reject(new Error('登录已失效，请重新登录'))
+          reject(new Error('认证失败，请检查 API Token'))
           return
         }
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(res.data)
         } else {
-          reject(new Error(res.data?.error || `请求失败: ${res.statusCode}`))
+          reject(new Error(`请求失败: ${res.statusCode}`))
         }
       },
       fail: (err) => reject(err)
     })
   })
 }
-
-export const register = async ({ username, email, password }) => {
-  const data = await request('/api/register', 'POST', { username, email, password })
-  if (data?.token) setSessionToken(data.token)
-  return data
-}
-
-export const login = async ({ identifier, password }) => {
-  const data = await request('/api/login', 'POST', { identifier, password })
-  if (data?.token) setSessionToken(data.token)
-  return data
-}
-
-export const logout = async () => {
-  try {
-    await request('/api/logout', 'POST', {})
-  } finally {
-    clearSessionToken()
-  }
-}
-
-export const getMe = () => request('/api/me')
 
 // 获取全部数据
 export const getData = () => request('/api/data')
