@@ -795,6 +795,79 @@ async function runBatched(items, batchSize, fn) {
   return results;
 }
 
+async function wrFetchStats(apiKey) {
+  const now = Math.floor(Date.now() / 1000);
+
+  // monthly: weekReadDaily / weekReadMinutes 来源
+  // overall: totalReadDays（累计）
+  const [monthlyResult, overallResult] = await Promise.allSettled([
+    wrCall(apiKey, "/readdata/detail", { mode: "monthly" }),
+    wrCall(apiKey, "/readdata/detail", { mode: "overall" }),
+  ]);
+  const monthly = monthlyResult.status === "fulfilled" ? monthlyResult.value : {};
+  const overall = overallResult.status === "fulfilled" ? overallResult.value : {};
+
+  // 热力图：18 周的 weekly 数据，每次 6 个并发
+  const weekOffsets = Array.from({ length: 18 }, (_, i) => i * 7 * 86400);
+  const fetchWeek = async (offset) => {
+    try {
+      const d = await wrCall(apiKey, "/readdata/detail", { mode: "weekly", baseTime: now - offset });
+      return d.readTimes || {};
+    } catch { return {}; }
+  };
+  const dailyMap = {};
+  for (let i = 0; i < weekOffsets.length; i += 6) {
+    const batch = await Promise.all(weekOffsets.slice(i, i + 6).map(fetchWeek));
+    for (const readTimes of batch) {
+      for (const [ts, secs] of Object.entries(readTimes)) {
+        const t = Number(ts);
+        if (!t) continue;
+        const dateKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" })
+          .format(new Date(t > 1e11 ? t : t * 1000));
+        dailyMap[dateKey] = (dailyMap[dateKey] || 0) + Math.max(0, Number(secs) || 0);
+      }
+    }
+  }
+  const dailyReadTimes = Object.entries(dailyMap)
+    .map(([date, seconds]) => ({
+      date,
+      timestamp: Math.floor(new Date(`${date}T00:00:00+08:00`).getTime() / 1000),
+      seconds,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // 小程序阅读环：月度 readTimes → {ts_str: minutes}
+  const weekReadDaily = {};
+  for (const [ts, secs] of Object.entries(monthly.readTimes || {})) {
+    const mins = Math.round(Number(secs) / 60);
+    if (mins > 0) weekReadDaily[ts] = mins;
+  }
+  const weekReadMinutes = Object.values(weekReadDaily).reduce((a, b) => a + b, 0);
+  const totalReadDays   = Number(overall.readDays || monthly.readDays || 0);
+
+  return {
+    wereadStats: {
+      monthly: {
+        readDays:           Number(monthly.readDays           || 0),
+        totalReadTime:      Number(monthly.totalReadTime      || 0),
+        dayAverageReadTime: Number(monthly.dayAverageReadTime || 0),
+        baseTime: now,
+      },
+      annual: {
+        readDays:           Number(overall.readDays           || 0),
+        totalReadTime:      Number(overall.totalReadTime      || 0),
+        dayAverageReadTime: Number(overall.dayAverageReadTime || 0),
+        baseTime: now,
+      },
+      dailyReadTimes,
+    },
+    weekReadDaily,
+    weekReadMinutes,
+    totalReadDays,
+    wereadSyncedAt: new Date().toISOString(),
+  };
+}
+
 async function syncWeRead(env) {
   const apiKey = String(env.WEREAD_API_KEY || "").trim();
   if (!apiKey) { console.log("[weread-cron] 跳过：未配置 WEREAD_API_KEY"); return; }
@@ -824,19 +897,26 @@ async function syncWeRead(env) {
 
   console.log(`[weread-cron] 同步完成：books=${books.length} notes=${allNotes.length}`);
 
+  const stats = await wrFetchStats(apiKey).catch((e) => {
+    console.error(`[weread-cron] 阅读统计获取失败：${e}`);
+    return null;
+  });
+
   const existing = await loadSharedData(env.TASKS_KV);
   await saveSharedData(env.TASKS_KV, {
-    tasks:           (existing.tasks || []).filter((t) => t && typeof t === "object"),
-    books:           [...(existing.books || []).filter((b) => b?.source !== "weread"), ...books],
-    notes:           [...(existing.notes || []).filter((n) => n?.source !== "weread"), ...allNotes],
-    updates:         (existing.updates || []).filter((u) => u?.type !== "weread"),
-    wereadStats:     existing.wereadStats,
-    weekReadMinutes: existing.weekReadMinutes,
-    weekReadDaily:   existing.weekReadDaily,
-    totalReadDays:   existing.totalReadDays,
-    wereadSyncedAt:  existing.wereadSyncedAt,
+    tasks:   (existing.tasks  || []).filter((t) => t && typeof t === "object"),
+    books:   [...(existing.books  || []).filter((b) => b?.source !== "weread"), ...books],
+    notes:   [...(existing.notes  || []).filter((n) => n?.source !== "weread"), ...allNotes],
+    updates: (existing.updates || []).filter((u) => u?.type !== "weread"),
+    ...(stats ?? {
+      wereadStats:     existing.wereadStats,
+      weekReadMinutes: existing.weekReadMinutes,
+      weekReadDaily:   existing.weekReadDaily,
+      totalReadDays:   existing.totalReadDays,
+      wereadSyncedAt:  existing.wereadSyncedAt,
+    }),
   });
-  console.log("[weread-cron] ✅ 已写入 KV");
+  console.log(`[weread-cron] ✅ 已写入 KV${stats ? `（热力图 ${stats.wereadStats.dailyReadTimes.length} 天，本月 ${stats.weekReadMinutes} 分钟）` : "（统计跳过）"}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
