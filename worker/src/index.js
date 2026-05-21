@@ -592,17 +592,20 @@ async function wrActivityChanged(apiKey, kv) {
   return { changed: false };
 }
 
-async function syncWeRead(env) {
+async function syncWeRead(env, options = {}) {
   const apiKey = String(env.WEREAD_API_KEY || "").trim();
   if (!apiKey) { console.log("[weread-cron] 跳过：未配置 WEREAD_API_KEY"); return; }
 
-  const activityCheck = await wrActivityChanged(apiKey, env.TASKS_KV).catch(() => ({ changed: true }));
+  const force = Boolean(options.force);
+  const activityCheck = force
+    ? { changed: true, monthly: await wrCall(apiKey, "/readdata/detail", { mode: "monthly" }).catch(() => null) }
+    : await wrActivityChanged(apiKey, env.TASKS_KV).catch(() => ({ changed: true }));
   if (!activityCheck.changed) {
     console.log("[weread-cron] 跳过：本月阅读数据无变化");
     return;
   }
 
-  console.log("[weread-cron] 检测到新活动，开始同步...");
+  console.log(force ? "[weread-cron] 手动强制同步..." : "[weread-cron] 检测到新活动，开始同步...");
   const [shelf, allNotebookBooks] = await Promise.all([
     wrCall(apiKey, "/shelf/sync"),
     wrPageNotebooks(apiKey),
@@ -613,9 +616,31 @@ async function syncWeRead(env) {
   const rawBooks = (shelf.books || []).filter((b) => b && typeof b === "object");
   console.log(`[weread-cron] 书架 ${rawBooks.length} 本，笔记本 ${notebookBooks.length} 本`);
 
-  // 跳过单本 progress API（每本 1 个 subrequest，Free 计划上限 50 不够用）
+  // 现有数据：用于进度兜底 + 最终保存
+  const existing = await loadData(env.TASKS_KV);
+  const existingProgressMap = Object.fromEntries(
+    (existing.books || []).filter(b => b?.source === "weread")
+      .map(b => [String(b._bookId || b.id || ""), b.progressPercent || 0])
+  );
+
+  // 只拉最近 3 本的进度（书架展示也只取前 3，节省 subrequest）
+  const top3Raw = [...rawBooks]
+    .sort((a, b) => wrEpochMs(b.readUpdateTime || b.updateTime) - wrEpochMs(a.readUpdateTime || a.updateTime))
+    .slice(0, 3);
+  const top3Progress = await runBatched(top3Raw, 3, (b) => wrFetchProgress(apiKey, b));
+  const progressMap = {};
+  top3Raw.forEach((b, i) => { progressMap[String(b.bookId || "").trim()] = top3Progress[i] || {}; });
+
   const books = rawBooks
-    .map((b) => wrNormalizeBook(b, {}))
+    .map((b) => {
+      const bookId = String(b.bookId || "").trim();
+      const book = wrNormalizeBook(b, progressMap[bookId] || {});
+      // 兜底：API 返回 0% 但历史有进度时保留
+      if (book.progressPercent === 0 && (existingProgressMap[bookId] || 0) > 0) {
+        return { ...book, progressPercent: existingProgressMap[bookId] };
+      }
+      return book;
+    })
     .sort((a, b) => (b.readTimestamp || 0) - (a.readTimestamp || 0));
 
   const noteLists = await runBatched(notebookBooks, 4, (b) => wrFetchNotes(apiKey, b));
@@ -629,8 +654,6 @@ async function syncWeRead(env) {
     console.error(`[weread-cron] 阅读统计获取失败：${e}`);
     return null;
   });
-
-  const existing = await loadData(env.TASKS_KV);
   await saveData(env.TASKS_KV, {
     tasks:   (existing.tasks  || []).filter((t) => t && typeof t === "object"),
     books:   [...(existing.books  || []).filter((b) => b?.source !== "weread"), ...books],
@@ -823,7 +846,7 @@ export default {
         if (!isPersonalAuthorized(request, env))
           return json({ error: "unauthorized" }, 401);
         try {
-          await syncWeRead(env);
+          await syncWeRead(env, { force: true });
           const data = await loadData(env.TASKS_KV);
           return json({ ok: true, dailyReadTimesCount: data.wereadStats?.dailyReadTimes?.length ?? 0, totalReadDays: data.totalReadDays ?? 0 });
         } catch (e) {
