@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
 import math
 
-from services.config import BOOK_ACCENTS, DATA_FILE, DIARY_FILE, TIME_FILE, WEREAD_DATA_FILE, WEREAD_NOTES_FILE
+from services.config import BOOK_ACCENTS, DATA_FILE, TIME_FILE, WEREAD_DATA_FILE, WEREAD_NOTES_FILE
+from services.diary_store import archive_diary_if_needed, effective_diary_date, empty_diary, load_diary_file, merge_diary, write_diary_file
 from services.json_store import backup_file, load_json_file, write_json_file
 from services.weread_stats import (
     build_weread_time_data,
@@ -26,98 +26,6 @@ def load_base_app_data():
 
 def write_base_app_data(data):
     write_json_file(DATA_FILE, data)
-
-
-def empty_diary():
-    return {"today": {"date": "", "content": ""}, "archive": []}
-
-
-def _coerce_diary_view_count(value):
-    try:
-        return max(0, int(value))
-    except (TypeError, ValueError):
-        return 0
-
-
-def _clean_diary_content(text: str) -> str:
-    import re as _re
-
-    if not text:
-        return ""
-    text = _re.sub(r"Your browser does not support the (video|audio) tag\.?", "", text, flags=_re.IGNORECASE)
-    text = _re.sub(r"\d{1,2}:\d{2}\s*", "", text)
-    if "\n\n---\n" in text:
-        text = text.split("\n\n---\n")[0]
-    return text.strip()
-
-
-def _normalize_diary_archive_entry(entry):
-    if not isinstance(entry, dict):
-        return None
-    date = str(entry.get("date", "")).strip()
-    if not date:
-        return None
-    return {
-        **entry,
-        "date": date,
-        "content": str(entry.get("content", "")),
-        "viewCount": _coerce_diary_view_count(entry.get("viewCount")),
-        "lastViewedAt": str(entry.get("lastViewedAt", "")).strip(),
-    }
-
-
-def _merge_diary_archive_entry(left, right):
-    normalized_left = _normalize_diary_archive_entry(left)
-    normalized_right = _normalize_diary_archive_entry(right)
-    primary = normalized_left or normalized_right
-    secondary = normalized_right if normalized_left else None
-    if not primary:
-        return None
-    if not secondary:
-        return primary
-
-    left_content = _clean_diary_content(primary.get("content", ""))
-    right_content = _clean_diary_content(secondary.get("content", ""))
-    content = right_content if len(right_content) > len(left_content) else left_content
-    last_viewed_at = max(str(primary.get("lastViewedAt", "") or ""), str(secondary.get("lastViewedAt", "") or ""))
-    return {
-        **primary,
-        "date": primary.get("date") or secondary.get("date") or "",
-        "content": content,
-        "viewCount": max(
-            _coerce_diary_view_count(primary.get("viewCount")),
-            _coerce_diary_view_count(secondary.get("viewCount")),
-        ),
-        "lastViewedAt": last_viewed_at,
-    }
-
-
-def _normalize_diary(diary):
-    if not isinstance(diary, dict):
-        return empty_diary()
-    today = diary.get("today") if isinstance(diary.get("today"), dict) else {}
-    archive = [
-        normalized
-        for normalized in (_normalize_diary_archive_entry(entry) for entry in (diary.get("archive") or []))
-        if normalized
-    ]
-    return {
-        "today": {
-            **today,
-            "date": str(today.get("date", "")).strip(),
-            "content": str(today.get("content", "")),
-        },
-        "archive": archive,
-    }
-
-
-def load_diary_file():
-    return _normalize_diary(load_json_file(DIARY_FILE, empty_diary()))
-
-
-def write_diary_file(diary):
-    backup_file(DIARY_FILE, "diary", keep=1)
-    write_json_file(DIARY_FILE, _normalize_diary(diary))
 
 
 def empty_time_data():
@@ -149,67 +57,6 @@ def load_time_data():
 
 def write_time_data(data):
     write_json_file(TIME_FILE, normalize_time_data(data))
-
-
-def effective_diary_date():
-    now = datetime.now()
-    if now.hour < 5:
-        return (now - timedelta(days=1)).date().isoformat()
-    return now.date().isoformat()
-
-
-def archive_diary_if_needed(diary=None):
-    today_str = effective_diary_date()
-    if diary is None:
-        diary = load_diary_file()
-    diary = _normalize_diary(diary)
-    today = diary["today"]
-    archive = diary["archive"]
-
-    existing_date = today.get("date", "")
-    if existing_date and existing_date != today_str:
-        if today.get("content", "").strip():
-            archived_today = _normalize_diary_archive_entry(today)
-            archive = sorted([*archive, archived_today] if archived_today else archive, key=lambda item: item.get("date", ""))
-        today = {"date": today_str, "content": ""}
-    elif not existing_date:
-        today = {"date": today_str, "content": ""}
-
-    return {"today": today, "archive": archive}
-
-
-def merge_diary(local_diary: dict, cloud_diary: dict) -> dict:
-    local_diary = _normalize_diary(local_diary)
-    cloud_diary = _normalize_diary(cloud_diary)
-
-    local_today = local_diary["today"]
-    cloud_today = cloud_diary["today"]
-    local_clean = _clean_diary_content(str(local_today.get("content", "")))
-    cloud_clean = _clean_diary_content(str(cloud_today.get("content", "")))
-    if len(cloud_clean) > len(local_clean):
-        merged_today = {**cloud_today, "content": cloud_clean}
-    else:
-        merged_today = {**local_today, "content": local_clean} if local_clean else {**cloud_today, "content": cloud_clean}
-
-    archive_map = {}
-    for entry in local_diary["archive"]:
-        if entry.get("date"):
-            archive_map[entry["date"]] = _merge_diary_archive_entry(entry, {**entry, "content": _clean_diary_content(entry.get("content", ""))})
-    for entry in cloud_diary["archive"]:
-        date = entry.get("date")
-        if not date:
-            continue
-        archive_map[date] = _merge_diary_archive_entry(
-            archive_map.get(date),
-            {**entry, "content": _clean_diary_content(entry.get("content", ""))},
-        )
-
-    valid = {
-        date: _normalize_diary_archive_entry(entry)
-        for date, entry in archive_map.items()
-        if entry and entry.get("content", "").strip()
-    }
-    return {"today": merged_today, "archive": sorted([entry for entry in valid.values() if entry], key=lambda item: item.get("date", ""))}
 
 
 def empty_weread_notes_data():
