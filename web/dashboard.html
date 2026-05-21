@@ -609,7 +609,7 @@ function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onC
         title="今日聚焦"
         sub={`${dateStr} · ${focus.length} 项待处理`}
       />
-      <div className="grid md:grid-cols-2 gap-4 items-stretch">
+      <div className="grid md:grid-cols-2 gap-4 items-stretch" style={{minHeight:'200px'}}>
         {/* 左栏：今日任务（紧凑行） */}
         <div className="bg-white rounded-2xl border border-[#e8e4dc] overflow-hidden">
           {focus.length === 0 ? (
