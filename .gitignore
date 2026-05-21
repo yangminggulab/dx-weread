@@ -12,6 +12,9 @@ miniprogram/.swc/
 data/
 
 # 遗留文件（旧路径兼容）
+data.json
+diary.json
+.backups/
 diary.json.bak-*
 .weread_read_template.json
 .weread_notes.json.bak-*
@@ -19,8 +22,8 @@ diary.json.bak-*
 .weread_cookie.json
 
 # Generated build files
-web/src/dashboard.js
-web/public/
+worker/src/dashboard.js
+worker/public/
 
 # 敏感配置（含 API Token，不要提交到 git！）
 .env
