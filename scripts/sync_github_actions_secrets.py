@@ -29,7 +29,7 @@ def print_status(
     token_source: str,
     gh_repo: str,
     values: dict[str, str],
-    cookie_source: str,
+    api_key_source: str,
 ) -> None:
     print("GitHub Actions secret sync check")
     token_label = f"present ({token_source})" if gh_pat else "missing"
@@ -37,8 +37,8 @@ def print_status(
     print(f"- GH_REPO: {'present' if gh_repo else 'missing'}")
     print(f"- API_TOKEN: {'present' if values['API_TOKEN'] else 'missing'} (.env/env)")
     print(
-        f"- WEREAD_COOKIE: {'present' if values['WEREAD_COOKIE'] else 'missing'} "
-        f"({cookie_source})"
+        f"- WEREAD_API_KEY: {'present' if values['WEREAD_API_KEY'] else 'missing'} "
+        f"({api_key_source})"
     )
 
 
@@ -85,9 +85,9 @@ def main() -> int:
 
     gh_pat, token_source = pick_github_token()
     gh_repo = resolve_github_repo(ROOT_DIR)
-    values, cookie_source = collect_default_secret_values(ROOT_DIR)
+    values, api_key_source = collect_default_secret_values(ROOT_DIR)
 
-    print_status(gh_pat, token_source, gh_repo, values, cookie_source)
+    print_status(gh_pat, token_source, gh_repo, values, api_key_source)
 
     missing_local = [name for name, value in values.items() if not value]
     missing_github = [
@@ -110,7 +110,7 @@ def main() -> int:
         print("No usable GitHub token found in GH_PAT / GH_TOKEN / GITHUB_TOKEN.")
         gh_pat, token_source = prompt_for_github_token()
         if gh_pat:
-            print_status(gh_pat, token_source, gh_repo, values, cookie_source)
+            print_status(gh_pat, token_source, gh_repo, values, api_key_source)
             missing_github = [
                 name
                 for name, value in {"GitHub token": gh_pat, "GH_REPO": gh_repo}.items()
@@ -127,7 +127,7 @@ def main() -> int:
 
     if missing_local:
         print(f"Missing local values: {', '.join(missing_local)}")
-        print("API_TOKEN comes from .env/env; WEREAD_COOKIE comes from env or .weread_cookie.json.")
+        print("API_TOKEN and WEREAD_API_KEY come from .env/env.")
         return 1
 
     for name in sync_repo_secrets(gh_repo, gh_pat, values):

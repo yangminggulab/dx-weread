@@ -14,8 +14,6 @@ RESET_FLAG_FILE = os.path.join(ROOT_DIR, ".daily_reset_date")
 ENV_FILE = os.path.join(ROOT_DIR, ".env")
 WEREAD_DATA_FILE = os.path.join(ROOT_DIR, ".weread_data.json")
 WEREAD_NOTES_FILE = os.path.join(ROOT_DIR, ".weread_notes.json")
-WEREAD_READ_TEMPLATE_FILE = os.path.join(ROOT_DIR, ".weread_read_template.json")
-WEREAD_BRIDGE_FILE = os.path.join(ROOT_DIR, ".weread_bridge.json")
 
 BOOK_ACCENTS = ["#2d6a4f", "#4a4a6a", "#6a4a2a", "#3a6a5a", "#5a3a6a"]
 LOCAL_BRIDGE_ALLOWED_ORIGINS = {

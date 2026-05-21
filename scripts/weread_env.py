@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
@@ -22,53 +21,6 @@ def load_dotenv(repo_root: str | Path) -> Path:
         key, _, value = line.partition("=")
         os.environ.setdefault(key.strip(), value.strip())
     return env_path
-
-
-def load_weread_cookie(repo_root: str | Path) -> str:
-    """Prefer WEREAD_COOKIE env, then fall back to .weread_cookie.json."""
-    cookie = os.environ.get("WEREAD_COOKIE", "").strip()
-    if cookie:
-        return cookie
-
-    cookie_path = Path(repo_root).resolve() / ".weread_cookie.json"
-    if not cookie_path.exists():
-        return ""
-
-    try:
-        payload = json.loads(cookie_path.read_text(encoding="utf-8"))
-    except Exception:
-        return ""
-
-    if isinstance(payload, dict):
-        return str(payload.get("cookie", "")).strip()
-    return str(payload).strip()
-
-
-def load_weread_read_template(repo_root: str | Path) -> dict:
-    """Load the latest saved WeRead read-template capture, if any."""
-    template_path = Path(repo_root).resolve() / ".weread_read_template.json"
-    if not template_path.exists():
-        return {}
-
-    try:
-        payload = json.loads(template_path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-
-    if not isinstance(payload, dict):
-        return {}
-
-    latest = payload.get("latest") if isinstance(payload.get("latest"), dict) else {}
-    captures = payload.get("captures") if isinstance(payload.get("captures"), list) else []
-
-    if latest.get("url"):
-        return latest
-
-    for item in captures:
-        if isinstance(item, dict) and item.get("url"):
-            return item
-
-    return {}
 
 
 def normalize_shelf_entries(shelf_payload: dict | list) -> list[dict]:

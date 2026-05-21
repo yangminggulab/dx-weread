@@ -16,7 +16,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from scripts.weread_env import load_dotenv, load_weread_cookie
+from scripts.weread_env import load_dotenv
 
 load_dotenv(ROOT_DIR)
 
@@ -66,14 +66,12 @@ def resolve_github_repo(root_dir: Path = ROOT_DIR) -> str:
 
 
 def collect_default_secret_values(root_dir: Path = ROOT_DIR) -> tuple[dict[str, str], str]:
-    weread_cookie_env = os.environ.get("WEREAD_COOKIE", "").strip()
-    weread_cookie = load_weread_cookie(root_dir).strip()
-    cookie_source = "env.WEREAD_COOKIE" if weread_cookie_env else ".weread_cookie.json"
+    api_key_source = "env.WEREAD_API_KEY" if os.environ.get("WEREAD_API_KEY", "").strip() else "missing"
     values = {
         "API_TOKEN": os.environ.get("API_TOKEN", "").strip(),
-        "WEREAD_COOKIE": weread_cookie,
+        "WEREAD_API_KEY": os.environ.get("WEREAD_API_KEY", "").strip(),
     }
-    return values, cookie_source
+    return values, api_key_source
 
 
 def encrypt_secret(public_key: str, value: str) -> str:
