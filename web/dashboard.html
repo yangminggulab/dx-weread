@@ -1231,11 +1231,18 @@ function App() {
     nuid.current = Math.max(0, ...n.map(x=>x.id)) + 1;
     return true;
   }, []);
-  const refreshFromServer = useCallback(() =>
-    apiRequest('/api/data')
-      .then(d => applyServerPayload(d))
-      .catch(() => false)
-  , [applyServerPayload]);
+  const refreshFromServer = useCallback(async () => {
+    try {
+      const d = await apiRequest('/api/data');
+      applyServerPayload(d);
+    } catch (_) {}
+    try {
+      if (!diaryTimerRef.current) {
+        const diaryData = await apiRequest('/api/diary');
+        if (diaryData?.today !== undefined) setDiary(diaryData);
+      }
+    } catch (_) {}
+  }, [applyServerPayload]);
 
   useEffect(() => {
     let cancelled = false;
