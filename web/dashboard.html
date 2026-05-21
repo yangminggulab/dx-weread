@@ -1155,10 +1155,13 @@ function WereadRecent({ notes, updates }) {
 
   React.useEffect(() => {
     if (noteEntries.length <= 1) return;
-    const timer = setInterval(() => {
-      setOffset(prev => (prev + 1) % noteEntries.length);
-    }, 3500);
-    return () => clearInterval(timer);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        setOffset(prev => (prev + 4) % noteEntries.length);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [noteEntries.length]);
 
   const displayEntries = React.useMemo(() => {
