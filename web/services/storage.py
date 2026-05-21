@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import math
 
-from services.config import BOOK_ACCENTS, DATA_FILE, TIME_FILE, WEREAD_DATA_FILE, WEREAD_NOTES_FILE
+from services.config import BOOK_ACCENTS, DATA_FILE, WEREAD_DATA_FILE, WEREAD_NOTES_FILE
 from services.diary_store import archive_diary_if_needed, effective_diary_date, empty_diary, load_diary_file, merge_diary, write_diary_file
 from services.json_store import backup_file, load_json_file, write_json_file
+from services.time_store import empty_time_data, load_time_data, normalize_time_data, write_time_data
 from services.weread_stats import (
     build_weread_time_data,
     derive_weread_time_fields,
@@ -26,37 +27,6 @@ def load_base_app_data():
 
 def write_base_app_data(data):
     write_json_file(DATA_FILE, data)
-
-
-def empty_time_data():
-    return {}
-
-
-def normalize_time_data(data):
-    payload = data if isinstance(data, dict) else {}
-    result = dict(payload)
-    if "weread" in result:
-        weread = result.get("weread") if isinstance(result.get("weread"), dict) else {}
-        result["weread"] = {
-            "source": "weread",
-            "syncedAt": str(weread.get("syncedAt", "")).strip(),
-            "monthly": normalize_weread_stats({"monthly": weread.get("monthly")}).get("monthly", {}),
-            "annual": normalize_weread_stats({"annual": weread.get("annual")}).get("annual", {}),
-            "overall": normalize_weread_stats({"overall": weread.get("overall")}).get("overall", {}),
-            "dailyReadTimes": normalize_weread_stats({"dailyReadTimes": weread.get("dailyReadTimes")}).get("dailyReadTimes", []),
-            "weekReadDaily": weread.get("weekReadDaily") if isinstance(weread.get("weekReadDaily"), dict) else {},
-            "weekReadMinutes": coerce_int_id(weread.get("weekReadMinutes")),
-            "totalReadDays": coerce_int_id(weread.get("totalReadDays")),
-        }
-    return result
-
-
-def load_time_data():
-    return normalize_time_data(load_json_file(TIME_FILE, empty_time_data()))
-
-
-def write_time_data(data):
-    write_json_file(TIME_FILE, normalize_time_data(data))
 
 
 def empty_weread_notes_data():
