@@ -252,6 +252,7 @@ export default function TaskPage() {
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
   const [diaryFocused, setDiaryFocused] = useState(false)
+  const [diaryKeyboardHeight, setDiaryKeyboardHeight] = useState(0)
 
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
@@ -716,6 +717,7 @@ export default function TaskPage() {
       {/* ── 日记 Tab ── */}
       {tab === 'diary' && (
         <View className='diary-page'
+          style={diaryKeyboardHeight > 0 ? { height: `calc(100vh - 340px - ${diaryKeyboardHeight}px)` } : {}}
           onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           {diaryLoading && !diary.today?.date ? (
             <View className='empty'><Text>加载中...</Text></View>
@@ -728,18 +730,23 @@ export default function TaskPage() {
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
                   <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
                 </View>
-                <ScrollView scrollY className='diary-textarea-scroll'>
+                <View className='diary-textarea-scroll'>
                   <Textarea
                     className='diary-textarea'
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
-                    onFocus={() => setDiaryFocused(true)}
-                    onBlur={() => setDiaryFocused(false)}
-                    adjustPosition
+                    onBlur={() => { setDiaryFocused(false); setDiaryKeyboardHeight(0) }}
+                    onKeyboardHeightChange={e => {
+                      const h = Number(e.detail?.height || 0)
+                      setDiaryKeyboardHeight(h)
+                      setDiaryFocused(h > 0)
+                    }}
+                    adjustPosition={false}
+                    cursorSpacing={16}
                     maxlength={10000}
                   />
-                </ScrollView>
+                </View>
               </View>
 
               {/* 下半：历史上的今天 / 往期日记 */}
