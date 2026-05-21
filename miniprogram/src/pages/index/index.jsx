@@ -252,6 +252,7 @@ export default function TaskPage() {
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
   const [diaryFocused, setDiaryFocused] = useState(false)
+  const [diaryKeyboardHeight, setDiaryKeyboardHeight] = useState(0)
 
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
@@ -716,6 +717,7 @@ export default function TaskPage() {
       {/* ── 日记 Tab ── */}
       {tab === 'diary' && (
         <View className='diary-page'
+          style={diaryKeyboardHeight > 0 ? { height: `calc(100vh - 340px - ${diaryKeyboardHeight}px)` } : {}}
           onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           {diaryLoading && !diary.today?.date ? (
             <View className='empty'><Text>加载中...</Text></View>
@@ -735,8 +737,14 @@ export default function TaskPage() {
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
                     onFocus={() => setDiaryFocused(true)}
-                    onBlur={() => setDiaryFocused(false)}
-                    adjustPosition
+                    onBlur={() => { setDiaryFocused(false); setDiaryKeyboardHeight(0) }}
+                    onKeyboardHeightChange={e => {
+                      const h = Number(e.detail?.height || 0)
+                      setDiaryKeyboardHeight(h)
+                      if (h === 0) setDiaryFocused(false)
+                    }}
+                    adjustPosition={false}
+                    cursorSpacing={16}
                     maxlength={10000}
                   />
                 </ScrollView>
