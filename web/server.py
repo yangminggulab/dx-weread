@@ -1,10 +1,18 @@
 """
 WeRead + Dashboard 本地服务
-运行: python3 server.py
+运行: python3 web/server.py
 访问: http://localhost:8080
 """
 
 from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+_WEB_DIR = Path(__file__).resolve().parent
+_ROOT_DIR = _WEB_DIR.parent
+sys.path.insert(0, str(_ROOT_DIR))  # 让 sync.xxx 可以被找到
+sys.path.insert(0, str(_WEB_DIR))   # 让 routes.xxx / services.xxx 可以被找到
 
 from flask import Flask, make_response, request
 

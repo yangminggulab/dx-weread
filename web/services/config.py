@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 
-ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 DATA_FILE = os.path.join(ROOT_DIR, "data.json")
 DIARY_FILE = os.path.join(ROOT_DIR, "diary.json")
