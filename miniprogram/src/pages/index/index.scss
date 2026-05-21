@@ -402,13 +402,6 @@
   color: #aaa;
 }
 
-.diary-done {
-  color: #2d6a4f;
-  font-weight: 600;
-  padding: 10px 0 10px 20px;
-  margin: -10px 0;
-}
-
 .diary-textarea-scroll {
   flex: 1;
   min-height: 0;
@@ -430,13 +423,13 @@
 
 .diary-editing {
   .diary-section-top {
-    height: calc(72% - 8px);
+    height: calc(84% - 8px);
     z-index: 2;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.06);
   }
   .diary-section-bottom {
-    height: calc(28% - 8px);
-    opacity: 0.62;
+    opacity: 0.12;
+    pointer-events: none;
   }
 }
 

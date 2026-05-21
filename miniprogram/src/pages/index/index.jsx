@@ -252,7 +252,6 @@ export default function TaskPage() {
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
   const [diaryFocused, setDiaryFocused] = useState(false)
-  const [diaryKeyboardHeight, setDiaryKeyboardHeight] = useState(0)
 
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
@@ -595,30 +594,6 @@ export default function TaskPage() {
     }, 1500)
   }
 
-  function handleDiaryFocus(e) {
-    setDiaryFocused(true)
-    const h = Number(e.detail?.height || 0)
-    if (h > 0) setDiaryKeyboardHeight(h)
-  }
-
-  function handleDiaryBlur() {
-    setDiaryFocused(false)
-    setDiaryKeyboardHeight(0)
-  }
-
-  function finishDiaryEditing() {
-    try {
-      Taro.hideKeyboard({
-        complete: () => {
-          setDiaryFocused(false)
-          setDiaryKeyboardHeight(0)
-        }
-      })
-    } catch {
-      handleDiaryBlur()
-    }
-  }
-
   function openFullscreen(idx) {
     setFullscreenIdx(idx)
     setFsHistory([])
@@ -678,7 +653,6 @@ export default function TaskPage() {
   }
 
   function handleTouchEnd(e) {
-    if (diaryFocused) return
     const t = e.changedTouches[0]
     const dx = t.clientX - touchStartRef.current.x
     const dy = t.clientY - touchStartRef.current.y
@@ -733,10 +707,7 @@ export default function TaskPage() {
         {TYPE_TABS.map(t => (
           <View key={t.key}
             className={`tab-item ${tab === t.key ? 'tab-active' : ''}`}
-            onClick={() => {
-              if (diaryFocused) finishDiaryEditing()
-              setTab(t.key)
-            }}>
+            onClick={() => setTab(t.key)}>
             <Text>{t.label}</Text>
           </View>
         ))}
@@ -755,28 +726,20 @@ export default function TaskPage() {
               <View className='diary-section-top card'>
                 <View className='diary-header'>
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
-                  <Text className={`diary-status${diaryFocused ? ' diary-done' : ''}`} onClick={diaryFocused ? finishDiaryEditing : undefined}>
-                    {diaryFocused ? (diarySaving ? '保存中...' : '完成') : (diarySaving ? '保存中...' : '自动保存')}
-                  </Text>
+                  <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
                 </View>
-                <View className='diary-textarea-scroll'>
+                <ScrollView scrollY className='diary-textarea-scroll'>
                   <Textarea
                     className='diary-textarea'
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
-                    onFocus={handleDiaryFocus}
-                    onBlur={handleDiaryBlur}
-                    onKeyboardHeightChange={e => {
-                      const h = Number(e.detail?.height || 0)
-                      setDiaryKeyboardHeight(h)
-                      if (h === 0) setDiaryFocused(false)
-                    }}
+                    onFocus={() => setDiaryFocused(true)}
+                    onBlur={() => setDiaryFocused(false)}
                     adjustPosition
-                    cursorSpacing={80}
                     maxlength={10000}
                   />
-                </View>
+                </ScrollView>
               </View>
 
               {/* 下半：历史上的今天 / 往期日记 */}
