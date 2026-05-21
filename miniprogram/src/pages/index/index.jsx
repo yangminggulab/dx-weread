@@ -252,6 +252,7 @@ export default function TaskPage() {
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
   const [diaryFocused, setDiaryFocused] = useState(false)
+  const diaryFocusDelayRef = useRef(null)
 
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
@@ -728,18 +729,25 @@ export default function TaskPage() {
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
                   <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
                 </View>
-                <ScrollView scrollY className='diary-textarea-scroll'>
+                <View className='diary-textarea-scroll'>
                   <Textarea
                     className='diary-textarea'
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
-                    onFocus={() => setDiaryFocused(true)}
-                    onBlur={() => setDiaryFocused(false)}
-                    adjustPosition
+                    onFocus={() => {
+                      if (diaryFocusDelayRef.current) clearTimeout(diaryFocusDelayRef.current)
+                      diaryFocusDelayRef.current = setTimeout(() => setDiaryFocused(true), 350)
+                    }}
+                    onBlur={() => {
+                      if (diaryFocusDelayRef.current) clearTimeout(diaryFocusDelayRef.current)
+                      setDiaryFocused(false)
+                    }}
+                    adjustPosition={false}
+                    cursorSpacing={24}
                     maxlength={10000}
                   />
-                </ScrollView>
+                </View>
               </View>
 
               {/* 下半：历史上的今天 / 往期日记 */}
