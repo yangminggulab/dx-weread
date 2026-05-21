@@ -570,26 +570,20 @@ export default function TaskPage() {
   }
 
   function handleDiaryChange(content) {
-    const updatedAt = new Date().toISOString()
     diaryLocalEditAtRef.current = Date.now()
     diaryTodayDirtyRef.current = true
-    const updated = normalizeDiaryPayload({
-      ...diaryRef.current,
-      today: { ...diaryRef.current.today, date: getTodayStr(), content, updatedAt }
-    })
+    const updated = { ...diaryRef.current, today: { ...diaryRef.current.today, date: getTodayStr(), content } }
     diaryRef.current = updated
     setDiary(updated)
-    persistDiaryCache(updated)
     if (diaryTimerRef.current) clearTimeout(diaryTimerRef.current)
     diaryTimerRef.current = setTimeout(async () => {
       try {
         setDiarySaving(true)
-        // 只保存当天日记，不传归档，避免超大 payload 导致 storage 溢出/请求超时
         const todayPayload = { today: updated.today, archive: [] }
         const normalized = normalizeDiaryPayload(todayPayload)
         persistDiaryCache(normalized)
         await saveDiary(normalized)
-        if (diaryRef.current?.today?.updatedAt === updated.today.updatedAt) {
+        if (diaryRef.current?.today?.content === updated.today.content) {
           diaryTodayDirtyRef.current = false
         }
       } catch {
