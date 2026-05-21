@@ -149,7 +149,9 @@ function readCachedDiary() {
 
 function persistDiaryCache(diary) {
   try {
-    Taro.setStorageSync(DIARY_CACHE_KEY, diary)
+    // 只缓存当天日记，归档从服务端拉取，避免 storage 超限闪退
+    const safe = diary && typeof diary === 'object' ? diary : {}
+    Taro.setStorageSync(DIARY_CACHE_KEY, { today: safe.today || {}, archive: [] })
     for (const key of LEGACY_DIARY_CACHE_KEYS) {
       Taro.removeStorageSync(key)
     }
@@ -547,7 +549,9 @@ export default function TaskPage() {
     diaryTimerRef.current = setTimeout(async () => {
       try {
         setDiarySaving(true)
-        const normalized = normalizeDiaryPayload(updated)
+        // 只保存当天日记，不传归档，避免超大 payload 导致 storage 溢出/请求超时
+        const todayPayload = { today: updated.today, archive: [] }
+        const normalized = normalizeDiaryPayload(todayPayload)
         persistDiaryCache(normalized)
         await saveDiary(normalized)
       } catch {
@@ -700,8 +704,9 @@ export default function TaskPage() {
                     onInput={e => handleDiaryChange(e.detail.value)}
                     onFocus={() => setDiaryFocused(true)}
                     onBlur={() => setDiaryFocused(false)}
-                    autoHeight
                     adjustPosition={false}
+                    cursorSpacing={24}
+                    disableDefaultPadding
                     showConfirmBar={false}
                     maxlength={10000}
                   />
