@@ -558,7 +558,7 @@ function NoteModal({ note, books, onSave, onClose }) {
 ═══════════════════════════════════════════════════════════ */
 
 
-function Header({ onAdd, personalMode }) {
+function Header({ onAdd, onAddBook, personalMode }) {
   const editionLabel = personalMode ? '个人版' : '本地版';
   return (
     <header className="sticky top-0 z-40 bg-[#f7f5f0]/96 backdrop-blur-sm border-b border-[#e8e4dc]">
@@ -581,6 +581,11 @@ function Header({ onAdd, personalMode }) {
             数学笔记
           </a>
 
+          <button onClick={onAddBook} className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#f0f4f1] border border-[#e0d9cc] hover:border-[#2d6a4f] text-[#555] rounded-lg text-[13px] transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
+            增加学习书籍
+          </button>
+
           <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg text-[13px] font-medium transition-colors">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
             新增任务
@@ -596,63 +601,58 @@ function Header({ onAdd, personalMode }) {
    TODAY FOCUS
 ═══════════════════════════════════════════════════════════ */
 
-function TodayFocus({ tasks, diary, onDiaryChange, onDiarySave, diarySaving, onClick }) {
+function TodayFocus({ tasks, onClick }) {
   const focus = useMemo(() =>
     tasks.filter(t => t.taskType === 'daily' && t.status !== 'completed').slice(0, 3)
   , [tasks]);
 
-  const dateStr = new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'});
-  const todayContent = diary?.today?.content || '';
-
   return (
     <section>
-      <SectionHead
-        title="今日聚焦"
-        sub={`${dateStr} · ${focus.length} 项待处理`}
-      />
-      <div className="grid md:grid-cols-2 gap-4 items-stretch">
-        {/* 左栏：今日任务 */}
-        <div className="bg-white rounded-2xl border border-[#e8e4dc] overflow-hidden">
-          {focus.length === 0 ? (
-            <div className="p-8 text-center text-[#ccc] text-sm">今日无待处理任务，好好休息 ☕</div>
-          ) : (
-            focus.map((task, i) => {
-              const near = isNear(task.deadline), over = isOver(task.deadline, task.status);
-              return (
-                <div key={task.id} onClick={() => onClick(task)}
-                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#faf9f6] transition-colors
-                    ${i < focus.length - 1 ? 'border-b border-[#f0ede8]' : ''}`}>
-                  <span className="serif text-[11px] text-[#ccc] font-medium w-5 shrink-0">#{i+1}</span>
-                  <p className="serif text-sm font-medium text-[#1c1c1c] flex-1 leading-snug">{task.title}</p>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Pill text={PRIORITY[task.priority].label} cls={PRIORITY[task.priority].cls} />
-                    {task.deadline && (
-                      <span className={`text-xs ${over ? 'text-red-500' : near ? 'text-amber-600' : 'text-[#ccc]'}`}>
-                        {task.deadline.slice(5)}
-                      </span>
-                    )}
-                  </div>
+      <SectionHead title="今日聚焦" />
+      <div className="bg-white rounded-2xl border border-[#e8e4dc] overflow-hidden">
+        {focus.length === 0 ? (
+          <div className="p-8 text-center text-[#ccc] text-sm">今日无待处理任务，好好休息 ☕</div>
+        ) : (
+          focus.map((task, i) => {
+            const near = isNear(task.deadline), over = isOver(task.deadline, task.status);
+            return (
+              <div key={task.id} onClick={() => onClick(task)}
+                className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#faf9f6] transition-colors
+                  ${i < focus.length - 1 ? 'border-b border-[#f0ede8]' : ''}`}>
+                <span className="serif text-[11px] text-[#ccc] font-medium w-5 shrink-0">#{i+1}</span>
+                <p className="serif text-sm font-medium text-[#1c1c1c] flex-1 leading-snug">{task.title}</p>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Pill text={PRIORITY[task.priority].label} cls={PRIORITY[task.priority].cls} />
+                  {task.deadline && (
+                    <span className={`text-xs ${over ? 'text-red-500' : near ? 'text-amber-600' : 'text-[#ccc]'}`}>
+                      {task.deadline.slice(5)}
+                    </span>
+                  )}
                 </div>
-              );
-            })
-          )}
-        </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+}
 
-        {/* 右栏：今日日记（底部与左栏对齐） */}
-        <div className="flex flex-col justify-end">
-        <div className="bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col" style={{height:'180px'}}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="serif text-sm font-semibold text-[#1c1c1c]">今日日记</span>
-            <span className="text-xs text-[#bbb]">{diarySaving ? '保存中...' : (todayContent ? '已自动保存' : '')}</span>
-          </div>
-          <textarea
-            className="diary-textarea flex-1 resize-none text-sm text-[#1c1c1c] leading-relaxed placeholder-[#ccc] bg-transparent border-none outline-none"
-            placeholder="今天发生了什么，记录下来..."
-            value={todayContent}
-            onChange={e => onDiaryChange(e.target.value)}
-          />
+function DiarySection({ diary, onDiaryChange, diarySaving }) {
+  const todayContent = diary?.today?.content || '';
+  return (
+    <section className="flex flex-col h-full">
+      <SectionHead title="今日日记" />
+      <div className="flex-1 bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col overflow-hidden">
+        <div className="flex justify-end mb-2">
+          <span className="text-xs text-[#bbb]">{diarySaving ? '保存中...' : ''}</span>
         </div>
-        </div>
+        <textarea
+          className="diary-textarea flex-1 resize-none text-sm text-[#1c1c1c] leading-relaxed placeholder-[#ccc] bg-transparent border-none outline-none overflow-y-auto"
+          placeholder="今天发生了什么，记录下来..."
+          value={todayContent}
+          onChange={e => onDiaryChange(e.target.value)}
+        />
       </div>
     </section>
   );
@@ -725,12 +725,12 @@ function PlanSection({ tasks, onToggle, onTask, onAdd }) {
   const [expanded, setExpanded] = useState({ daily: false, weekly: false, longterm: false });
   const toggle = key => setExpanded(e => ({ ...e, [key]: !e[key] }));
 
-  const PlanCol = ({ colKey, title, tasks: colTasks, emptyText, extra }) => {
+  const PlanCol = ({ colKey, title, tasks: colTasks, emptyText, extra, accent }) => {
     const isOpen = expanded[colKey];
     const visible = isOpen ? colTasks : colTasks.slice(0, 3);
     const hasMore = colTasks.length > 3;
     return (
-      <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden">
+      <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden" style={{borderTop:`6px solid ${accent}`}}>
         <div onClick={() => hasMore && toggle(colKey)}
           className={`px-4 py-3 border-b border-[#e8e4dc] flex items-center justify-between ${hasMore ? 'cursor-pointer hover:bg-[#faf9f6]' : ''} transition-colors`}>
           <div className="flex items-center gap-2">
@@ -743,7 +743,7 @@ function PlanSection({ tasks, onToggle, onTask, onAdd }) {
             </svg>
           )}
         </div>
-        <div className="p-3 space-y-2">
+        <div className="p-3 space-y-2" style={{background: accent + '18'}}>
           {colTasks.length === 0
             ? <div className="text-center text-[#ccc] text-sm py-8">{emptyText}</div>
             : visible.map(t => <PlanCard key={t.id} task={t} />)
@@ -755,24 +755,15 @@ function PlanSection({ tasks, onToggle, onTask, onAdd }) {
 
   return (
     <section>
-      <SectionHead
-        title="计划管理"
-        sub=""
-        right={
-          <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg text-xs font-medium transition-colors">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
-            新增任务
-          </button>
-        }
-      />
+      <SectionHead title="计划管理" />
       <div className="grid md:grid-cols-3 gap-4 items-start">
-        <PlanCol colKey="daily" title="☀️ 每日任务" tasks={daily} emptyText="今日任务全部完成 ✓"
-          extra={<><span className="text-xs text-[#bbb]">{dailyDone}/{dailyTotal} 完成</span>{dailyTotal>0&&<div className="flex items-center gap-1.5 ml-1"><div className="w-14 h-1.5 bg-[#f0ece4] rounded-full overflow-hidden"><div className="h-full bg-[#f59e0b] rounded-full transition-all" style={{width:`${Math.round(dailyDone/dailyTotal*100)}%`}}/></div><span className="text-xs text-[#b45309] font-medium">{Math.round(dailyDone/dailyTotal*100)}%</span></div>}</>}
+        <PlanCol colKey="daily" title="☀️ 每日任务" tasks={daily} emptyText="今日任务全部完成 ✓" accent="#f59e0b"
+          extra={<><span className="text-xs text-[#bbb]">{dailyDone}/{dailyTotal} 完成</span>{dailyTotal>0&&<div className="flex items-center gap-1.5 ml-1"><div className="w-14 h-1.5 bg-[#f0ece4] rounded-full overflow-hidden"><div className="h-full rounded-full transition-all" style={{width:`${Math.round(dailyDone/dailyTotal*100)}%`,background:'#f59e0b'}}/></div><span className="text-xs font-medium" style={{color:'#f59e0b'}}>{Math.round(dailyDone/dailyTotal*100)}%</span></div>}</>}
         />
-        <PlanCol colKey="weekly" title="📅 本周任务" tasks={weekly} emptyText="本周任务已全部完成 🎉"
-          extra={<><span className="text-xs text-[#bbb]">{weekDone}/{weekTotal} 完成</span>{weekTotal>0&&<div className="flex items-center gap-1.5 ml-1"><div className="w-14 h-1.5 bg-[#f0ece4] rounded-full overflow-hidden"><div className="h-full bg-[#2d6a4f] rounded-full transition-all" style={{width:`${Math.round(weekDone/weekTotal*100)}%`}}/></div><span className="text-xs text-[#2d6a4f] font-medium">{Math.round(weekDone/weekTotal*100)}%</span></div>}</>}
+        <PlanCol colKey="weekly" title="📅 本周任务" tasks={weekly} emptyText="本周任务已全部完成 🎉" accent="#3E74B5"
+          extra={<><span className="text-xs text-[#bbb]">{weekDone}/{weekTotal} 完成</span>{weekTotal>0&&<div className="flex items-center gap-1.5 ml-1"><div className="w-14 h-1.5 bg-[#f0ece4] rounded-full overflow-hidden"><div className="h-full rounded-full transition-all" style={{width:`${Math.round(weekDone/weekTotal*100)}%`,background:'#3E74B5'}}/></div><span className="text-xs font-medium" style={{color:'#3E74B5'}}>{Math.round(weekDone/weekTotal*100)}%</span></div>}</>}
         />
-        <PlanCol colKey="longterm" title="🎯 长期计划" tasks={longterm} emptyText="暂无长期计划"
+        <PlanCol colKey="longterm" title="🎯 长期计划" tasks={longterm} emptyText="暂无长期计划" accent="#7B4EA0"
           extra={<span className="text-xs text-[#bbb]">{longterm.filter(t=>t.status==='in_progress').length} 进行中</span>}
         />
       </div>
@@ -787,41 +778,32 @@ function PlanSection({ tasks, onToggle, onTask, onAdd }) {
 function Books({ books, onAdd, onEdit, onDelete }) {
   return (
     <section>
-      <SectionHead
-        title="学习书架"
-        sub={`${books.length} 本`}
-        right={
-          <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#2d6a4f] hover:bg-[#1e4d38] text-white rounded-lg text-xs font-medium transition-colors">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
-            加入书架
-          </button>
-        }
-      />
+      <SectionHead title="学习书架" />
       {books.length === 0
         ? <div className="bg-white rounded-xl border border-[#e8e4dc] p-10 text-center text-[#ccc] text-sm">书架空空，点击右上角添加</div>
-        : <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {books.map(b=>{
+        : <div className="rounded-xl overflow-y-auto border border-[#e8e4dc] bg-white" style={{maxHeight:220, boxShadow:'inset 0 -3px 0 #e0d9cc'}}>
+            {books.map((b, i) => {
               const pct = b.totalPage > 0 ? Math.round(b.currentPage / b.totalPage * 100) : 0;
               return (
-                <div key={b.id} className="bg-white rounded-xl border border-[#e8e4dc] p-4 hover:shadow-md hover:border-[#c8c0b4] transition-all group flex flex-col gap-2">
-                  <div className="flex items-start justify-between">
-                    <h3 className="serif text-sm font-semibold text-[#1c1c1c] leading-snug group-hover:text-[#2d6a4f] transition-colors flex-1 pr-2">{b.title}</h3>
-                    <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={()=>onEdit(b)} className="p-1 text-[#d4cfc4] hover:text-[#2d6a4f] rounded">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                      </button>
-                      <button onClick={()=>onDelete(b.id)} className="p-1 text-[#d4cfc4] hover:text-red-400 rounded">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                      </button>
+                <div key={b.id} className={`flex gap-3 items-stretch group hover:bg-white/70 transition-colors ${i < books.length - 1 ? 'border-b border-[#f0ede8]' : ''}`}>
+                  <div className="w-1 shrink-0 rounded-sm my-2 ml-3" style={{background: b.accent || '#8a7a6a'}} />
+                  <div className="flex-1 min-w-0 py-3 pr-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="serif text-sm font-medium text-[#2a1f14] flex-1 truncate">{b.title}</span>
+                      <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={()=>onEdit(b)} className="p-1 text-[#c8b898] hover:text-[#2d6a4f] rounded">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                        </button>
+                        <button onClick={()=>onDelete(b.id)} className="p-1 text-[#c8b898] hover:text-red-400 rounded">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-auto">
-                    <div className="flex justify-between text-xs text-[#bbb] mb-1">
-                      <span>{b.currentPage} / {b.totalPage} 页</span>
-                      <span>{pct}%</span>
-                    </div>
-                    <div className="h-1.5 bg-[#f0ece4] rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-[#2d6a4f] transition-all" style={{width:`${pct}%`}} />
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1 bg-[#e0d4c0] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{width:`${pct}%`, background: b.accent || '#8a7a6a'}} />
+                      </div>
+                      <span className="text-xs text-[#a89880] shrink-0 w-8 text-right">{pct}%</span>
                     </div>
                   </div>
                 </div>
@@ -841,7 +823,6 @@ function WeReadShelf({ books }) {
     <section>
       <SectionHead
         title="微信读书书架"
-        sub={books.length ? `已同步 ${books.length} 本 · 仅展示最近翻看 3 本` : '同步后会在这里显示最近翻看的书'}
       />
       {recentBooks.length === 0
         ? <div className="bg-white rounded-xl border border-[#e8e4dc] p-10 text-center text-[#ccc] text-sm">还没有同步到微信读书书架</div>
@@ -887,38 +868,56 @@ function WeReadNotes({ notes }) {
     [orderedNotes]
   );
   const [sel, setSel] = React.useState(visibleNotes[0] || null);
+  const scrollRef = React.useRef(null);
+  const [fades, setFades] = React.useState({ top: false, bottom: true });
+
+  const updateFades = React.useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setFades({
+      top: el.scrollTop > 0,
+      bottom: el.scrollTop + el.clientHeight < el.scrollHeight - 1,
+    });
+  }, []);
+
+  React.useEffect(() => {
+    updateFades();
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', updateFades, { passive: true });
+    return () => el.removeEventListener('scroll', updateFades);
+  }, [updateFades]);
 
   React.useEffect(() => {
     if (!visibleNotes.length) { setSel(null); return; }
     if (!sel || !visibleNotes.some(n => (n.id || n.sourceItemId) === (sel.id || sel.sourceItemId))) setSel(visibleNotes[0]);
   }, [visibleNotes, sel]);
 
-  const noteSub = orderedNotes.length
-    ? `最新 ${Math.min(3, orderedNotes.length)} 条 · 已同步 ${orderedNotes.length} 条划线与评论`
-    : '同步后的最新划线和评论会显示在这里';
-
   return (
     <section>
       <SectionHead
         title="微信读书笔记"
-        sub={noteSub}
       />
       <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden flex" style={{height:320}}>
-        <div className="w-52 shrink-0 border-r border-[#e8e4dc] overflow-y-auto">
-          {visibleNotes.length === 0
-            ? <div className="p-4 text-xs text-[#ccc] text-center mt-8">还没有同步笔记</div>
-            : visibleNotes.map(n => (
-              <div key={n.id || n.sourceItemId} onClick={() => setSel(n)}
-                className={`px-4 py-3 cursor-pointer border-b border-[#f5f2eb] last:border-0 transition-colors ${(sel?.id || sel?.sourceItemId) === (n.id || n.sourceItemId) ? 'bg-[#f0f4f1]' : 'hover:bg-[#faf9f6]'}`}>
-                <div className={`text-sm font-medium leading-snug mb-1.5 ${(sel?.id || sel?.sourceItemId) === (n.id || n.sourceItemId) ? 'text-[#2d6a4f] serif' : 'text-[#1c1c1c]'}`}>{n.title}</div>
-                {n.bookTitle && <div className="text-xs text-[#8f887d] mb-1 truncate">{n.bookTitle}</div>}
-                <div className="flex gap-1 flex-wrap mb-1">
-                  {(n.tags || []).map(t => <span key={t} className="text-xs bg-[#f2f2ef] text-[#999] px-1.5 py-0.5 rounded-full">{t}</span>)}
+        <div className="relative w-52 shrink-0 border-r border-[#e8e4dc]">
+          <div ref={scrollRef} className="h-full overflow-y-auto">
+            {visibleNotes.length === 0
+              ? <div className="p-4 text-xs text-[#ccc] text-center mt-8">还没有同步笔记</div>
+              : visibleNotes.map(n => (
+                <div key={n.id || n.sourceItemId} onClick={() => setSel(n)}
+                  className={`px-4 py-3 cursor-pointer border-b border-[#f5f2eb] last:border-0 transition-colors ${(sel?.id || sel?.sourceItemId) === (n.id || n.sourceItemId) ? 'bg-[#f0f4f1]' : 'hover:bg-[#faf9f6]'}`}>
+                  <div className={`text-sm font-medium leading-snug mb-1.5 ${(sel?.id || sel?.sourceItemId) === (n.id || n.sourceItemId) ? 'text-[#2d6a4f] serif' : 'text-[#1c1c1c]'}`}>{n.title}</div>
+                  {n.bookTitle && <div className="text-xs text-[#8f887d] mb-1 truncate">{n.bookTitle}</div>}
+                  <div className="flex gap-1 flex-wrap mb-1">
+                    {(n.tags || []).map(t => <span key={t} className="text-xs bg-[#f2f2ef] text-[#999] px-1.5 py-0.5 rounded-full">{t}</span>)}
+                  </div>
+                  <div className="text-xs text-[#ccc]">{pickDisplayTime(n, 'sourceUpdatedAt')}</div>
                 </div>
-                <div className="text-xs text-[#ccc]">{pickDisplayTime(n, 'sourceUpdatedAt')}</div>
-              </div>
-            ))
-          }
+              ))
+            }
+          </div>
+          {fades.top && <div className="pointer-events-none absolute top-0 left-0 right-0 h-10" style={{background:'linear-gradient(to top, transparent, white)'}} />}
+          {fades.bottom && <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16" style={{background:'linear-gradient(to bottom, transparent, white)'}} />}
         </div>
         <div className="flex-1 p-5 overflow-y-auto">
           {sel && visibleNotes.find(n => (n.id || n.sourceItemId) === (sel.id || sel.sourceItemId)) ? (
@@ -1014,7 +1013,6 @@ function WeReadHeatmap({ stats, notes, syncedAt, selectedDate, onSelectDate }) {
     <section>
       <SectionHead
         title="阅读热力"
-        sub="最近 18 周 · 色块越深表示读得越久，金点代表当天有微信读书笔记"
       />
       <div className="space-y-4">
         <div className="bg-white rounded-xl border border-[#e8e4dc] p-4">
@@ -1172,7 +1170,7 @@ function WereadRecent({ notes, updates }) {
 
   return (
     <section>
-      <SectionHead title="最近动态" sub={noteEntries.length ? '轮播微信读书旧笔记' : ''} />
+      <SectionHead title="最近动态" />
       <div className="bg-white rounded-xl border border-[#e8e4dc] overflow-hidden">
         {displayEntries.slice(0,6).map((u,i)=>(
           <div key={u.id} className={`flex items-start gap-3 px-5 py-3 ${i<displayEntries.length-1?'border-b border-[#f5f2eb]':''}`}>
@@ -1404,14 +1402,20 @@ function App() {
     <div className="min-h-screen">
       <Header
         onAdd={()=>setModal('add')}
+        onAddBook={()=>setProjectModal('add')}
         personalMode={PERSONAL_MODE}
       />
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-10 pb-20">
-        <TodayFocus tasks={tasks} diary={diary} onDiaryChange={handleDiaryChange} diarySaving={diarySaving} onClick={setDetail} />
+        <div className="grid md:grid-cols-3 gap-6 items-stretch">
+          <TodayFocus tasks={tasks} onClick={setDetail} />
+          <Books books={learningBooks} onAdd={()=>setProjectModal('add')} onEdit={b=>setProjectModal(b)} onDelete={handleDeleteBook} />
+          <DiarySection diary={diary} onDiaryChange={handleDiaryChange} diarySaving={diarySaving} />
+        </div>
         <PlanSection tasks={tasks} onToggle={handleToggle} onTask={setDetail} onAdd={()=>setModal('add')} />
-        <Books books={learningBooks} onAdd={()=>setProjectModal('add')} onEdit={b=>setProjectModal(b)} onDelete={handleDeleteBook} />
-        <WeReadShelf books={wereadBooks} />
+        <div className="mt-8">
+          <WeReadShelf books={wereadBooks} />
+        </div>
         {/* Bottom 2-col */}
         <div className="grid md:grid-cols-5 gap-6 items-start">
           <div className="md:col-span-3 space-y-6">
@@ -1429,6 +1433,7 @@ function App() {
           </div>
         </div>
       </main>
+      <div className="pointer-events-none fixed bottom-0 left-0 right-0 h-24 z-30" style={{background:'linear-gradient(to bottom, transparent, #f7f5f0)'}} />
 
       {/* Modals */}
 

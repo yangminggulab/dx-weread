@@ -61,61 +61,6 @@ def merge_cloud_into_local(local: dict, cloud: dict, preserve_local_only_tasks: 
     return result
 
 
-def push_to_cloud_sync(label: str = "auto", app_data: dict | None = None) -> dict:
-    if not CLOUD_API_TOKEN:
-        print(f"[cloud-push] 跳过：未设置 API_TOKEN（{label}）")
-        return {
-            "attempted": False,
-            "ok": False,
-            "reason": "missing_api_token",
-            "message": "未设置 API_TOKEN，已跳过云端同步",
-        }
-
-    try:
-        data = dict(app_data) if isinstance(app_data, dict) else load_app_data()
-        base = CLOUD_BASE_URL.rstrip("/")
-        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {CLOUD_API_TOKEN}"}
-        try:
-            response = requests.get(f"{base}/api/data", headers=headers, timeout=10)
-            response.raise_for_status()
-            cloud_data = response.json()
-            if isinstance(cloud_data, dict):
-                data = merge_cloud_into_local(data, cloud_data, preserve_local_only_tasks=True)
-        except Exception as pull_exc:
-            print(f"[cloud-push] ⚠️  拉取云端数据失败，使用本地副本（{pull_exc}）")
-
-        response = requests.post(f"{base}/api/data", json=data, headers=headers, timeout=15)
-        response.raise_for_status()
-        print(f"[cloud-push] ✅ 推送成功（{label}）tasks={len(data.get('tasks', []))} books={len(data.get('books', []))}")
-        return {"attempted": True, "ok": True, "baseUrl": base, "message": "云端同步成功"}
-    except Exception as exc:
-        print(f"[cloud-push] ⚠️  推送失败（{label}）: {exc}")
-        return {"attempted": True, "ok": False, "baseUrl": CLOUD_BASE_URL.rstrip("/"), "message": str(exc)}
-
-
-def push_to_cloud_async(label: str = "auto"):
-    threading.Thread(target=push_to_cloud_sync, args=(label,), daemon=True).start()
-
-
-def push_diary_to_cloud_async(label: str = "auto"):
-    def _do():
-        if not CLOUD_API_TOKEN:
-            return
-        try:
-            diary = load_diary_file()
-            response = requests.post(
-                CLOUD_BASE_URL.rstrip("/") + "/api/diary",
-                json=diary,
-                headers={"Content-Type": "application/json", "Authorization": f"Bearer {CLOUD_API_TOKEN}"},
-                timeout=15,
-            )
-            response.raise_for_status()
-            print(f"[diary-push] ✅ 推送成功（{label}）archive={len(diary.get('archive', []))}天")
-        except Exception as exc:
-            print(f"[diary-push] ⚠️  推送失败（{label}）: {exc}")
-
-    threading.Thread(target=_do, daemon=True).start()
-
 
 def pull_from_cloud(label: str = "scheduled"):
     if not CLOUD_API_TOKEN:
@@ -174,7 +119,6 @@ def do_daily_reset(today, label="5am"):
 
     updated_diary = archive_diary_if_needed(load_diary_file())
     write_diary_file(updated_diary)
-    push_diary_to_cloud_async(f"{label}-archive")
     print(f"[reset] ✅ 日记归档完成 ({today})")
 
     base = load_base_app_data()
@@ -182,7 +126,6 @@ def do_daily_reset(today, label="5am"):
     base["tasks"] = [item for item in (base.get("tasks") or []) if isinstance(item, dict) and item.get("status") != "completed"]
     after = len(base["tasks"])
     write_base_app_data(base)
-    push_to_cloud_async(f"{label}-clean-completed")
     print(f"[reset] ✅ 已完成任务清除 {before - after} 条 ({today})")
     _set_last_reset_date(today)
 

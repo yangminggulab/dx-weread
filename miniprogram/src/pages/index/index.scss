@@ -402,6 +402,18 @@
   color: #aaa;
 }
 
+.diary-status-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.diary-done-btn {
+  color: #2d6a4f;
+  font-weight: 600;
+  font-size: 24px;
+  padding: 12px 0 12px 24px;
+}
+
 .diary-textarea-scroll {
   flex: 1;
   min-height: 0;
@@ -419,17 +431,6 @@
   padding: 0;
   box-sizing: border-box;
   min-height: 200px;
-}
-
-.diary-editing {
-  .diary-section-top {
-    z-index: 2;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.05);
-  }
-  .diary-section-bottom {
-    opacity: 0.15;
-    pointer-events: none;
-  }
 }
 
 .diary-random-header {
