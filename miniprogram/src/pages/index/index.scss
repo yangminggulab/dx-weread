@@ -443,14 +443,14 @@
 
 .diary-textarea-scroll {
   flex: 1;
-  height: 0;
   min-height: 0;
   overflow: hidden;
 }
 
 .diary-textarea {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   font-size: 28px;
   color: #1c1c1c;
   line-height: 1.8;
@@ -458,7 +458,6 @@
   border: none;
   padding: 0;
   box-sizing: border-box;
-  overflow: visible;
 }
 
 .diary-random-header {
