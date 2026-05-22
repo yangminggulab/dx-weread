@@ -89,12 +89,39 @@
   }
 }
 
-.book-list {
+.book-list-wrap {
+  position: relative;
   height: calc(100vh - 280px);
+  width: 100%;
+}
+
+.book-list {
+  height: 100%;
   padding: 0 24px;
   box-sizing: border-box;
   width: 100%;
   overflow-x: hidden;
+}
+
+.list-fade-top,
+.list-fade-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.list-fade-top {
+  top: 0;
+  height: 40px;
+  background: linear-gradient(to bottom, #f7f5f0, transparent);
+}
+
+.list-fade-bottom {
+  bottom: 0;
+  height: 64px;
+  background: linear-gradient(to top, #f7f5f0, transparent);
 }
 
 .book-card {

@@ -106,13 +106,40 @@
 }
 
 // ── 任务列表 ──────────────────────────────────────
-.task-list {
+.task-list-wrap {
+  position: relative;
   height: calc(100vh - 340px);
+  width: 100%;
+}
+
+.task-list {
+  height: 100%;
   padding: 0 24px;
   box-sizing: border-box;
   width: 100%;
   // key={tab} 触发重新挂载时，列表整体从下方淡入
   animation: fadeInUp 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+.list-fade-top,
+.list-fade-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.list-fade-top {
+  top: 0;
+  height: 40px;
+  background: linear-gradient(to bottom, #f7f5f0, transparent);
+}
+
+.list-fade-bottom {
+  bottom: 0;
+  height: 64px;
+  background: linear-gradient(to top, #f7f5f0, transparent);
 }
 
 // 卡片整体随列表进场淡入，不错开
@@ -432,6 +459,8 @@
   padding: 0;
   box-sizing: border-box;
   min-height: 200px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .diary-random-header {
