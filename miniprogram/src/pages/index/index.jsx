@@ -737,6 +737,7 @@ export default function TaskPage() {
                     onFocus={() => setDiaryFocused(true)}
                     onBlur={() => setDiaryFocused(false)}
                     adjustPosition={false}
+                    showConfirmBar={false}
                     cursorSpacing={24}
                     maxlength={10000}
                   />

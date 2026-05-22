@@ -91,6 +91,46 @@ def _normalize_daily_read_times(raw_map: Any) -> list[dict[str, Any]]:
     return items
 
 
+def _month_base_time(months_ago: int) -> int:
+    now = datetime.now()
+    month_index = now.month - 1 - months_ago
+    year = now.year + month_index // 12
+    month = month_index % 12 + 1
+    return int(datetime(year, month, 15, 12, 0, 0).timestamp())
+
+
+def _merge_daily_read_times(*raw_maps: Any) -> list[dict[str, Any]]:
+    by_date: dict[str, dict[str, Any]] = {}
+    for raw_map in raw_maps:
+        for item in _normalize_daily_read_times(raw_map):
+            date = item["date"]
+            existing = by_date.get(date)
+            if not existing or item["seconds"] > existing["seconds"]:
+                by_date[date] = item
+    return sorted(by_date.values(), key=lambda item: item["timestamp"])
+
+
+def _fetch_recent_daily_read_times(
+    client: WeReadGatewayClient,
+    current_monthly: dict[str, Any] | None,
+    *,
+    month_count: int = 5,
+) -> list[dict[str, Any]]:
+    monthly_payloads: list[dict[str, Any]] = []
+    if isinstance(current_monthly, dict):
+        monthly_payloads.append(current_monthly)
+
+    for months_ago in range(1, month_count):
+        try:
+            monthly_payloads.append(
+                client.call("/readdata/detail", mode="monthly", baseTime=_month_base_time(months_ago))
+            )
+        except WeReadApiError as exc:
+            _log(f"读取 {months_ago} 个月前每日阅读失败：{exc}")
+
+    return _merge_daily_read_times(*(payload.get("readTimes") for payload in monthly_payloads))
+
+
 def _shorten_text(text: str, limit: int = 18) -> str:
     compact = " ".join(str(text or "").split())
     if len(compact) <= limit:
@@ -382,9 +422,9 @@ def sync_weread_snapshot(existing_notes_store: dict[str, Any] | None = None) -> 
     stats = client.call("/readdata/detail", mode="monthly")
     annual_stats = client.call("/readdata/detail", mode="annually", baseTime=int(datetime.now().timestamp()))
     overall_stats = client.call("/readdata/detail", mode="overall")
-    daily_read_times = _normalize_daily_read_times(annual_stats.get("dailyReadTimes"))
+    daily_read_times = _fetch_recent_daily_read_times(client, stats)
     if not daily_read_times:
-        daily_read_times = _normalize_daily_read_times(stats.get("readTimes"))
+        daily_read_times = _merge_daily_read_times(annual_stats.get("dailyReadTimes"), stats.get("readTimes"))
     _log(
         "阅读统计读取完成："
         f"monthlyReadDays={_coerce_int(stats.get('readDays'))} "
