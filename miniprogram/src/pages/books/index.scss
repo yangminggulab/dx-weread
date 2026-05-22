@@ -91,12 +91,11 @@
 
 .book-list-wrap {
   position: relative;
-  height: calc(100vh - 280px);
   width: 100%;
 }
 
 .book-list {
-  height: 100%;
+  height: calc(100vh - 280px);
   padding: 0 24px;
   box-sizing: border-box;
   width: 100%;
