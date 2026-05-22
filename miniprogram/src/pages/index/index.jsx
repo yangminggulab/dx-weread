@@ -251,7 +251,6 @@ export default function TaskPage() {
   const [diaryLoading, setDiaryLoading] = useState(() => !readCachedDiary())
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
-  const [diaryFocused, setDiaryFocused] = useState(false)
 
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
@@ -269,8 +268,23 @@ export default function TaskPage() {
   const diaryTodayDirtyRef = useRef(false)
   const diaryLocalEditAtRef = useRef(0)
   const diaryFullLoadingRef = useRef(false)
+  const tabRef = useRef(tab)
+  const diaryKeyboardHeightRef = useRef(0)
 
   useEffect(() => { diaryRef.current = diary }, [diary])
+  useEffect(() => { tabRef.current = tab }, [tab])
+
+  useEffect(() => {
+    const handleKeyboardHeightChange = (res = {}) => {
+      if (tabRef.current !== 'diary') return
+      const height = Number(res.height)
+      console.info('[diary-keyboard]', { height: res.height })
+      if (!Number.isFinite(height)) return
+      diaryKeyboardHeightRef.current = height
+    }
+    Taro.onKeyboardHeightChange?.(handleKeyboardHeightChange)
+    return () => Taro.offKeyboardHeightChange?.(handleKeyboardHeightChange)
+  }, [])
 
   const applyDiarySnapshot = useCallback((nextDiary) => {
     const normalized = normalizeDiaryPayload(nextDiary)
@@ -594,6 +608,16 @@ export default function TaskPage() {
     }, 1500)
   }
 
+  function closeDiaryKeyboard(e) {
+    e?.stopPropagation?.()
+    diaryKeyboardHeightRef.current = 0
+    Taro.hideKeyboard?.()
+  }
+
+  function stopDiaryTextareaTap(e) {
+    e?.stopPropagation?.()
+  }
+
   function openFullscreen(idx) {
     setFullscreenIdx(idx)
     setFsHistory([])
@@ -716,28 +740,37 @@ export default function TaskPage() {
       {/* ── 日记 Tab ── */}
       {tab === 'diary' && (
         <View className='diary-page'
+          onClick={closeDiaryKeyboard}
           onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           {diaryLoading && !diary.today?.date ? (
             <View className='empty'><Text>加载中...</Text></View>
           ) : (
             // key={tab} 让内容在切换回来时重播淡入动画
-            <View key='diary-content' className={`diary-content-anim${diaryFocused ? ' diary-editing' : ''}`}>
+            <View key='diary-content' className='diary-content-anim'>
               {/* 上半：今日日记 */}
               <View className='diary-section-top card'>
                 <View className='diary-header'>
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
-                  <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
+                  <View className='diary-status-wrap'>
+                    <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
+                    <Text className='diary-done-btn' onClick={closeDiaryKeyboard}>完成</Text>
+                  </View>
                 </View>
-                <View className='diary-textarea-scroll'>
+                <View className='diary-textarea-scroll' onClick={stopDiaryTextareaTap}>
                   <Textarea
                     className='diary-textarea'
                     placeholder='今天发生了什么...'
                     value={diary.today?.content || ''}
                     onInput={e => handleDiaryChange(e.detail.value)}
-                    onFocus={() => setDiaryFocused(true)}
-                    onBlur={() => setDiaryFocused(false)}
+                    onFocus={e => {
+                      console.info('[diary-focus]', e.detail || {})
+                    }}
+                    onBlur={e => {
+                      console.info('[diary-blur]', e.detail || {})
+                    }}
                     adjustPosition={false}
                     showConfirmBar={false}
+                    disableDefaultPadding
                     cursorSpacing={24}
                     maxlength={10000}
                   />
@@ -747,7 +780,7 @@ export default function TaskPage() {
               {/* 下半：历史上的今天 / 往期日记 */}
               {randomEntry && (
                 <View className='diary-section-bottom card'
-                  onClick={() => openFullscreen(randomArchiveIdx)}>
+                  onClick={e => { closeDiaryKeyboard(e); openFullscreen(randomArchiveIdx) }}>
                   <View className='diary-random-header'>
                     <Text className={`history-label ${isHistoryToday ? 'history-label-accent' : ''}`}>
                       {historyLabel}
