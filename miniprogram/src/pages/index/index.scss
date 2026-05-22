@@ -26,10 +26,10 @@
 
 // ── 页面 ──────────────────────────────────────────
 .task-page {
-  min-height: 100vh;
+  height: 100vh;
   background: #f7f5f0;
   padding-bottom: 120px;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 // ── 顶部统计 ──────────────────────────────────────
@@ -110,6 +110,7 @@
   padding: 0 24px;
   box-sizing: border-box;
   width: 100%;
+  overflow: hidden;
   // key={tab} 触发重新挂载时，列表整体从下方淡入
   animation: fadeInUp 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
 }

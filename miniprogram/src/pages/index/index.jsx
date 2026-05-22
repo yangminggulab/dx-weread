@@ -797,8 +797,8 @@ export default function TaskPage() {
 
       {/* ── 任务列表 ── */}
       {tab !== 'diary' && (
-        // key={tab} 使切换 tab 时 ScrollView 重新挂载，触发 CSS 进场动画
-        <ScrollView key={tab} scrollY showScrollbar={false} className='task-list'
+        // key={tab} 使切换 tab 时列表重新挂载，触发 CSS 进场动画
+        <View key={tab} className='task-list'
           onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
 
           {/* 骨架屏：仅在无缓存时展示 */}
@@ -855,7 +855,7 @@ export default function TaskPage() {
               </View>
             </View>
           ))}
-        </ScrollView>
+        </View>
       )}
 
       {/* 悬浮添加按钮 */}
