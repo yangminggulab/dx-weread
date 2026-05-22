@@ -9,10 +9,8 @@ import time
 
 from sync.weread import WeReadApiError, load_weread_api_key, sync_weread_snapshot
 
-from services.cloud_sync import push_to_cloud_sync
 from services.config import (
     BACKUP_DIR,
-    CLOUD_API_TOKEN,
     WEREAD_AUTO_SYNC_INTERVAL_HOURS,
     WEREAD_AUTO_SYNC_ON_START,
     WEREAD_AUTO_SYNC_SOURCE,
@@ -23,8 +21,6 @@ from services.config import (
 )
 from services.storage import (
     load_app_data,
-    load_base_app_data,
-    merge_app_and_special_data,
     migrate_embedded_special_data,
     split_combined_payload,
     write_base_app_data,
@@ -134,18 +130,8 @@ def run_weread_sync(label: str):
     result = fetch_weread_data(load_weread_notes_data())
     migrate_embedded_special_data()
     payload, counts = persist_weread_result(result)
-    cloud_app_data = merge_app_and_special_data(
-        load_base_app_data(),
-        payload,
-        {"notes": payload.get("notes", []), "meta": payload.get("notesMeta", {})},
-        load_time_data(),
-    )
-    cloud_result = push_to_cloud_sync(label, app_data=cloud_app_data)
-    print(
-        "[weread-sync] 同步完成"
-        f"（{label}） books={counts['books']} notes={counts['notes']} updates={counts['updates']}"
-    )
-    return result, counts, cloud_result
+    print(f"[weread-sync] 同步完成（{label}） books={counts['books']} notes={counts['notes']} updates={counts['updates']}")
+    return result, counts
 
 
 def save_combined_data(data):
@@ -189,7 +175,6 @@ def weread_status_payload():
         "wereadAutoSyncSource": WEREAD_AUTO_SYNC_SOURCE,
         "wereadAutoSyncIntervalHours": WEREAD_AUTO_SYNC_INTERVAL_HOURS,
         "wereadAutoSyncOnStart": WEREAD_AUTO_SYNC_ON_START,
-        "cloudPushEnabled": bool(CLOUD_API_TOKEN),
         "message": "" if has_api_key else "未配置 WEREAD_API_KEY，暂时无法同步微信读书数据",
     }
 
@@ -206,9 +191,7 @@ def _weread_auto_sync_scheduler(interval_hours: float = 2):
         try:
             if load_weread_api_key():
                 print("[weread-auto] 🔄 自动同步微信读书...")
-                _, counts, cloud_result = run_weread_sync("weread-auto-sync")
-                if cloud_result.get("attempted") and not cloud_result.get("ok"):
-                    print(f"[weread-auto] ⚠️  本地同步成功，但云端推送失败：{cloud_result.get('message', '')}")
+                _, counts = run_weread_sync("weread-auto-sync")
                 print(f"[weread-auto] ✅ 完成：{counts}")
             else:
                 print("[weread-auto] ⚠️  跳过：未配置 WEREAD_API_KEY")
