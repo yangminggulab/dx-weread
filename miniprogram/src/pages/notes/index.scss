@@ -1,8 +1,8 @@
 .notes-page {
-  height: 100vh;
+  min-height: 100vh;
   background: #f7f5f0;
   padding-bottom: 120px;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .page-header {
@@ -55,7 +55,6 @@
 .notes-list {
   height: calc(100vh - 300px);
   width: 100%;
-  overflow: hidden;
 }
 
 .note-card {

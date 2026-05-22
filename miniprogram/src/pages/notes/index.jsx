@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import Taro from '@tarojs/taro'
-import { View, Text, Input, Textarea } from '@tarojs/components'
+import { View, Text, ScrollView, Input, Textarea } from '@tarojs/components'
 import { getData, addNote, getDiary } from '../../api/index'
 import './index.scss'
 
@@ -134,7 +134,7 @@ export default function NotesPage() {
         {search ? <Text className='search-clear' onClick={() => setSearch('')}>✕</Text> : null}
       </View>
 
-      <View className='notes-list'>
+      <ScrollView scrollY showScrollbar={false} className='notes-list'>
         {loading && <View className='empty'><Text>加载中...</Text></View>}
         {!loading && !hasResults && (
           <View className='empty'><Text>{search ? '无匹配结果' : '暂无笔记 📝'}</Text></View>
@@ -173,7 +173,7 @@ export default function NotesPage() {
             ))}
           </>
         )}
-      </View>
+      </ScrollView>
 
       <View className='fab' onClick={() => setShowAdd(true)}>
         <Text className='fab-icon'>+</Text>

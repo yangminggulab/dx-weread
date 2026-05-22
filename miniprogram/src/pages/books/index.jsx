@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Taro, { useDidShow, useReady } from '@tarojs/taro'
-import { View, Text, Image, Canvas } from '@tarojs/components'
+import { View, Text, ScrollView, Image, Canvas } from '@tarojs/components'
 import { getData } from '../../api/index'
 import './index.scss'
 
@@ -231,7 +231,7 @@ export default function BooksPage() {
         ))}
       </View>
 
-      <View key={tab} className='book-list'>
+      <ScrollView key={tab} scrollY showScrollbar={false} className='book-list'>
         {loading && <View className='empty'><Text>加载中...</Text></View>}
         {!loading && listMap[tab].length === 0 && <View className='empty'><Text>暂无书籍 📚</Text></View>}
 
@@ -275,7 +275,7 @@ export default function BooksPage() {
             dayGoalMinutes={DAY_GOAL_MINUTES}
           />
         )}
-      </View>
+      </ScrollView>
     </View>
   )
 }
