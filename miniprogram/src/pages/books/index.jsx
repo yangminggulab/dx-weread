@@ -25,7 +25,7 @@ function getTodayMinutes(weekDaily) {
 
 function drawRing2d(ctx, W, H, minutes, goal) {
   const cx = W / 2, cy = H / 2
-  const sw = 18
+  const sw = 24
   const r = Math.min(W, H) / 2 - sw / 2 - 2
   const pct = goal > 0 ? minutes / goal : 0
   const start = Math.PI / 2
@@ -42,31 +42,47 @@ function drawRing2d(ctx, W, H, minutes, goal) {
   if (pct <= 0) return
 
   if (pct >= 1) {
+    // almost-full arc so the round cap at start stays connected as the "tail"
     ctx.beginPath()
-    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.arc(cx, cy, r, start, start + Math.PI * 2 - 0.001, false)
     ctx.strokeStyle = '#4cd964'
     ctx.lineWidth = sw
-    ctx.lineCap = 'butt'
+    ctx.lineCap = 'round'
     ctx.stroke()
+
     const ov = pct % 1
-    if (ov > 0.005) {
+    if (ov > 0) {
+      // overflow arc on top — same color + shadow for Apple-like depth
+      ctx.save()
+      ctx.shadowColor = 'rgba(0,0,0,0.28)'
+      ctx.shadowBlur = 8
       ctx.beginPath()
-      ctx.arc(cx, cy, r, start, start + Math.PI * 2 * ov)
-      ctx.strokeStyle = '#7ef587'
+      ctx.arc(cx, cy, r, start, start + Math.PI * 2 * ov, false)
+      ctx.strokeStyle = '#4cd964'
       ctx.lineWidth = sw
       ctx.lineCap = 'round'
       ctx.stroke()
-      const tipAngle = start + Math.PI * 2 * ov
-      const tx = cx + r * Math.cos(tipAngle)
-      const ty = cy + r * Math.sin(tipAngle)
-      ctx.beginPath()
-      ctx.arc(tx, ty, sw / 2, 0, Math.PI * 2)
-      ctx.fillStyle = '#7ef587'
-      ctx.fill()
+      ctx.restore()
+
+      // arrow at the tip, rotated to match ring travel direction
+      if (ov > 0.02) {
+        const tipAngle = start + Math.PI * 2 * ov
+        const tx = cx + r * Math.cos(tipAngle)
+        const ty = cy + r * Math.sin(tipAngle)
+        ctx.save()
+        ctx.translate(tx, ty)
+        ctx.rotate(tipAngle + Math.PI / 2)
+        ctx.font = `bold ${Math.round(sw * 0.62)}px sans-serif`
+        ctx.fillStyle = 'rgba(0,0,0,0.72)'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('→', 0, 0)
+        ctx.restore()
+      }
     }
   } else {
     ctx.beginPath()
-    ctx.arc(cx, cy, r, start, start + Math.PI * 2 * pct)
+    ctx.arc(cx, cy, r, start, start + Math.PI * 2 * pct, false)
     ctx.strokeStyle = '#4cd964'
     ctx.lineWidth = sw
     ctx.lineCap = 'round'
