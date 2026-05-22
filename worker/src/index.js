@@ -645,6 +645,13 @@ async function wrActivityChanged(apiKey, kv) {
   return { changed: false };
 }
 
+function mergeDailyReadTimes(existing = [], incoming = []) {
+  const map = new Map();
+  for (const item of existing) if (item?.date) map.set(item.date, item);
+  for (const item of incoming) if (item?.date) map.set(item.date, item);
+  return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
 async function syncWeRead(env, options = {}) {
   const apiKey = String(env.WEREAD_API_KEY || "").trim();
   if (!apiKey) { console.log("[weread-cron] 跳过：未配置 WEREAD_API_KEY"); return; }
@@ -697,6 +704,12 @@ async function syncWeRead(env, options = {}) {
     console.error(`[weread-cron] 阅读统计获取失败：${e}`);
     return null;
   });
+  if (stats) {
+    stats.wereadStats.dailyReadTimes = mergeDailyReadTimes(
+      existing.wereadStats?.dailyReadTimes,
+      stats.wereadStats.dailyReadTimes,
+    );
+  }
   await saveData(env.TASKS_KV, {
     tasks:   (existing.tasks  || []).filter((t) => t && typeof t === "object"),
     books:   [...(existing.books  || []).filter((b) => b?.source !== "weread"), ...books],
