@@ -64,21 +64,7 @@ function drawRing2d(ctx, W, H, minutes, goal) {
       ctx.stroke()
       ctx.restore()
 
-      // arrow at the tip, rotated to match ring travel direction
-      if (ov > 0.02) {
-        const tipAngle = start + Math.PI * 2 * ov
-        const tx = cx + r * Math.cos(tipAngle)
-        const ty = cy + r * Math.sin(tipAngle)
-        ctx.save()
-        ctx.translate(tx, ty)
-        ctx.rotate(tipAngle + Math.PI / 2)
-        ctx.font = `bold ${Math.round(sw * 0.62)}px sans-serif`
-        ctx.fillStyle = 'rgba(0,0,0,0.72)'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText('→', 0, 0)
-        ctx.restore()
-      }
+
     }
   } else {
     ctx.beginPath()
