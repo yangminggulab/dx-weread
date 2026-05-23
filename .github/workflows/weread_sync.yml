@@ -2,7 +2,7 @@ name: WeRead Sync
 
 on:
   schedule:
-    - cron: '0 1,4,7,10,13,16,19,22 * * *'  # 每 3 小时（北京时间 9/12/15/18/21/0/3/6 点）
+    - cron: '0 * * * *'  # 每小时
   workflow_dispatch:  # 支持手动触发
 
 jobs:
