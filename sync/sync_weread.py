@@ -261,6 +261,7 @@ def sync():
     week_read_daily   = {}
     total_read_days   = 0
     weread_stats      = {"monthly": {}, "annual": {}, "overall": {}, "dailyReadTimes": []}
+    stats_ok          = False
     try:
         monthly_data = gw("/readdata/detail", mode="monthly")
         overall_data = gw("/readdata/detail", mode="overall")
@@ -302,6 +303,7 @@ def sync():
             "overall":        _brief(overall_data),
             "dailyReadTimes": daily_list,
         }
+        stats_ok = True
         print(f"   热力图 {len(daily_list)} 天  本月 {week_read_minutes} 分钟  累计 {total_read_days} 天")
     except Exception as e:
         print(f"   ⚠️ 统计数据跳过: {e}")
@@ -327,6 +329,20 @@ def sync():
     for item in weread_stats["dailyReadTimes"]:
         existing_daily[item["date"]] = item
     weread_stats["dailyReadTimes"] = sorted(existing_daily.values(), key=lambda x: x["date"])
+
+    # 统计获取失败时，回退到云端已有数据，避免覆盖成空值
+    if not stats_ok:
+        week_read_minutes = cloud.get("weekReadMinutes", 0)
+        week_read_daily   = cloud.get("weekReadDaily", {})
+        total_read_days   = cloud.get("totalReadDays", 0)
+        prev_stats        = cloud.get("wereadStats") or {}
+        weread_stats = {
+            "monthly":        prev_stats.get("monthly", {}),
+            "annual":         prev_stats.get("annual", {}),
+            "overall":        prev_stats.get("overall", {}),
+            "dailyReadTimes": weread_stats["dailyReadTimes"],  # 已合并云端历史
+        }
+        print("   ℹ️ 统计获取失败，保留云端现有数据")
 
     synced_at = datetime.now().isoformat(timespec="seconds")
     updates = [
