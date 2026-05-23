@@ -380,7 +380,7 @@
 .rring-stat-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .rring-val-row {
@@ -390,10 +390,10 @@
 }
 
 .rring-val {
-  font-size: 44px;
-  font-weight: 700;
+  font-size: 48px;
+  font-weight: 800;
   color: #4cd964;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .rring-val-plain {
@@ -401,11 +401,13 @@
 }
 
 .rring-unit {
-  font-size: 24px;
-  color: #888;
+  font-size: 20px;
+  font-weight: 400;
+  color: #aaa;
 }
 
 .rring-label {
-  font-size: 22px;
+  font-size: 20px;
+  font-weight: 400;
   color: #aaa;
 }
