@@ -300,7 +300,7 @@ export default function BooksPage() {
           />
         )}
       </ScrollView>
-      <View className='list-fade-bottom' />
+      {tab !== 'reading' && <View className='list-fade-bottom' />}
       </View>
     </View>
   )
