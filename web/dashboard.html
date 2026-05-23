@@ -1145,28 +1145,32 @@ function WereadRecent({ notes, updates }) {
       })),
     [notes]
   );
-  const [offset, setOffset] = React.useState(0);
+  const pickRandom = React.useCallback((len) => {
+    if (!len) return [];
+    const pool = Array.from({ length: len }, (_, i) => i);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, Math.min(4, len));
+  }, []);
+
+  const [indices, setIndices] = React.useState([]);
 
   React.useEffect(() => {
-    setOffset(0);
-  }, [noteEntries.length]);
+    setIndices(pickRandom(noteEntries.length));
+  }, [noteEntries.length, pickRandom]);
 
   React.useEffect(() => {
     if (noteEntries.length <= 1) return;
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        setOffset(prev => (prev + 4) % noteEntries.length);
-      }
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [noteEntries.length]);
+    const id = setInterval(() => setIndices(pickRandom(noteEntries.length)), 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [noteEntries.length, pickRandom]);
 
   const displayEntries = React.useMemo(() => {
     if (!noteEntries.length) return updates.slice(0, 6);
-    const size = Math.min(4, noteEntries.length);
-    return Array.from({ length: size }, (_, idx) => noteEntries[(offset + idx) % noteEntries.length]);
-  }, [noteEntries, offset, updates]);
+    return indices.map(i => noteEntries[i]).filter(Boolean);
+  }, [noteEntries, indices, updates]);
 
   return (
     <section>
