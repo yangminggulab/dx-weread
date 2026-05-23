@@ -46,7 +46,7 @@ function getStreakDays(dailyReadTimes, weekReadDaily, goalMinutes) {
 
 function drawRing2d(ctx, W, H, minutes, goal) {
   const cx = W / 2, cy = H / 2
-  const sw = Math.round(Math.min(W, H) * 0.16)
+  const sw = Math.round(Math.min(W, H) * 0.20)
   const r = Math.min(W, H) / 2 - sw / 2 - 2
   const pct = goal > 0 ? minutes / goal : 0
   const start = Math.PI / 2
