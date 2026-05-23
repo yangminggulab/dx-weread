@@ -353,19 +353,19 @@
 .rring-row {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 20px;
   width: 100%;
 }
 
 .rring-wrap {
-  width: 190px;
-  height: 190px;
+  width: 120px;
+  height: 120px;
   flex-shrink: 0;
 }
 
 .rring-canvas {
-  width: 190px;
-  height: 190px;
+  width: 120px;
+  height: 120px;
 }
 
 .rring-stats {
@@ -373,8 +373,8 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: 190px;
-  padding: 4px 0;
+  height: 120px;
+  padding: 2px 0;
   box-sizing: border-box;
 }
 
@@ -391,7 +391,7 @@
 }
 
 .rring-val {
-  font-size: 48px;
+  font-size: 38px;
   font-weight: 800;
   color: #4cd964;
   line-height: 1.1;
