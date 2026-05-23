@@ -23,6 +23,27 @@ function getTodayMinutes(weekDaily) {
   }, 0)
 }
 
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function getStreakDays(dailyReadTimes, weekReadDaily, goalMinutes) {
+  const completed = new Set(
+    (dailyReadTimes || [])
+      .filter(d => (d.minutes ?? Math.round((d.seconds || 0) / 60)) >= goalMinutes)
+      .map(d => d.date)
+  )
+  if (getTodayMinutes(weekReadDaily) >= goalMinutes) completed.add(toDateStr(new Date()))
+  if (!completed.size) return 0
+  let streak = 0
+  const d = new Date()
+  while (completed.has(toDateStr(d))) {
+    streak++
+    d.setDate(d.getDate() - 1)
+  }
+  return streak
+}
+
 function drawRing2d(ctx, W, H, minutes, goal) {
   const cx = W / 2, cy = H / 2
   const sw = 24
@@ -76,8 +97,9 @@ function drawRing2d(ctx, W, H, minutes, goal) {
   }
 }
 
-function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
+function ReadingRing({ weekDaily, dailyReadTimes, totalReadDays, dayGoalMinutes }) {
   const todayMinutes = getTodayMinutes(weekDaily)
+  const streakDays = getStreakDays(dailyReadTimes, weekDaily, dayGoalMinutes)
 
   const execPaint = useCallback((min, goal) => {
     Taro.createSelectorQuery()
@@ -114,19 +136,28 @@ function ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes }) {
   return (
     <View className='rring-card'>
       <View className='rring-row'>
-        <View className='rring-side'>
-          <Text className='rring-val'>{todayStr}</Text>
-          <Text className='rring-label'>今日阅读</Text>
-        </View>
         <View className='rring-wrap'>
           <Canvas type='2d' id='wr-ring' className='rring-canvas' />
         </View>
-        <View className='rring-side'>
-          <View className='rring-side-top'>
-            <Text className='rring-val rring-val-days'>{totalReadDays}</Text>
-            <Text className='rring-unit'>天</Text>
+        <View className='rring-stats'>
+          <View className='rring-stat-item'>
+            <Text className='rring-val'>{todayStr}</Text>
+            <Text className='rring-label'>今日阅读</Text>
           </View>
-          <Text className='rring-label'>累计完成</Text>
+          <View className='rring-stat-item'>
+            <View className='rring-val-row'>
+              <Text className='rring-val'>{streakDays}</Text>
+              <Text className='rring-unit'>天</Text>
+            </View>
+            <Text className='rring-label'>连续完成</Text>
+          </View>
+          <View className='rring-stat-item'>
+            <View className='rring-val-row'>
+              <Text className='rring-val'>{totalReadDays}</Text>
+              <Text className='rring-unit'>天</Text>
+            </View>
+            <Text className='rring-label'>累积完成</Text>
+          </View>
         </View>
       </View>
     </View>
@@ -146,6 +177,7 @@ export default function BooksPage() {
   const [tab, setTab] = useState('reading')
   const [weekDaily, setWeekDaily] = useState({})
   const [totalReadDays, setTotalReadDays] = useState(0)
+  const [dailyReadTimes, setDailyReadTimes] = useState([])
   const touchRef = useRef({ x: 0, y: 0, time: 0 })
 
   const loadData = useCallback(async () => {
@@ -155,6 +187,7 @@ export default function BooksPage() {
       setBooks(fetched)
       setWeekDaily(data.weekReadDaily || {})
       setTotalReadDays(data.totalReadDays || 0)
+      setDailyReadTimes(data.wereadStats?.dailyReadTimes || [])
       try { Taro.setStorageSync(BOOKS_CACHE_KEY, { books: fetched }) } catch {}
     } catch {
       Taro.showToast({ title: '加载失败', icon: 'error' })
@@ -259,6 +292,7 @@ export default function BooksPage() {
         {!loading && tab === 'reading' && (
           <ReadingRing
             weekDaily={weekDaily}
+            dailyReadTimes={dailyReadTimes}
             totalReadDays={totalReadDays}
             dayGoalMinutes={DAY_GOAL_MINUTES}
           />
