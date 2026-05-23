@@ -354,6 +354,7 @@
   display: flex;
   align-items: center;
   width: 100%;
+  gap: 24px;
 }
 
 .rring-wrap {
@@ -375,8 +376,6 @@
   flex-direction: column;
   justify-content: center;
   gap: 12px;
-  padding: 0 20px;
-  box-sizing: border-box;
 }
 
 .rring-stat-item {
