@@ -270,6 +270,7 @@ export default function TaskPage() {
   const diaryFullLoadingRef = useRef(false)
   const tabRef = useRef(tab)
   const diaryKeyboardHeightRef = useRef(0)
+  const diaryInputTouchRef = useRef(false)
 
   useEffect(() => { diaryRef.current = diary }, [diary])
   useEffect(() => { tabRef.current = tab }, [tab])
@@ -618,6 +619,18 @@ export default function TaskPage() {
     e?.stopPropagation?.()
   }
 
+  function lockDiaryInputTouch(e) {
+    e?.stopPropagation?.()
+    diaryInputTouchRef.current = true
+  }
+
+  function unlockDiaryInputTouch(e) {
+    e?.stopPropagation?.()
+    setTimeout(() => {
+      diaryInputTouchRef.current = false
+    }, 0)
+  }
+
   function openFullscreen(idx) {
     setFullscreenIdx(idx)
     setFsHistory([])
@@ -672,11 +685,13 @@ export default function TaskPage() {
   const touchStartRef = useRef({ x: 0, y: 0, time: 0 })
 
   function handleTouchStart(e) {
+    if (diaryInputTouchRef.current) return
     const t = e.touches[0]
     touchStartRef.current = { x: t.clientX, y: t.clientY, time: Date.now() }
   }
 
   function handleTouchEnd(e) {
+    if (diaryInputTouchRef.current) return
     const t = e.changedTouches[0]
     const dx = t.clientX - touchStartRef.current.x
     const dy = t.clientY - touchStartRef.current.y
@@ -739,9 +754,12 @@ export default function TaskPage() {
 
       {/* ── 日记 Tab ── */}
       {tab === 'diary' && (
-        <View className='diary-page'
+        <View
+          className='diary-page'
           onClick={closeDiaryKeyboard}
-          onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           {diaryLoading && !diary.today?.date ? (
             <View className='empty'><Text>加载中...</Text></View>
           ) : (
@@ -756,7 +774,13 @@ export default function TaskPage() {
                     <Text className='diary-done-btn' onClick={closeDiaryKeyboard}>完成</Text>
                   </View>
                 </View>
-                <View className='diary-textarea-scroll' onClick={stopDiaryTextareaTap}>
+                <ScrollView
+                  className='diary-textarea-shell'
+                  scrollY
+                  onClick={stopDiaryTextareaTap}
+                  onTouchStart={lockDiaryInputTouch}
+                  onTouchEnd={unlockDiaryInputTouch}
+                >
                   <Textarea
                     className='diary-textarea'
                     placeholder='今天发生了什么...'
@@ -768,14 +792,14 @@ export default function TaskPage() {
                     onBlur={e => {
                       console.info('[diary-blur]', e.detail || {})
                     }}
+                    autoHeight
                     adjustPosition={false}
-                    autoHeight={false}
                     showConfirmBar={false}
                     disableDefaultPadding
                     cursorSpacing={24}
                     maxlength={10000}
                   />
-                </View>
+                </ScrollView>
               </View>
 
               {/* 下半：历史上的今天 / 往期日记 */}
