@@ -5,6 +5,7 @@
 ## 模块结构
 
 ```
+.github/       GitHub Actions workflow（微信读书定时同步）
 sync/          同步脚本（微信读书 API 同步、云端推送等 Python 脚本）
 data/          运行时数据文件（gitignore，不提交）
 web/           本地 Flask 服务器 + dashboard.html 网页源码
@@ -18,20 +19,16 @@ miniprogram/   微信小程序（Taro）
 微信读书 API
       │
       ▼
-web/services/weread_sync.py      ← Flask 后台，每 2 小时自动跑
-sync/sync_weread.py              ← 手动命令行脚本
-      │ 两者都写
-      ▼
-data/weread_data.json
-data/weread_notes.json
-data/time.json
-data/tasks.json
-data/diary.json
-local_backups/
-      │
-      ├──→ 推送 ──→ Cloudflare Worker KV ──→ 小程序读取
-      │
-      └──→ web/server.py 本地读取 ──→ 浏览器 localhost:8080
+GitHub Actions（每小时，北京时间 9:00-23:00）
+.github/workflows/weread_sync.yml
+      │ 调用
+sync/sync_weread.py ── 书架、进度、笔记、热力图 ──→ POST /api/data ──→ Cloudflare Worker KV
+                                                                              │
+本地 Flask（每 15 分钟 pull）◄─────────────────────────────────────────────────┤
+      │                                                                        │
+      ▼                                                                        ▼
+data/ 本地文件                                                           小程序读取
+web/server.py → 浏览器 localhost:8080
 ```
 
 **写入规则：**
@@ -39,14 +36,13 @@ local_backups/
 | 操作 | 写哪里 | 推云端？ |
 |---|---|---|
 | 网页改任务/日记 | 本地 `data/` | ❌ 不推 |
-| WeRead 同步 | 本地 `data/` | ✅ 自动推 |
-| 凌晨 5 点重置 | 本地 `data/` | ✅ 自动推 |
+| WeRead 同步 | GitHub Actions → Worker KV | ✅ 直接写云端 |
+| 凌晨 5 点重置 | Worker KV（Worker Cron） | — |
 | 云端 pull（每 15 分钟） | 本地 `data/` | — |
 
 **云端 Worker 独立运行的部分（不依赖本地）：**
 - 小程序直接调 Worker API 读写云端 KV
-- Worker Cron 每 3 小时自动同步微信读书（需配置 `WEREAD_API_KEY` secret）
-- Worker Cron 凌晨 5 点重置已完成任务
+- Worker Cron 凌晨 5 点重置已完成任务（微信读书同步已迁移到 GitHub Actions）
 
 ## 本地运行
 
@@ -73,7 +69,7 @@ npm install
 npm run deploy
 ```
 
-需要在 Cloudflare 控制台配置 Secrets：`API_TOKEN`、`WEREAD_API_KEY`
+需要在 Cloudflare 控制台配置 Secrets：`API_TOKEN`（`WEREAD_API_KEY` 已不再需要，微信读书同步改由 GitHub Actions 负责）
 
 ## 数据文件
 
@@ -125,17 +121,23 @@ npm run deploy
 | `src/pages/notes/index.jsx` | **微信读书笔记页面** |
 | `src/pages/notes/index.scss` | 笔记页面样式 |
 
+### `.github/` — GitHub Actions
+
+| 文件 | 职责 |
+|---|---|
+| `workflows/weread_sync.yml` | 微信读书定时同步（每小时，北京时间 9:00-23:00），调用 `sync/sync_weread.py` |
+
 ### `worker/` — Cloudflare Worker
 
 | 文件 | 职责 |
 |---|---|
-| `src/index.js` | Worker 全部逻辑（KV 读写 API、定时任务同步微信读书、凌晨重置任务） |
+| `src/index.js` | Worker 全部逻辑（KV 读写 API、凌晨重置任务；微信读书同步已迁移至 GitHub Actions） |
 
 ### `sync/` — 命令行同步脚本
 
 | 文件 | 职责 |
 |---|---|
-| `sync/sync_weread.py` | 手动触发微信读书同步 |
+| `sync/sync_weread.py` | 微信读书全量同步并推送云端（GitHub Actions 调用，也可手动运行） |
 | `sync/weread_env.py` | 微信读书 API 认证环境变量配置 |
 | `sync/weread/service.py` | 微信读书 API 封装（wasm 解密、请求签名） |
 | `sync/backup_bookshelf.py` | 书架数据备份 |
@@ -164,7 +166,8 @@ npm run deploy
 | 添加/修改后端 API 接口 | `web/routes/api.py` |
 | 修改任务数据存储逻辑 | 任务数据在根部 `data.json` 中，由 `web/services/storage.py` 管理 |
 | 修改日记存储逻辑 | `web/services/diary_store.py` |
-| 修改微信读书同步逻辑 | `web/services/weread_sync.py` |
+| 修改微信读书同步逻辑（云端） | `sync/sync_weread.py` + `.github/workflows/weread_sync.yml` |
+| 修改微信读书同步逻辑（本地） | `web/services/weread_sync.py` |
 | 修改微信读书统计计算 | `web/services/weread_stats.py` |
 | 修改云端推送/拉取 | `web/services/cloud_sync.py` |
 | 修改 Cloudflare Worker 逻辑 | `worker/src/index.js` |
@@ -327,21 +330,13 @@ npm run deploy
 
 ### worker/src/index.js（Cloudflare Worker）
 - `fetch(request, env)` — Worker 主入口，路由 API 请求和 CRUD
-- `scheduled(event, env, ctx)` — Cron 定时任务（每日重置 + weread 同步）
+- `scheduled(event, env, ctx)` — Cron 定时任务（每日重置，微信读书同步已迁移至 GitHub Actions）
 - `loadData(kv)` / `saveData(kv, data)` — KV 读写 app 数据
 - `loadDiary(kv)` / `saveDiary(kv, diary)` — KV 读写日记
 - `loadCurrentDiary(kv)` — 加载日记并自动归档
 - `mergeDataForFullSave(existing, incoming)` — 合并增量数据
 - `mergeDiaryUpdate(storedDiary, incomingDiary)` — 合并日记更新
 - `runDailyReset(env)` — 每日重置（归档日记、清除已完成任务）
-- `syncWeRead(env, options)` — 完整 weread 同步（书架→进度→笔记→统计→持久化）
-- `wrPageNotebooks(apiKey)` — 分页拉取笔记本列表
-- `wrFetchNotes(apiKey, notebookBook)` — 拉取单本书全部笔记（划线+书评）
-- `wrFetchProgress(apiKey, book)` — 拉取单本书阅读进度
-- `wrFetchStats(apiKey, cachedMonthly)` — 拉取阅读统计（月/日/周）
-- `wrNormalizeBook(item, progressPayload)` — 标准化书籍
-- `wrNormalizeHighlight(bookTitle, bookId, mark, chapterTitles)` — 标准化划线笔记
-- `wrNormalizeReview(bookTitle, bookId, reviewItem)` — 标准化书评笔记
 
 ### sync/weread/env.py
 - `load_dotenv(repo_root)` — 加载 `.env` 文件
@@ -359,8 +354,13 @@ npm run deploy
 - `_normalize_review_note(book_title, book_id, review_item)` — 标准化书评
 - `_fetch_recent_daily_read_times(client, current_monthly, month_count)` — 拉取多月阅读时长
 
+### .github/workflows/weread_sync.yml
+- 每小时触发（北京时间 9:00-23:00），运行 `sync/sync_weread.py`
+- 支持 `workflow_dispatch` 手动触发
+- 所需 GitHub Secrets：`WEREAD_API_KEY`、`API_TOKEN`、`CLOUD_BASE_URL`
+
 ### sync/sync_weread.py
-- `sync()` — 手动全量同步 weread 并推送云端
+- `sync()` — 全量同步 weread（书架、进度、笔记、热力图）并推送云端 KV
 
 ### sync/backup_bookshelf.py
 - `run_backup()` — 备份书架数据
