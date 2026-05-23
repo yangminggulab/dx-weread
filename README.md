@@ -97,9 +97,8 @@ npm run deploy
 | `web/server.py` | Flask 入口，注册路由和定时任务，启动服务器 |
 | `web/dashboard.html` | 浏览器端 UI（任务/日记/读书面板），包含内联 Vue.js 组件和样式 |
 | `web/routes/api.py` | 所有 REST API 路由（任务 CRUD、日记读写、微信读书数据查询、云端推送/pull） |
-| `web/services/storage.py` | 通用数据清洗/标准化工具函数 |
+| `web/services/storage.py` | 任务数据聚合层（load/save/merge/migrate），负责合并 base data、weread、notes、time 为统一响应 |
 | `web/services/json_store.py` | 通用 JSON 文件读写（含自动备份到 `local_backups/`） |
-| `web/services/tasks_store.py` | 任务数据的持久化层 |
 | `web/services/diary_store.py` | 日记数据的持久化层 |
 | `web/services/time_store.py` | 时间模块数据（阅读时长等）持久化层 |
 | `web/services/weread_store.py` | 微信读书书架/统计数据持久化层 |
@@ -163,7 +162,7 @@ npm run deploy
 | 添加/修改小程序 API 调用 | `miniprogram/src/api/index.js` |
 | 修改网页端 UI (dashboard) | `web/dashboard.html` |
 | 添加/修改后端 API 接口 | `web/routes/api.py` |
-| 修改任务数据存储逻辑 | `web/services/tasks_store.py` |
+| 修改任务数据存储逻辑 | 任务数据在根部 `data.json` 中，由 `web/services/storage.py` 管理 |
 | 修改日记存储逻辑 | `web/services/diary_store.py` |
 | 修改微信读书同步逻辑 | `web/services/weread_sync.py` |
 | 修改微信读书统计计算 | `web/services/weread_stats.py` |
@@ -174,4 +173,201 @@ npm run deploy
 | 修改小程序全局配置/tabBar | `miniprogram/src/app.config.js` |
 | 修改小程序全局样式 | `miniprogram/src/app.scss` |
 | 修改微信读书 API 调用底层 | `sync/weread/service.py` |
+
+## 各文件函数清单
+
+### web/server.py
+- `_Handler` — HTTP 请求处理器类
+- `_Handler._cors_headers()` — 构建 CORS 响应头
+- `_Handler._send_json(data, status)` — 发送 JSON 响应
+- `_Handler._read_json_body()` — 解析请求 JSON body
+- `_Handler.do_OPTIONS()` — CORS 预检请求
+- `_Handler._dispatch(method)` — 路由 GET/POST 到 API handler 或返回静态 HTML
+- `_Handler.do_GET()` / `_Handler.do_POST()` — 代理到 `_dispatch`
+
+### web/routes/api.py
+- `handle_request(method, path, body)` — API 路由总入口，分发到数据/日记/weread/cloud 子路由
+
+### web/services/storage.py
+- `load_base_app_data()` — 加载基础 app 数据 JSON
+- `write_base_app_data(data)` — 写入基础 app 数据
+- `estimate_total_pages(total_words)` — 字数估算页数 (500字/页)
+- `estimate_current_page(progress_percent, total_pages)` — 按进度估算当前页
+- `split_combined_payload(data)` — 拆解合并 payload 为 user/weread/notes 三部分
+- `merge_app_and_special_data(data, weread, weread_notes_data, time_data)` — 聚合所有数据为统一响应
+- `migrate_embedded_special_data()` — 迁移嵌入在 data.json 中的 weread/time 数据到独立文件
+- `load_app_data()` — 加载并合并所有数据（base+weread+notes+time）
+
+### web/services/json_store.py
+- `load_json_file(path, default)` — 加载 JSON 文件，缺失时返回默认值
+- `write_json_file(path, data, mode)` — 写入 JSON 文件
+- `backup_file(path, prefix, keep=20)` — 创建带时间戳的备份，保留最近 N 份
+
+### web/services/diary_store.py
+- `empty_diary()` — 空日记结构
+- `load_diary_file()` — 加载并标准化日记 JSON
+- `write_diary_file(diary)` — 备份并写入日记
+- `effective_diary_date()` — 返回今天日期（凌晨5点前回退到昨天）
+- `archive_diary_if_needed(diary)` — 日期变更时自动归档今天的日记
+- `merge_diary_update(stored_diary, incoming_diary)` — 合并日记更新（解决 today/archive 冲突）
+- `merge_diary(local_diary, cloud_diary)` — 合并本地与云端日记
+- `_clean_diary_content(text)` — 清理日记内容（移除旧版视频标签、时间戳、分隔线）
+- `_normalize_diary(diary)` — 标准化日记结构
+- `_normalize_diary_archive_entry(entry)` — 标准化单条归档
+- `_merge_diary_archive_entry(left, right)` — 合并两条归档（取更长内容、更高浏览数）
+- `_timestamp_order(incoming, stored)` — 时间戳比较决定合并优先级
+
+### web/services/time_store.py
+- `empty_time_data()` — 空时间数据
+- `normalize_time_data(data)` — 标准化时间数据（确保 weread 子结构）
+- `load_time_data()` — 加载并标准化时间数据
+- `write_time_data(data)` — 标准化并写入时间数据
+
+### web/services/weread_store.py
+- `normalize_weread_book(book)` — 标准化单本书籍
+- `normalize_weread_note(note)` — 标准化单条笔记
+- `normalize_weread_update(item)` — 标准化单条更新
+- `normalize_weread_data(data)` — 标准化全部 weread 数据
+- `normalize_weread_notes_data(data)` — 标准化全部笔记数据
+- `load_weread_data()` / `write_weread_data(data)` — 读写 weread 数据
+- `load_weread_notes_data()` / `write_weread_notes_data(data)` — 读写笔记数据
+- `is_weread_book(book)` / `is_weread_note(note)` / `is_weread_update(item)` — 判断数据来源
+- `pick_book_accent(seed)` — 确定性选书籍主题色
+- `extract_note_preview(summary)` — 提取笔记预览首行
+- `allocate_id(used_ids, preferred)` — 分配不重复 ID
+- `merge_weread_store(existing, incoming)` — 合并 weread 数据（去重 books/notes/updates）
+- `merge_weread_notes_store(existing, incoming)` — 合并笔记数据（按 sourceItemId 去重）
+- `coerce_int_id(value)` / `has_tag(tags, name)` — 工具函数
+
+### web/services/weread_sync.py
+- `fetch_weread_data(existing_notes_store)` — 通过 gateway API 拉取完整 weread 快照
+- `build_weread_sync_payload(result)` — 构建标准化同步 payload
+- `persist_weread_sync_payload(payload)` — 持久化同步数据到 store
+- `run_weread_sync(label)` — 完整同步流程（fetch → persist）
+- `save_combined_data(data)` — 保存外部合并数据
+- `weread_status_payload()` — 构建前端状态信息（API key、书籍数等）
+- `start_background_jobs()` — 启动后台定时同步线程
+
+### web/services/weread_stats.py
+- `empty_weread_stats()` — 空统计结构
+- `normalize_weread_stats(stats)` — 标准化阅读统计
+- `has_weread_stats(stats)` — 判断是否有有效数据
+- `merge_weread_stats(primary, fallback)` — 合并统计（优先 primary）
+- `derive_weread_time_fields(stats)` — 从统计推算周阅读/总阅读天数
+- `build_weread_time_data(stats, synced_at)` — 构建时间域 weread 记录
+- `merge_time_data(existing, weread_stats, weread_synced_at)` — 合并 weread 时间数据
+
+### web/services/cloud_sync.py
+- `merge_cloud_into_local(local, cloud, preserve_local_only_tasks)` — 云端数据合并到本地（时间戳冲突解决）
+- `pull_from_cloud(label)` — 从云端 API 拉取并合并 app 数据和日记
+- `do_daily_reset(today, label)` — 凌晨重置（cloud pull → 日记归档 → 清除已完成任务）
+- `start_background_jobs()` — 启动 cloud-pull 和 5am-reset 后台线程
+
+### web/services/config.py
+- `load_env_file()` — 加载 `.env` 文件到环境变量
+- `env_flag(name, default)` — 读取布尔环境变量
+- `env_float(name, default)` — 读取浮点环境变量
+
+### web/dashboard.html
+- 单个 HTML 文件，包含内联 Vue.js 应用，渲染任务/日记/读书三面板 UI
+
+### miniprogram/src/app.js
+- 小程序入口，初始化 Taro
+
+### miniprogram/src/app.config.js
+- 页面路由配置、tabBar 定义（任务/书架/笔记三个 tab）
+
+### miniprogram/src/app.scss
+- 小程序全局样式
+
+### miniprogram/src/config.js
+- 前端配置常量（API base URL 等）
+
+### miniprogram/src/api/index.js
+- `request(path, method, data)` — 封装 Taro.request，自动附加 auth header
+- `getData()` → GET /api/data
+- `saveData(data)` → POST /api/data
+- `addTask(task)` → POST /api/tasks/add
+- `updateTask(task)` → POST /api/tasks/update
+- `deleteTask(id)` → POST /api/tasks/delete
+- `getDiary()` → GET /api/diary
+- `getDiaryToday()` → GET /api/diary?today=1
+- `saveDiary(diary)` → POST /api/diary
+- `addNote(note)` → POST /api/notes/add
+- `deleteNote(id)` → POST /api/notes/delete
+- `updateNote(note)` → POST /api/notes/update
+
+### miniprogram/src/pages/index/index.jsx（任务+日记主页面）
+- `TaskPage()` — 主组件，管理任务 CRUD、日记编辑、左右滑切换 tab
+- `loadData()` — 拉取全量数据
+- `loadDiaryToday()` — 轻量拉取今日日记
+- `loadDiary()` — 拉取完整日记（含归档，进入日记 tab 时懒加载）
+- `handleStatusChange(task)` — 切换任务完成状态（乐观更新）
+- `handleDelete(id)` — 确认并删除任务
+- `handleAdd()` — 提交新任务
+- `openEdit(task)` / `handleEditSave()` — 编辑任务
+- `handleDiaryChange(content)` — 日记输入防抖自动保存
+- `openFullscreen(idx)` — 打开日记归档全屏阅读器
+- `cleanDiaryContent(text)` — 日记内容清理
+- `normalizeDiaryPayload(payload)` — 标准化日记数据结构
+- `mergeDiaryArchiveViewMeta(baseArchive, overlayArchive)` — 合并归档浏览元数据
+
+### miniprogram/src/pages/books/index.jsx（读书书架页面）
+- `BooksPage()` — 主组件，展示在读书架/想读/读完三栏
+- `loadData()` — 拉取 weread 书籍数据
+- `ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes })` — Canvas 阅读进度环
+- `drawRing2d(ctx, W, H, minutes, goal)` — 绘制 2D 环形进度图
+- `getTodayMinutes(weekDaily)` — 计算今日阅读分钟数
+
+### miniprogram/src/pages/notes/index.jsx（读书笔记页面）
+- `NotesPage()` — 主组件，笔记 CRUD、日记条目展示、搜索
+- `loadData()` — 拉取笔记和日记数据
+- `handleAdd()` — 新建笔记
+- `pickRandomNotes(notes, count)` — 随机选取 N 条笔记
+
+### worker/src/index.js（Cloudflare Worker）
+- `fetch(request, env)` — Worker 主入口，路由 API 请求和 CRUD
+- `scheduled(event, env, ctx)` — Cron 定时任务（每日重置 + weread 同步）
+- `loadData(kv)` / `saveData(kv, data)` — KV 读写 app 数据
+- `loadDiary(kv)` / `saveDiary(kv, diary)` — KV 读写日记
+- `loadCurrentDiary(kv)` — 加载日记并自动归档
+- `mergeDataForFullSave(existing, incoming)` — 合并增量数据
+- `mergeDiaryUpdate(storedDiary, incomingDiary)` — 合并日记更新
+- `runDailyReset(env)` — 每日重置（归档日记、清除已完成任务）
+- `syncWeRead(env, options)` — 完整 weread 同步（书架→进度→笔记→统计→持久化）
+- `wrPageNotebooks(apiKey)` — 分页拉取笔记本列表
+- `wrFetchNotes(apiKey, notebookBook)` — 拉取单本书全部笔记（划线+书评）
+- `wrFetchProgress(apiKey, book)` — 拉取单本书阅读进度
+- `wrFetchStats(apiKey, cachedMonthly)` — 拉取阅读统计（月/日/周）
+- `wrNormalizeBook(item, progressPayload)` — 标准化书籍
+- `wrNormalizeHighlight(bookTitle, bookId, mark, chapterTitles)` — 标准化划线笔记
+- `wrNormalizeReview(bookTitle, bookId, reviewItem)` — 标准化书评笔记
+
+### sync/weread/env.py
+- `load_dotenv(repo_root)` — 加载 `.env` 文件
+
+### sync/weread/service.py（微信读书 API 核心）
+- `WeReadGatewayClient` — HTTP 客户端（带重试）
+- `WeReadGatewayClient.call(api_name, **params)` — 调用 gateway API（最多重试3次）
+- `sync_weread_snapshot(existing_notes_store)` — 完整快照同步（书架/进度/笔记/统计/热力图）
+- `_page_notebooks(client)` — 分页拉取笔记本
+- `_page_reviews(client, book_id)` — 分页拉取书评
+- `_fetch_book_progress(client, book)` — 拉取单本书进度
+- `_fetch_book_notes(client, notebook_book, existing_notes_by_book)` — 拉取单本书笔记
+- `_normalize_book(item, progress_payload)` — 标准化书籍
+- `_normalize_bookmark_note(book_title, book_id, mark, chapter_titles)` — 标准化划线
+- `_normalize_review_note(book_title, book_id, review_item)` — 标准化书评
+- `_fetch_recent_daily_read_times(client, current_monthly, month_count)` — 拉取多月阅读时长
+
+### sync/sync_weread.py
+- `sync()` — 手动全量同步 weread 并推送云端
+
+### sync/backup_bookshelf.py
+- `run_backup()` — 备份书架数据
+
+### sync/export_notes.py
+- `run_export()` — 导出全部笔记为 Markdown 文件
+- `export_book(notebook_book)` — 导出单本书笔记
+- `format_markdown(notebook_book, bookmark_payload, reviews)` — 格式化为 Markdown
+- `generate_index(exported)` — 生成 README.md 索引
 
