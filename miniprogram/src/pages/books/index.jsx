@@ -140,22 +140,24 @@ function ReadingRing({ weekDaily, dailyReadTimes, totalReadDays, dayGoalMinutes 
           <Canvas type='2d' id='wr-ring' className='rring-canvas' />
         </View>
         <View className='rring-stats'>
-          <View className='rring-stat-item'>
-            <Text className='rring-label'>今日阅读</Text>
-            <Text className='rring-val'>{todayStr}</Text>
-          </View>
-          <View className='rring-stat-item'>
-            <Text className='rring-label'>连续完成</Text>
-            <View className='rring-val-row'>
-              <Text className='rring-val rring-val-plain'>{streakDays}</Text>
-              <Text className='rring-unit'>天</Text>
+          <View className='rring-stats-inner'>
+            <View className='rring-stat-item'>
+              <Text className='rring-label'>今日阅读</Text>
+              <Text className='rring-val'>{todayStr}</Text>
             </View>
-          </View>
-          <View className='rring-stat-item'>
-            <Text className='rring-label'>累积完成</Text>
-            <View className='rring-val-row'>
-              <Text className='rring-val rring-val-plain'>{totalReadDays}</Text>
-              <Text className='rring-unit'>天</Text>
+            <View className='rring-stat-item'>
+              <Text className='rring-label'>连续完成</Text>
+              <View className='rring-val-row'>
+                <Text className='rring-val rring-val-plain'>{streakDays}</Text>
+                <Text className='rring-unit'>天</Text>
+              </View>
+            </View>
+            <View className='rring-stat-item'>
+              <Text className='rring-label'>累积完成</Text>
+              <View className='rring-val-row'>
+                <Text className='rring-val rring-val-plain'>{totalReadDays}</Text>
+                <Text className='rring-unit'>天</Text>
+              </View>
             </View>
           </View>
         </View>
