@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-WeChat Reading sync via Agent API Gateway (WEREAD_API_KEY, no cookie).
-Required: WEREAD_API_KEY, API_TOKEN
-Optional: CLOUD_BASE_URL (default: https://yangminggu.com/tasks)
+WeChat Reading sync via Agent API Gateway — books, notes, heatmap — push to cloud.
+Required env vars: WEREAD_API_KEY, API_TOKEN
+Optional env vars: CLOUD_BASE_URL (default: https://yangminggu.com/tasks)
 """
-import os, sys, requests
+import hashlib
+import os
+import sys
+import requests
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +28,8 @@ WEREAD_API_KEY = os.environ.get("WEREAD_API_KEY", "")
 BOOK_ACCENTS   = ["#2d6a4f", "#4a4a6a", "#6a4a2a", "#3a6a5a", "#5a3a6a"]
 
 
+# ── helpers ──────────────────────────────────────────────────────────────────
+
 def pick_accent(title):
     return BOOK_ACCENTS[sum(ord(c) for c in (title or "")) % len(BOOK_ACCENTS)]
 
@@ -42,6 +47,16 @@ def fmt_date(ms):
     try: return datetime.fromtimestamp(ms / 1000 if ms > 10**11 else ms).strftime("%Y-%m-%d")
     except: return ""
 
+def fmt_ts(ms):
+    if not ms: return ""
+    try: return datetime.fromtimestamp(ms / 1000 if ms > 10**11 else ms).strftime("%Y-%m-%d %H:%M")
+    except: return ""
+
+def make_id(book_id, note_type, *parts):
+    norm = "||".join(" ".join(str(p or "").split()) for p in parts if str(p or "").strip())
+    digest = hashlib.sha1(f"{book_id}|{note_type}|{norm}".encode()).hexdigest()[:16]
+    return f"{book_id}:{note_type}:{digest}"
+
 def gw(api_name, **params):
     resp = requests.post(
         GATEWAY_URL,
@@ -56,12 +71,17 @@ def gw(api_name, **params):
         raise RuntimeError(f"{api_name} errcode={ec}: {data.get('errmsg') or data.get('errMsg', '')}")
     return data
 
-def fetch_progress(book):
-    bid = str(book.get("bookId") or "").strip()
-    try:
-        return bid, gw("/book/getprogress", bookId=bid).get("book") or {}
-    except Exception:
-        return bid, {}
+def _brief(d):
+    return {
+        "baseTime":           coerce_int(d.get("baseTime")),
+        "readDays":           coerce_int(d.get("readDays")),
+        "totalReadTime":      coerce_int(d.get("totalReadTime")),
+        "dayAverageReadTime": coerce_int(d.get("dayAverageReadTime")),
+        "compare":            d.get("compare") or 0,
+    }
+
+
+# ── sync ──────────────────────────────────────────────────────────────────────
 
 def sync():
     # 1. 书架
@@ -72,6 +92,13 @@ def sync():
 
     # 2. 并发拉阅读进度
     print("📖 Fetching progress...")
+    def fetch_progress(book):
+        bid = str(book.get("bookId") or "").strip()
+        try:
+            return bid, gw("/book/getprogress", bookId=bid).get("book") or {}
+        except Exception:
+            return bid, {}
+
     progress_map = {}
     with ThreadPoolExecutor(max_workers=6) as pool:
         for bid, prog in pool.map(fetch_progress, raw_books):
@@ -89,14 +116,7 @@ def sync():
         read_ts = as_ms(prog.get("updateTime") or item.get("readUpdateTime") or item.get("updateTime"))
         finish  = pct >= 100 or coerce_int(item.get("finishReading")) == 1
         started = bool(coerce_int(prog.get("isStartReading")))
-
-        if finish:
-            status = "finished"
-        elif not started and pct == 0:
-            status = "want"
-        else:
-            status = "reading"
-
+        status  = "finished" if finish else ("want" if not started and pct == 0 else "reading")
         books.append({
             "id":               f"wr_{bid}",
             "_bookId":          bid,
@@ -117,53 +137,141 @@ def sync():
     done    = sum(1 for b in books if b["status"] == "finished")
     print(f"   在读 {reading}  想读 {want}  读完 {done}")
 
-    # 4. 阅读统计
-    print("📊 Fetching reading stats...")
+    # 4. 笔记（划线 + 评论）
+    print("📝 Fetching notes...")
+    notes = []
     try:
-        week = gw("/readdata/detail", mode="weekly")
-        week_read_minutes = coerce_int(week.get("totalReadTime")) // 60
-        week_read_daily   = {
-            str(k): coerce_int(v) // 60
-            for k, v in (week.get("readTimes") or {}).items()
-        }
-        print(f"   本周阅读: {week_read_minutes} 分钟")
-    except Exception as e:
-        print(f"   ⚠️ 本周统计跳过: {e}")
-        week_read_minutes = 0
-        week_read_daily   = {}
+        notebook_books = []
+        last_sort = None
+        for _ in range(50):
+            params = {"count": 100}
+            if last_sort:
+                params["lastSort"] = last_sort
+            nb_data = gw("/user/notebooks", **params)
+            page = [b for b in (nb_data.get("books") or []) if isinstance(b, dict)]
+            notebook_books.extend(page)
+            if not nb_data.get("hasMore") or not page:
+                break
+            last_sort = coerce_int(page[-1].get("sort"))
+            if not last_sort:
+                break
+        print(f"   {len(notebook_books)} books with notes")
 
-    try:
-        overall = gw("/readdata/detail", mode="overall")
-        total_read_days = coerce_int(overall.get("readDays"))
-        print(f"   累计阅读天数: {total_read_days} 天")
-    except Exception as e:
-        print(f"   ⚠️ 累计统计跳过: {e}")
-        total_read_days = 0
+        def fetch_book_notes(nb_book):
+            bid   = str(nb_book.get("bookId") or "").strip()
+            meta  = nb_book.get("book") if isinstance(nb_book.get("book"), dict) else {}
+            title = meta.get("title", "") or str(nb_book.get("title") or "") or bid
+            if not bid:
+                return []
+            try:
+                bm = gw("/book/bookmarklist", bookId=bid)
+            except Exception:
+                return []
+            chapter_titles = {
+                coerce_int(ch.get("chapterUid")): str(ch.get("title") or "").strip()
+                for ch in (bm.get("chapters") or [])
+                if isinstance(ch, dict)
+            }
+            reviews = []
+            synckey = 0
+            for _ in range(50):
+                try:
+                    rv = gw("/review/list/mine", bookid=bid, count=100, synckey=synckey)
+                except Exception:
+                    break
+                page_rv = [r for r in (rv.get("reviews") or []) if isinstance(r, dict)]
+                reviews.extend(page_rv)
+                if not rv.get("hasMore") or not page_rv:
+                    break
+                next_key = coerce_int(rv.get("synckey"))
+                if next_key == synckey:
+                    break
+                synckey = next_key
 
-    # 5. 热力图：并发拉 18 周每日阅读数据
-    print("📅 Fetching heatmap data (18 weeks)...")
-    weread_stats = {"monthly": {}, "annual": {}, "dailyReadTimes": []}
+            book_notes = []
+            seen = set()
+            for mark in (bm.get("updated") or []):
+                text = " ".join(str(mark.get("markText") or "").split())
+                if not text:
+                    continue
+                ts     = as_ms(mark.get("createTime"))
+                ch_uid = coerce_int(mark.get("chapterUid"))
+                sid    = make_id(bid, "highlight", mark.get("bookmarkId"), mark.get("range"), ch_uid, text, ts)
+                if sid in seen:
+                    continue
+                seen.add(sid)
+                preview = text[:18] + ("..." if len(text) > 18 else "")
+                book_notes.append({
+                    "source":                 "weread",
+                    "title":                  f"《{title}》划线 · {preview}",
+                    "tags":                   ["微信读书", "划线"],
+                    "summary":                text,
+                    "noteType":               "highlight",
+                    "bookTitle":              title,
+                    "_bookId":                bid,
+                    "sourceItemId":           sid,
+                    "sourceUpdatedAt":        fmt_ts(ts),
+                    "sourceUpdatedTimestamp": ts,
+                    "updatedAt":              fmt_date(ts),
+                    "chapterTitle":           chapter_titles.get(ch_uid, ""),
+                    "chapterUid":             ch_uid,
+                    "range":                  str(mark.get("range") or "").strip(),
+                    "colorStyle":             coerce_int(mark.get("colorStyle")),
+                })
+            for rv_item in reviews:
+                r       = rv_item.get("review") if isinstance(rv_item.get("review"), dict) else {}
+                content = " ".join(str(r.get("content") or "").split())
+                if not content:
+                    continue
+                ts  = as_ms(r.get("createTime"))
+                sid = make_id(bid, "review", r.get("reviewId"), r.get("range"), ts, content)
+                if sid in seen:
+                    continue
+                seen.add(sid)
+                preview = content[:18] + ("..." if len(content) > 18 else "")
+                book_notes.append({
+                    "source":                 "weread",
+                    "title":                  f"《{title}》评论 · {preview}",
+                    "tags":                   ["微信读书", "评论"],
+                    "summary":                content,
+                    "noteType":               "review",
+                    "bookTitle":              title,
+                    "_bookId":                bid,
+                    "sourceItemId":           sid,
+                    "sourceUpdatedAt":        fmt_ts(ts),
+                    "sourceUpdatedTimestamp": ts,
+                    "updatedAt":              fmt_date(ts),
+                    "chapterTitle":           str(r.get("chapterTitle") or r.get("chapterName") or "").strip(),
+                    "chapterUid":             coerce_int(r.get("chapterUid")),
+                    "range":                  str(r.get("range") or "").strip(),
+                })
+            return sorted(book_notes, key=lambda n: n.get("sourceUpdatedTimestamp") or 0, reverse=True)
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for book_notes in pool.map(fetch_book_notes, notebook_books):
+                notes.extend(book_notes)
+        notes.sort(key=lambda n: n.get("sourceUpdatedTimestamp") or 0, reverse=True)
+        print(f"   {len(notes)} notes total")
+    except Exception as e:
+        print(f"   ⚠️ 笔记同步失败: {e}")
+
+    # 5. 阅读统计 + 热力图（18 周每日数据，并发拉取）
+    print("📊 Fetching reading stats + heatmap (18 weeks)...")
+    week_read_minutes = 0
+    week_read_daily   = {}
+    total_read_days   = 0
+    weread_stats      = {"monthly": {}, "annual": {}, "overall": {}, "dailyReadTimes": []}
     try:
         monthly_data = gw("/readdata/detail", mode="monthly")
+        overall_data = gw("/readdata/detail", mode="overall")
         annual_data  = gw("/readdata/detail", mode="annually")
 
-        def _brief(d):
-            return {
-                "baseTime":           coerce_int(d.get("baseTime")),
-                "readDays":           coerce_int(d.get("readDays")),
-                "totalReadTime":      coerce_int(d.get("totalReadTime")),
-                "dayAverageReadTime": coerce_int(d.get("dayAverageReadTime")),
-                "compare":            d.get("compare") or 0,
-            }
-
-        now_ts = int(datetime.now().timestamp())
+        now_ts       = int(datetime.now().timestamp())
         week_offsets = [i * 7 * 86400 for i in range(18)]
 
         def fetch_week(offset):
             try:
-                base = now_ts - offset
-                data = gw("/readdata/detail", mode="weekly", baseTime=base)
-                return data.get("readTimes") or {}
+                return gw("/readdata/detail", mode="weekly", baseTime=now_ts - offset).get("readTimes") or {}
             except Exception:
                 return {}
 
@@ -171,49 +279,91 @@ def sync():
         with ThreadPoolExecutor(max_workers=6) as pool:
             for rt in pool.map(fetch_week, week_offsets):
                 for ts_str, secs in rt.items():
-                    ts = int(ts_str)
+                    ts       = int(ts_str)
                     date_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
                     daily_map[date_str] = max(daily_map.get(date_str, 0), coerce_int(secs))
 
         daily_list = sorted(
             [{"date": d, "timestamp": int(datetime.strptime(d, "%Y-%m-%d").timestamp()), "seconds": s}
              for d, s in daily_map.items()],
-            key=lambda x: x["date"]
+            key=lambda x: x["date"],
         )
+
+        current_month = datetime.now().strftime("%Y-%m")
+        for item in daily_list:
+            if item["date"].startswith(current_month) and item["seconds"] > 0:
+                week_read_daily[str(item["timestamp"])] = round(item["seconds"] / 60)
+        week_read_minutes = sum(week_read_daily.values())
+        total_read_days   = coerce_int(overall_data.get("readDays")) or coerce_int(monthly_data.get("readDays"))
+
         weread_stats = {
             "monthly":        _brief(monthly_data),
             "annual":         _brief(annual_data),
+            "overall":        _brief(overall_data),
             "dailyReadTimes": daily_list,
         }
-        print(f"   热力图每日数据: {len(daily_list)} 天")
+        print(f"   热力图 {len(daily_list)} 天  本月 {week_read_minutes} 分钟  累计 {total_read_days} 天")
     except Exception as e:
-        print(f"   ⚠️ 热力图数据跳过: {e}")
+        print(f"   ⚠️ 统计数据跳过: {e}")
 
-    # 6. 拉云端、合并、推送
+    # 6. 拉云端现有数据、合并、推送
     print("☁️  Syncing to cloud...")
-    r = requests.get(
-        f"{CLOUD_BASE_URL}/api/data",
-        headers={"Authorization": f"Bearer {API_TOKEN}"},
-        timeout=15,
-    )
+    cloud_headers = {"Authorization": f"Bearer {API_TOKEN}", "Content-Type": "application/json"}
+    r = requests.get(f"{CLOUD_BASE_URL}/api/data", headers=cloud_headers, timeout=15)
     r.raise_for_status()
     cloud = r.json()
 
-    other_books = [b for b in (cloud.get("books") or []) if b.get("source") != "weread"]
-    cloud["books"]           = other_books + books
-    cloud["weekReadMinutes"] = week_read_minutes
-    cloud["weekReadDaily"]   = week_read_daily
-    cloud["totalReadDays"]   = total_read_days
-    cloud["wereadStats"]     = weread_stats
+    # 保留非 weread 的 books / notes / updates
+    other_books   = [b for b in (cloud.get("books")   or []) if b.get("source")  != "weread"]
+    other_notes   = [n for n in (cloud.get("notes")   or []) if n.get("source")  != "weread"]
+    other_updates = [u for u in (cloud.get("updates") or []) if u.get("type")    != "weread"]
 
-    push = requests.post(
-        f"{CLOUD_BASE_URL}/api/data",
-        json=cloud,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {API_TOKEN}"},
-        timeout=15,
-    )
+    # dailyReadTimes：把云端已有的历史和本次新拉的合并（新数据覆盖同日旧数据）
+    existing_daily = {
+        item["date"]: item
+        for item in (cloud.get("wereadStats", {}).get("dailyReadTimes") or [])
+        if item.get("date")
+    }
+    for item in weread_stats["dailyReadTimes"]:
+        existing_daily[item["date"]] = item
+    weread_stats["dailyReadTimes"] = sorted(existing_daily.values(), key=lambda x: x["date"])
+
+    synced_at = datetime.now().isoformat(timespec="seconds")
+    updates = [
+        {
+            "id":      int(datetime.now().timestamp() * 1000) + idx,
+            "type":    "weread",
+            "text":    note["title"],
+            "preview": note.get("summary", "")[:40],
+            "time":    "刚刚",
+        }
+        for idx, note in enumerate(notes[:4])
+    ] or [{
+        "id":      int(datetime.now().timestamp() * 1000),
+        "type":    "weread",
+        "text":    f"微信读书同步：{len(books)} 本书，{len(notes)} 条笔记",
+        "preview": "",
+        "time":    "刚刚",
+    }]
+
+    cloud.update({
+        "books":           other_books + books,
+        "notes":           other_notes + notes,
+        "updates":         other_updates + updates,
+        "weekReadMinutes": week_read_minutes,
+        "weekReadDaily":   week_read_daily,
+        "totalReadDays":   total_read_days,
+        "wereadStats":     weread_stats,
+        "wereadSyncedAt":  synced_at,
+    })
+
+    push = requests.post(f"{CLOUD_BASE_URL}/api/data", json=cloud, headers=cloud_headers, timeout=30)
     push.raise_for_status()
-    print(f"✅ Done: {len(books)} weread + {len(other_books)} other = {len(cloud['books'])} total, 热力图 {len(weread_stats['dailyReadTimes'])} 天")
+    print(
+        f"✅ Done: {len(books)} books  {len(notes)} notes  "
+        f"热力图 {len(weread_stats['dailyReadTimes'])} 天  "
+        f"(非weread: {len(other_books)} books / {len(other_notes)} notes)"
+    )
     return len(books)
 
 

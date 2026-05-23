@@ -1,0 +1,29 @@
+name: WeRead Sync
+
+on:
+  schedule:
+    - cron: '0 1,4,7,10,13,16,19,22 * * *'  # 每 3 小时（北京时间 9/12/15/18/21/0/3/6 点）
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run WeRead sync
+        run: python sync/sync_weread.py
+        env:
+          WEREAD_API_KEY: ${{ secrets.WEREAD_API_KEY }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          CLOUD_BASE_URL: ${{ secrets.CLOUD_BASE_URL }}
