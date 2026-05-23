@@ -347,34 +347,34 @@
 // ── 今日阅读圆环 ──────────────────────────────────────
 .rring-card {
   margin: 0 0 24px;
-  padding: 28px 24px;
-  background: #1c1c1e;
-  border-radius: 24px;
+  padding: 32px 8px;
 }
 
 .rring-row {
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
 }
 
 .rring-wrap {
-  width: 180px;
-  height: 180px;
+  width: 200px;
+  height: 200px;
   flex-shrink: 0;
 }
 
 .rring-canvas {
-  width: 180px;
-  height: 180px;
+  width: 200px;
+  height: 200px;
 }
 
 .rring-stats {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 18px;
+  justify-content: space-between;
+  height: 200px;
+  padding: 8px 0;
+  box-sizing: border-box;
 }
 
 .rring-stat-item {
@@ -390,18 +390,18 @@
 }
 
 .rring-val {
-  font-size: 40px;
+  font-size: 44px;
   font-weight: 700;
   color: #4cd964;
   line-height: 1;
 }
 
 .rring-unit {
-  font-size: 22px;
-  color: rgba(255,255,255,0.4);
+  font-size: 24px;
+  color: #888;
 }
 
 .rring-label {
   font-size: 22px;
-  color: rgba(255,255,255,0.45);
+  color: #aaa;
 }
