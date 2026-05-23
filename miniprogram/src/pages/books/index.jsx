@@ -147,8 +147,6 @@ export default function BooksPage() {
   const [weekDaily, setWeekDaily] = useState({})
   const [totalReadDays, setTotalReadDays] = useState(0)
   const touchRef = useRef({ x: 0, y: 0, time: 0 })
-  const [bookFades, setBookFades] = useState({ top: false, bottom: true })
-  const bookListHeightRef = useRef(0)
 
   const loadData = useCallback(async () => {
     try {
@@ -203,14 +201,6 @@ export default function BooksPage() {
     if (dx > 0 && idx > 0)              setTab(TABS[idx - 1].key)
   }
 
-  function handleBookScroll(e) {
-    const { scrollTop, scrollHeight } = e.detail
-    const h = bookListHeightRef.current
-    setBookFades({
-      top: scrollTop > 4,
-      bottom: h > 0 ? scrollTop + h < scrollHeight - 4 : true,
-    })
-  }
 
   return (
     <View className='books-page' onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
@@ -228,16 +218,8 @@ export default function BooksPage() {
         ))}
       </View>
 
-      <View className='book-list-wrap' ref={el => {
-        if (el) Taro.nextTick(() => {
-          Taro.createSelectorQuery().select('.book-list-wrap')
-            .fields({ size: true }).exec(([r]) => {
-              if (r) { bookListHeightRef.current = r.height; setBookFades(f => ({ ...f })) }
-            })
-        })
-      }}>
-      <ScrollView key={tab} scrollY showScrollbar={false} className='book-list'
-        onScroll={handleBookScroll}>
+      <View className='book-list-wrap'>
+      <ScrollView key={tab} scrollY showScrollbar={false} className='book-list'>
         {loading && <View className='empty'><Text>加载中...</Text></View>}
         {!loading && listMap[tab].length === 0 && <View className='empty'><Text>暂无书籍 📚</Text></View>}
 
@@ -282,8 +264,7 @@ export default function BooksPage() {
           />
         )}
       </ScrollView>
-      {bookFades.top && <View className='list-fade-top' />}
-      {bookFades.bottom && <View className='list-fade-bottom' />}
+      <View className='list-fade-bottom' />
       </View>
     </View>
   )

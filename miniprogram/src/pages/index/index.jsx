@@ -271,10 +271,6 @@ export default function TaskPage() {
   const tabRef = useRef(tab)
   const diaryKeyboardHeightRef = useRef(0)
 
-  // 任务列表滚动渐变遮罩
-  const [taskFades, setTaskFades] = useState({ top: false, bottom: true })
-  const taskListHeightRef = useRef(0)
-
   useEffect(() => { diaryRef.current = diary }, [diary])
   useEffect(() => { tabRef.current = tab }, [tab])
 
@@ -675,15 +671,6 @@ export default function TaskPage() {
   const TAB_KEYS = TYPE_TABS.map(t => t.key)
   const touchStartRef = useRef({ x: 0, y: 0, time: 0 })
 
-  function handleTaskScroll(e) {
-    const { scrollTop, scrollHeight } = e.detail
-    const h = taskListHeightRef.current
-    setTaskFades({
-      top: scrollTop > 4,
-      bottom: h > 0 ? scrollTop + h < scrollHeight - 4 : true,
-    })
-  }
-
   function handleTouchStart(e) {
     const t = e.touches[0]
     touchStartRef.current = { x: t.clientX, y: t.clientY, time: Date.now() }
@@ -811,16 +798,10 @@ export default function TaskPage() {
 
       {/* ── 任务列表 ── */}
       {tab !== 'diary' && (
-        <View className='task-list-wrap' ref={el => {
-          if (el) Taro.nextTick(() => {
-            Taro.createSelectorQuery().select('.task-list-wrap')
-              .fields({ size: true }).exec(([r]) => { if (r) taskListHeightRef.current = r.height })
-          })
-        }}>
+        <View className='task-list-wrap'>
         {/* key={tab} 使切换 tab 时 ScrollView 重新挂载，触发 CSS 进场动画 */}
         <ScrollView key={tab} scrollY showScrollbar={false} className='task-list'
-          onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}
-          onScroll={handleTaskScroll}>
+          onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
 
           {/* 骨架屏：仅在无缓存时展示 */}
           {loading && !hasCache && <SkeletonCards />}
@@ -877,8 +858,7 @@ export default function TaskPage() {
             </View>
           ))}
         </ScrollView>
-        {taskFades.top && <View className='list-fade-top' />}
-        {taskFades.bottom && <View className='list-fade-bottom' />}
+        <View className='list-fade-bottom' />
         </View>
       )}
 
