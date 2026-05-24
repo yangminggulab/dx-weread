@@ -5,7 +5,7 @@
 ## 模块结构
 
 ```
-.github/       GitHub Actions workflow（微信读书定时同步）
+.github/       GitHub Actions workflow（微信读书同步，由 Cloudflare Cron 触发）
 sync/          同步脚本（微信读书 API 同步、云端推送等 Python 脚本）
 data/          运行时数据文件（gitignore，不提交）
 web/           本地 Flask 服务器 + dashboard.html 网页源码
@@ -16,33 +16,52 @@ miniprogram/   微信小程序（Taro）
 ## 数据流
 
 ```
-微信读书 API
-      │
+Cloudflare Worker Cron（13 1-15 * * *，北京时间 9:13-23:13）
+      │ dispatchWereadSync()
+      │ POST /repos/yangminggulab/dx-weread/dispatches
       ▼
-GitHub Actions（每小时，北京时间 9:00-23:00）
+GitHub Actions（repository_dispatch: weread-sync）
 .github/workflows/weread_sync.yml
       │ 调用
-sync/sync_weread.py ── 书架、进度、笔记、热力图 ──→ POST /api/data ──→ Cloudflare Worker KV
-                                                                              │
-本地 Flask（每 15 分钟 pull）◄─────────────────────────────────────────────────┤
-      │                                                                        │
-      ▼                                                                        ▼
-data/ 本地文件                                                           小程序读取
+      ▼
+sync/sync_weread.py
+      │ 拉取书架、进度、笔记、热力图
+      ▼
+微信读书 API Gateway
+      │ 同步结果 POST /api/data
+      ▼
+Cloudflare Worker KV ─────────────────────────────────────┐
+                                                           │
+本地 Flask（每 15 分钟 pull）◄─────────────────────────────┤
+      │                                                    │
+      ▼                                                    ▼
+data/ 本地文件                                        小程序读取
 web/server.py → 浏览器 localhost:8080
 ```
+
+**调度职责划分：**
+
+| 触发器 | cron | 做什么 |
+|---|---|---|
+| Cloudflare Cron | `0 * * * *` | 每日重置（归档日记、清除已完成任务） |
+| Cloudflare Cron | `13 1-15 * * *` | 触发 GitHub Actions 跑微信读书同步 |
+| GitHub Actions | `repository_dispatch` | 运行 `sync/sync_weread.py` 写入 KV |
+
+Cloudflare 负责定时调度，GitHub Actions 只负责跑 Python 同步脚本，职责不交叉。微信读书同步不再依赖 GitHub 自带的 schedule（GitHub schedule 存在数小时延迟导致漏跑）。
 
 **写入规则：**
 
 | 操作 | 写哪里 | 推云端？ |
 |---|---|---|
 | 网页改任务/日记 | 本地 `data/` | ❌ 不推 |
-| WeRead 同步 | GitHub Actions → Worker KV | ✅ 直接写云端 |
-| 凌晨 5 点重置 | Worker KV（Worker Cron） | — |
+| WeRead 同步 | Cloudflare Cron → GitHub Actions → Worker KV | ✅ 直接写云端 |
+| 每日重置 | Worker KV（Worker Cron） | — |
 | 云端 pull（每 15 分钟） | 本地 `data/` | — |
 
 **云端 Worker 独立运行的部分（不依赖本地）：**
 - 小程序直接调 Worker API 读写云端 KV
-- Worker Cron 凌晨 5 点重置已完成任务（微信读书同步已迁移到 GitHub Actions）
+- Worker Cron `0 * * * *`：每日重置已完成任务、归档日记
+- Worker Cron `13 1-15 * * *`：dispatch GitHub Actions 触发微信读书同步
 
 ## 本地运行
 
@@ -69,7 +88,20 @@ npm install
 npm run deploy
 ```
 
-需要在 Cloudflare 控制台配置 Secrets：`API_TOKEN`（`WEREAD_API_KEY` 已不再需要，微信读书同步改由 GitHub Actions 负责）
+Cloudflare Worker Secrets（`wrangler secret put <NAME>`）：
+
+| Secret | 用途 |
+|---|---|
+| `API_TOKEN` | 鉴权小程序/脚本对 Worker API 的请求 |
+| `GITHUB_DISPATCH_TOKEN` | Worker Cron 触发 GitHub repository_dispatch 用的 fine-grained PAT（仓库 `yangminggulab/dx-weread`，Contents: Read and write） |
+
+GitHub Actions Secrets（仓库 Settings → Secrets）：
+
+| Secret | 用途 |
+|---|---|
+| `WEREAD_API_KEY` | 微信读书 API Gateway 认证 key |
+| `API_TOKEN` | 写回 Cloudflare Worker KV 的鉴权 token |
+| `CLOUD_BASE_URL` | Cloudflare Worker API 地址 |
 
 ## 数据文件
 
@@ -125,13 +157,13 @@ npm run deploy
 
 | 文件 | 职责 |
 |---|---|
-| `workflows/weread_sync.yml` | 微信读书定时同步（每小时，北京时间 9:00-23:00），调用 `sync/sync_weread.py` |
+| `workflows/weread_sync.yml` | 微信读书同步（由 Cloudflare Cron 通过 `repository_dispatch` 触发，也支持手动 `workflow_dispatch`），调用 `sync/sync_weread.py` |
 
 ### `worker/` — Cloudflare Worker
 
 | 文件 | 职责 |
 |---|---|
-| `src/index.js` | Worker 全部逻辑（KV 读写 API、凌晨重置任务；微信读书同步已迁移至 GitHub Actions） |
+| `src/index.js` | Worker 全部逻辑：KV 读写 API、Cron 每日重置任务（`0 * * * *`）、Cron 触发微信读书同步（`13 1-15 * * *` → GitHub repository_dispatch） |
 
 ### `sync/` — 命令行同步脚本
 
@@ -330,7 +362,8 @@ npm run deploy
 
 ### worker/src/index.js（Cloudflare Worker）
 - `fetch(request, env)` — Worker 主入口，路由 API 请求和 CRUD
-- `scheduled(event, env, ctx)` — Cron 定时任务（每日重置，微信读书同步已迁移至 GitHub Actions）
+- `scheduled(event, env, ctx)` — Cron 分发：`13 1-15 * * *` 触发 `dispatchWereadSync()`，其余触发 `runDailyReset()`
+- `dispatchWereadSync(env, event)` — POST GitHub repository_dispatch 触发微信读书同步
 - `loadData(kv)` / `saveData(kv, data)` — KV 读写 app 数据
 - `loadDiary(kv)` / `saveDiary(kv, diary)` — KV 读写日记
 - `loadCurrentDiary(kv)` — 加载日记并自动归档
@@ -355,8 +388,8 @@ npm run deploy
 - `_fetch_recent_daily_read_times(client, current_monthly, month_count)` — 拉取多月阅读时长
 
 ### .github/workflows/weread_sync.yml
-- 每小时触发（北京时间 9:00-23:00），运行 `sync/sync_weread.py`
-- 支持 `workflow_dispatch` 手动触发
+- 由 Cloudflare Worker Cron（`13 1-15 * * *`）通过 `repository_dispatch: weread-sync` 触发（北京时间 9:13-23:13）
+- 也支持 `workflow_dispatch` 手动触发
 - 所需 GitHub Secrets：`WEREAD_API_KEY`、`API_TOKEN`、`CLOUD_BASE_URL`
 
 ### sync/sync_weread.py
