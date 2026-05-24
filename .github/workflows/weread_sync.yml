@@ -1,9 +1,9 @@
 name: WeRead Sync
 
 on:
-  repository_dispatch:
-    types: [weread-sync]   # 外部 cron 服务通过 API 触发
-  workflow_dispatch:       # 保留手动触发
+  schedule:
+    - cron: '13 1-15 * * *'  # 每小时，北京时间 9:13-23:13（UTC 1-15）
+  workflow_dispatch:  # 支持手动触发
 
 jobs:
   sync:
