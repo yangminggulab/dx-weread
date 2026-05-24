@@ -140,6 +140,7 @@ def sync():
     # 4. 笔记（划线 + 评论）
     print("📝 Fetching notes...")
     notes = []
+    notes_ok = False
     try:
         notebook_books = []
         last_sort = None
@@ -251,6 +252,7 @@ def sync():
             for book_notes in pool.map(fetch_book_notes, notebook_books):
                 notes.extend(book_notes)
         notes.sort(key=lambda n: n.get("sourceUpdatedTimestamp") or 0, reverse=True)
+        notes_ok = True
         print(f"   {len(notes)} notes total")
     except Exception as e:
         print(f"   ⚠️ 笔记同步失败: {e}")
@@ -329,6 +331,12 @@ def sync():
     for item in weread_stats["dailyReadTimes"]:
         existing_daily[item["date"]] = item
     weread_stats["dailyReadTimes"] = sorted(existing_daily.values(), key=lambda x: x["date"])
+
+    # 笔记获取失败时，回退到云端已有 weread 笔记，避免清空
+    if not notes_ok:
+        cloud_weread_notes = [n for n in (cloud.get("notes") or []) if n.get("source") == "weread"]
+        notes = cloud_weread_notes
+        print(f"   ℹ️ 笔记获取失败，保留云端现有 {len(notes)} 条 weread 笔记")
 
     # 统计获取失败时，回退到云端已有数据，避免覆盖成空值
     if not stats_ok:
