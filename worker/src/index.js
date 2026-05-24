@@ -315,8 +315,35 @@ async function runDailyReset(env) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+async function dispatchWereadSync(env, event) {
+  const resp = await fetch(
+    "https://api.github.com/repos/yangminggulab/dx-weread/dispatches",
+    {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "dx-weread-cloudflare-cron",
+      },
+      body: JSON.stringify({
+        event_type: "weread-sync",
+        client_payload: { source: "cloudflare-cron", cron: event.cron },
+      }),
+    }
+  );
+  if (!resp.ok) {
+    const text = await resp.text();
+    console.error(`dispatchWereadSync failed: ${resp.status} ${text}`);
+  }
+}
+
 export default {
   async scheduled(event, env, ctx) {
+    if (event.cron === "13 1-15 * * *") {
+      ctx.waitUntil(dispatchWereadSync(env, event));
+      return;
+    }
     ctx.waitUntil(runDailyReset(env));
   },
 
