@@ -1,0 +1,8 @@
+{
+  "name": "dx-weread",
+  "private": true,
+  "scripts": {
+    "build": "node worker/scripts/build.js",
+    "check:worker": "node --check worker/src/index.js"
+  }
+}
