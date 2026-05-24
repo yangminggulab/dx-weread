@@ -135,22 +135,25 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 
 ## 逐文件职责清单（供 AI / 开发者快速定位）
 
-### `web/` — 本地 Flask 服务器
+### `web/` — 本地 Flask 服务器（⚠️ 仅本地运行，主要价值是本地备份）
 
-| 文件 | 职责 |
-|---|---|
-| `web/server.py` | Flask 入口，注册路由和定时任务，启动服务器 |
-| `web/dashboard.html` | 浏览器端 UI（任务/日记/读书面板），包含内联 Vue.js 组件和样式 |
-| `web/routes/api.py` | 所有 REST API 路由（任务 CRUD、日记读写、微信读书数据查询、云端推送/pull） |
-| `web/services/storage.py` | 任务数据聚合层（load/save/merge/migrate），负责合并 base data、weread、notes、time 为统一响应 |
-| `web/services/json_store.py` | 通用 JSON 文件读写（含自动备份到 `local_backups/`） |
-| `web/services/diary_store.py` | 日记数据的持久化层 |
-| `web/services/time_store.py` | 时间模块数据（阅读时长等）持久化层 |
-| `web/services/weread_store.py` | 微信读书书架/统计数据持久化层 |
-| `web/services/weread_sync.py` | 微信读书 API 同步逻辑（书籍、笔记、阅读时长） |
-| `web/services/weread_stats.py` | 微信读书统计计算（阅读趋势、周报等） |
-| `web/services/cloud_sync.py` | 云端 Worker KV 的推送/拉取逻辑 |
-| `web/services/config.py` | 环境变量读取和配置 |
+> 云端功能（网页 UI、API、每日重置、WeRead 同步）已全部由 Cloudflare Worker + GitHub Actions 承担。
+> 本地 Flask 目前保留的主要价值：每 15 分钟 pull 云端数据到本地 `data/`，由 `json_store.py` 自动备份到 `local_backups/`。
+
+| 文件 | 职责 | 本地/云端 |
+|---|---|---|
+| `web/server.py` | Flask 入口，注册路由和定时任务，启动服务器 | 🏠 本地 |
+| `web/dashboard.html` | 浏览器端 UI（任务/日记/读书面板）；同时被 Cloudflare Worker 托管在 `yangminggu.com/tasks` | 🏠 本地 + ☁️ 云端 |
+| `web/routes/api.py` | 所有 REST API 路由（任务 CRUD、日记读写、微信读书数据查询、云端 pull） | 🏠 本地 |
+| `web/services/storage.py` | 任务数据聚合层（load/save/merge/migrate），合并 base data、weread、notes、time | 🏠 本地 |
+| `web/services/json_store.py` | 通用 JSON 文件读写；**每次写入前自动备份到 `local_backups/`**（本地副本唯一来源） | 🏠 本地 |
+| `web/services/diary_store.py` | 日记数据的持久化层 | 🏠 本地 |
+| `web/services/time_store.py` | 时间模块数据（阅读时长等）持久化层 | 🏠 本地 |
+| `web/services/weread_store.py` | 微信读书书架/统计数据持久化层 | 🏠 本地 |
+| `web/services/weread_sync.py` | 微信读书 API 同步逻辑（旧，现已由 GitHub Actions + `sync/sync_weread.py` 替代） | 🏠 本地（已停用） |
+| `web/services/weread_stats.py` | 微信读书统计计算（阅读趋势、周报等） | 🏠 本地 |
+| `web/services/cloud_sync.py` | 从云端 Worker KV **pull** 数据到本地（无 push，本地改动不推云端） | 🏠 本地 |
+| `web/services/config.py` | 环境变量读取和配置 | 🏠 本地 |
 
 ### `miniprogram/` — Taro 微信小程序
 
@@ -205,26 +208,27 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 
 ## 快速定位：我要改…
 
-| 需求 | 改哪里 |
-|---|---|
-| 修改小程序的任务/日记 UI | `miniprogram/src/pages/index/index.jsx` + `index.scss` |
-| 修改小程序的读书书架 UI | `miniprogram/src/pages/books/index.jsx` + `index.scss` |
-| 修改小程序的读书笔记 UI | `miniprogram/src/pages/notes/index.jsx` + `index.scss` |
-| 添加/修改小程序 API 调用 | `miniprogram/src/api/index.js` |
-| 修改网页端 UI (dashboard) | `web/dashboard.html` |
-| 添加/修改后端 API 接口 | `web/routes/api.py` |
-| 修改任务数据存储逻辑 | 任务数据在根部 `data.json` 中，由 `web/services/storage.py` 管理 |
-| 修改日记存储逻辑 | `web/services/diary_store.py` |
-| 修改微信读书同步逻辑（云端） | `sync/sync_weread.py` + `.github/workflows/weread_sync.yml` |
-| 修改微信读书同步逻辑（本地） | `web/services/weread_sync.py` |
-| 修改微信读书统计计算 | `web/services/weread_stats.py` |
-| 修改云端推送/拉取 | `web/services/cloud_sync.py` |
-| 修改 Cloudflare Worker 逻辑 | `worker/src/index.js` |
-| 修改通用 JSON 存储/备份 | `web/services/json_store.py` |
-| 修改定时任务（Flask 端） | `web/server.py` |
-| 修改小程序全局配置/tabBar | `miniprogram/src/app.config.js` |
-| 修改小程序全局样式 | `miniprogram/src/app.scss` |
-| 修改微信读书 API 调用底层 | `sync/weread/service.py` |
+| 需求 | 改哪里 | 影响范围 |
+|---|---|---|
+| 修改小程序的任务/日记 UI | `miniprogram/src/pages/index/index.jsx` + `index.scss` | ☁️ 云端 |
+| 修改小程序的读书书架 UI | `miniprogram/src/pages/books/index.jsx` + `index.scss` | ☁️ 云端 |
+| 修改小程序的读书笔记 UI | `miniprogram/src/pages/notes/index.jsx` + `index.scss` | ☁️ 云端 |
+| 添加/修改小程序 API 调用 | `miniprogram/src/api/index.js` | ☁️ 云端 |
+| 修改网页端 UI (dashboard) | `web/dashboard.html` | 🏠 本地 + ☁️ 云端（同一文件，Worker 也托管） |
+| 添加/修改云端 Worker API 接口 | `worker/src/index.js` | ☁️ 云端 |
+| 添加/修改本地 Flask API 接口 | `web/routes/api.py` | 🏠 本地 |
+| 修改云端任务/日记存储逻辑 | `worker/src/index.js`（`loadData` / `saveData` / `loadDiary`） | ☁️ 云端 |
+| 修改本地任务数据存储逻辑 | `web/services/storage.py` | 🏠 本地 |
+| 修改本地日记存储逻辑 | `web/services/diary_store.py` | 🏠 本地 |
+| 修改微信读书同步逻辑 | `sync/sync_weread.py` + `.github/workflows/weread_sync.yml` | ☁️ 云端（GitHub Actions） |
+| 修改微信读书 API 调用底层 | `sync/weread/service.py` | ☁️ 云端（GitHub Actions） |
+| 修改微信读书统计计算（本地） | `web/services/weread_stats.py` | 🏠 本地 |
+| 修改云端 pull 到本地的逻辑 | `web/services/cloud_sync.py` | 🏠 本地 |
+| 修改本地自动备份逻辑 | `web/services/json_store.py` | 🏠 本地 |
+| 修改 Cloudflare Worker 定时任务 | `worker/src/index.js`（`scheduled`） + `wrangler.jsonc`（`crons`） | ☁️ 云端 |
+| 修改本地 Flask 定时任务 | `web/server.py` | 🏠 本地 |
+| 修改小程序全局配置/tabBar | `miniprogram/src/app.config.js` | ☁️ 云端 |
+| 修改小程序全局样式 | `miniprogram/src/app.scss` | ☁️ 云端 |
 
 ## 各文件函数清单
 
