@@ -367,18 +367,16 @@
 
 .diary-content-anim {
   flex: 1;
-  height: 100%;
-  position: relative;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   animation: fadeIn 0.22s ease both;
 }
 
 .diary-section-top {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: calc(67% - 8px);
+  flex: 2;
+  min-height: 0;
   margin-bottom: 0;
   overflow: hidden;
   display: flex;
@@ -387,11 +385,8 @@
 }
 
 .diary-section-bottom {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: calc(33% - 8px);
+  flex: 1;
+  min-height: 0;
   margin-bottom: 0;
   display: flex;
   flex-direction: column;
