@@ -640,26 +640,26 @@ function TodayFocus({ tasks, onClick }) {
 
 function DiarySection({ diary, onDiaryChange }) {
   const todayContent = diary?.today?.content || '';
-  const [focused, setFocused] = React.useState(false);
+  const [hovered, setHovered] = React.useState(false);
   return (
     <section className="flex flex-col h-full">
       <SectionHead title="今日日记" />
       <div
         className="flex-1 bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col overflow-hidden"
         style={{
-          boxShadow: focused
+          boxShadow: hovered
             ? '0 2px 6px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.04)'
             : '0 1px 3px rgba(0,0,0,.04)',
           transition: 'box-shadow 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
       >
         <textarea
           className="diary-textarea flex-1 resize-none text-sm text-[#1c1c1c] leading-relaxed placeholder-[#ccc] bg-transparent border-none outline-none overflow-y-auto"
           placeholder="今天发生了什么，记录下来..."
           value={todayContent}
           onChange={e => onDiaryChange(e.target.value)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
         />
       </div>
     </section>
