@@ -638,20 +638,26 @@ function TodayFocus({ tasks, onClick }) {
   );
 }
 
-function DiarySection({ diary, onDiaryChange, diarySaving }) {
+function DiarySection({ diary, onDiaryChange }) {
   const todayContent = diary?.today?.content || '';
+  const [focused, setFocused] = React.useState(false);
   return (
     <section className="flex flex-col h-full">
       <SectionHead title="今日日记" />
-      <div className="flex-1 bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col overflow-hidden">
-        <div className="flex justify-end mb-2">
-          <span className="text-xs text-[#bbb]">{diarySaving ? '保存中...' : ''}</span>
-        </div>
+      <div
+        className="flex-1 bg-white rounded-2xl border border-[#e8e4dc] p-4 flex flex-col overflow-hidden transition-all duration-200"
+        style={{
+          transform: focused ? 'translateY(-2px)' : 'translateY(0)',
+          boxShadow: focused ? '0 6px 20px rgba(0,0,0,.09)' : 'none',
+        }}
+      >
         <textarea
           className="diary-textarea flex-1 resize-none text-sm text-[#1c1c1c] leading-relaxed placeholder-[#ccc] bg-transparent border-none outline-none overflow-y-auto"
           placeholder="今天发生了什么，记录下来..."
           value={todayContent}
           onChange={e => onDiaryChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
         />
       </div>
     </section>
@@ -1414,7 +1420,7 @@ function App() {
         <div className="grid md:grid-cols-3 gap-6 items-stretch">
           <TodayFocus tasks={tasks} onClick={setDetail} />
           <Books books={learningBooks} onAdd={()=>setProjectModal('add')} onEdit={b=>setProjectModal(b)} onDelete={handleDeleteBook} />
-          <DiarySection diary={diary} onDiaryChange={handleDiaryChange} diarySaving={diarySaving} />
+          <DiarySection diary={diary} onDiaryChange={handleDiaryChange} />
         </div>
         <PlanSection tasks={tasks} onToggle={handleToggle} onTask={setDetail} onAdd={()=>setModal('add')} />
         <div className="mt-8">
