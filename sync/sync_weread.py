@@ -9,7 +9,7 @@ import os
 import sys
 import requests
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 _env = Path(__file__).parent / ".env"
@@ -26,6 +26,7 @@ CLOUD_BASE_URL = os.environ.get("CLOUD_BASE_URL", "https://yangminggu.com/tasks"
 API_TOKEN      = os.environ.get("API_TOKEN", "")
 WEREAD_API_KEY = os.environ.get("WEREAD_API_KEY", "")
 BOOK_ACCENTS   = ["#2d6a4f", "#4a4a6a", "#6a4a2a", "#3a6a5a", "#5a3a6a"]
+CST            = timezone(timedelta(hours=8))
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -44,12 +45,12 @@ def as_ms(v):
 
 def fmt_date(ms):
     if not ms: return ""
-    try: return datetime.fromtimestamp(ms / 1000 if ms > 10**11 else ms).strftime("%Y-%m-%d")
+    try: return datetime.fromtimestamp(ms / 1000 if ms > 10**11 else ms, tz=CST).strftime("%Y-%m-%d")
     except: return ""
 
 def fmt_ts(ms):
     if not ms: return ""
-    try: return datetime.fromtimestamp(ms / 1000 if ms > 10**11 else ms).strftime("%Y-%m-%d %H:%M")
+    try: return datetime.fromtimestamp(ms / 1000 if ms > 10**11 else ms, tz=CST).strftime("%Y-%m-%d %H:%M")
     except: return ""
 
 def make_id(book_id, note_type, *parts):
@@ -283,16 +284,16 @@ def sync():
             for rt in pool.map(fetch_week, week_offsets):
                 for ts_str, secs in rt.items():
                     ts       = int(ts_str)
-                    date_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+                    date_str = datetime.fromtimestamp(ts, tz=CST).strftime("%Y-%m-%d")
                     daily_map[date_str] = max(daily_map.get(date_str, 0), coerce_int(secs))
 
         daily_list = sorted(
-            [{"date": d, "timestamp": int(datetime.strptime(d, "%Y-%m-%d").timestamp()), "seconds": s}
+            [{"date": d, "timestamp": int(datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=CST).timestamp()), "seconds": s}
              for d, s in daily_map.items()],
             key=lambda x: x["date"],
         )
 
-        current_month = datetime.now().strftime("%Y-%m")
+        current_month = datetime.now(tz=CST).strftime("%Y-%m")
         for item in daily_list:
             if item["date"].startswith(current_month) and item["seconds"] > 0:
                 week_read_daily[str(item["timestamp"])] = round(item["seconds"] / 60)
