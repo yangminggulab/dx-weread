@@ -37,6 +37,9 @@ function getStreakDays(dailyReadTimes, weekReadDaily, goalMinutes) {
   if (!completed.size) return 0
   let streak = 0
   const d = new Date()
+  if (!completed.has(toDateStr(d))) {
+    d.setDate(d.getDate() - 1)
+  }
   while (completed.has(toDateStr(d))) {
     streak++
     d.setDate(d.getDate() - 1)
