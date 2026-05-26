@@ -323,14 +323,37 @@ def sync():
     other_notes   = [n for n in (cloud.get("notes")   or []) if n.get("source")  != "weread"]
     other_updates = [u for u in (cloud.get("updates") or []) if u.get("type")    != "weread"]
 
-    # dailyReadTimes：把云端已有的历史和本次新拉的合并（新数据覆盖同日旧数据）
+    # 检测是否有漏同步：正常间隔约1小时，超过1.5小时说明中间有漏跑
+    last_sync_str = cloud.get("wereadSyncedAt", "")
+    missed_sync = False
+    if last_sync_str:
+        try:
+            last_dt = datetime.fromisoformat(last_sync_str)
+            hours_gap = (datetime.now() - last_dt).total_seconds() / 3600
+            missed_sync = hours_gap > 1.5
+            if missed_sync:
+                print(f"   ⚠️  检测到漏同步（距上次 {hours_gap:.1f} 小时），启用保守合并（只升不降）")
+        except Exception:
+            pass
+
+    # dailyReadTimes 合并：
+    # - 正常同步：新数据无条件覆盖，网关纠错可以传入
+    # - 漏同步后：只在新数据更大时才覆盖，防止网关因窗口偏移返回偏小值覆盖掉历史正确数据
     existing_daily = {
         item["date"]: item
         for item in (cloud.get("wereadStats", {}).get("dailyReadTimes") or [])
         if item.get("date")
     }
     for item in weread_stats["dailyReadTimes"]:
-        existing_daily[item["date"]] = item
+        date = item["date"]
+        existing = existing_daily.get(date)
+        if existing is None:
+            existing_daily[date] = item
+        elif missed_sync:
+            if item.get("seconds", 0) > existing.get("seconds", 0):
+                existing_daily[date] = item   # 漏同步：只升不降
+        else:
+            existing_daily[date] = item       # 正常同步：无条件覆盖
     weread_stats["dailyReadTimes"] = sorted(existing_daily.values(), key=lambda x: x["date"])
 
     # 笔记获取失败时，回退到云端已有 weread 笔记，避免清空
