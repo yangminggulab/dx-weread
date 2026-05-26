@@ -66,29 +66,40 @@ function drawRing2d(ctx, W, H, minutes, goal) {
   if (pct <= 0) return
 
   if (pct >= 1) {
-    // almost-full arc so the round cap at start stays connected as the "tail"
+    // Layer 2: sealed base ring — arc(0, 2π) is a closed path with no start/end,
+    // so lineCap is irrelevant and there are zero cap artifacts at six o'clock.
     ctx.beginPath()
-    ctx.arc(cx, cy, r, start, start + Math.PI * 2 - 0.001, false)
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
     ctx.strokeStyle = '#4cd964'
     ctx.lineWidth = sw
-    ctx.lineCap = 'round'
+    ctx.lineCap = 'butt'
     ctx.stroke()
 
     const ov = pct % 1
     if (ov > 0) {
-      // overflow arc on top — same color + shadow for Apple-like depth
+      const endAngle = start + Math.PI * 2 * ov
+      const frontX = cx + r * Math.cos(endAngle)
+      const frontY = cy + r * Math.sin(endAngle)
+
+      // Layer 3a: leading-edge arc, butt caps at both ends.
+      // The tail at six o'clock is flat → blends seamlessly into the base ring.
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, start, endAngle, false)
+      ctx.strokeStyle = '#4cd964'
+      ctx.lineWidth = sw
+      ctx.lineCap = 'butt'
+      ctx.stroke()
+
+      // Layer 3b: round cap only at the front, with shadow (Apple-style depth).
+      // Shadow is scoped to this circle only — no shadow leaks at six o'clock.
       ctx.save()
       ctx.shadowColor = 'rgba(0,0,0,0.28)'
       ctx.shadowBlur = 8
       ctx.beginPath()
-      ctx.arc(cx, cy, r, start, start + Math.PI * 2 * ov, false)
-      ctx.strokeStyle = '#4cd964'
-      ctx.lineWidth = sw
-      ctx.lineCap = 'round'
-      ctx.stroke()
+      ctx.arc(frontX, frontY, sw / 2, 0, Math.PI * 2)
+      ctx.fillStyle = '#4cd964'
+      ctx.fill()
       ctx.restore()
-
-
     }
   } else {
     ctx.beginPath()
