@@ -78,28 +78,29 @@ function drawRing2d(ctx, W, H, minutes, goal) {
     const ov = pct % 1
     if (ov > 0) {
       const endAngle = start + Math.PI * 2 * ov
-      const frontX = cx + r * Math.cos(endAngle)
-      const frontY = cy + r * Math.sin(endAngle)
 
-      // Layer 3a: leading-edge arc, butt caps at both ends.
-      // The tail at six o'clock is flat → blends seamlessly into the base ring.
-      ctx.beginPath()
-      ctx.arc(cx, cy, r, start, endAngle, false)
-      ctx.strokeStyle = '#4cd964'
-      ctx.lineWidth = sw
-      ctx.lineCap = 'butt'
-      ctx.stroke()
-
-      // Layer 3b: round cap only at the front, with shadow (Apple-style depth).
-      // Shadow is scoped to this circle only — no shadow leaks at six o'clock.
+      // Layer 3a: leading-edge arc with round cap at the front (same look as <100%),
+      // shadow for Apple-style depth.
       ctx.save()
       ctx.shadowColor = 'rgba(0,0,0,0.28)'
       ctx.shadowBlur = 8
       ctx.beginPath()
-      ctx.arc(frontX, frontY, sw / 2, 0, Math.PI * 2)
-      ctx.fillStyle = '#4cd964'
-      ctx.fill()
+      ctx.arc(cx, cy, r, start, endAngle, false)
+      ctx.strokeStyle = '#4cd964'
+      ctx.lineWidth = sw
+      ctx.lineCap = 'round'
+      ctx.stroke()
       ctx.restore()
+
+      // Layer 3b: stamp a flat butt-cap over the six-o'clock tail.
+      // The round cap from layer 3a protrudes ~sw/2 backward from start;
+      // this short segment (±0.3 rad ≈ ±17°) covers it without adding shadow.
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, start - 0.3, start + 0.3, false)
+      ctx.strokeStyle = '#4cd964'
+      ctx.lineWidth = sw
+      ctx.lineCap = 'butt'
+      ctx.stroke()
     }
   } else {
     ctx.beginPath()
