@@ -1,0 +1,103 @@
+name: TaskWidget
+options:
+  minimumXcodeGenVersion: 2.42.0
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+settings:
+  base:
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+    SWIFT_VERSION: 5.9
+    CODE_SIGN_STYLE: Automatic
+targets:
+  TaskWidgetApp:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - App
+      - Shared
+    info:
+      path: Config/AppInfo.plist
+      properties:
+        CFBundleDisplayName: 任务阅读小组件
+        CFBundleURLTypes:
+          - CFBundleURLName: TaskWidgetURL
+            CFBundleURLSchemes:
+              - taskwidget
+    entitlements:
+      path: Config/TaskWidgetApp.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yangminggu.taskwidget
+        PRODUCT_NAME: TaskWidget
+    dependencies:
+      - target: TaskWidgetExtension
+        embed: true
+  TaskWidgetExtension:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - WidgetExtension
+      - Shared
+    info:
+      path: Config/WidgetInfo.plist
+      properties:
+        CFBundleDisplayName: 任务阅读
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Config/TaskWidgetExtension.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yangminggu.taskwidget.widget
+        PRODUCT_NAME: TaskWidgetExtension
+  TaskWidgetiOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - iOSApp
+      - Shared
+    info:
+      path: Config/iOSAppInfo.plist
+      properties:
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    entitlements:
+      path: Config/TaskWidgetiOS.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yangminggu.taskwidget.ios
+        PRODUCT_NAME: TaskWidgetiOS
+    dependencies:
+      - target: TaskWidgetiOSWidgetExtension
+        embed: true
+  TaskWidgetiOSWidgetExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - WidgetExtension
+      - Shared
+    info:
+      path: Config/iOSWidgetInfo.plist
+      properties:
+        CFBundleDisplayName: 任务阅读
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Config/TaskWidgetiOSWidgetExtension.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.yangminggu.taskwidget.ios.widget
+        PRODUCT_NAME: TaskWidgetiOSWidgetExtension

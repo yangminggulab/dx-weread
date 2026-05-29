@@ -53,11 +53,17 @@
 ### 目标
 调研能不能把现有小程序的核心功能做成 macOS 原生小组件（Widget）。
 
-### 待调研
-- 技术路线：SwiftUI WidgetKit（原生）vs Tauri/Electron 方案
-- 数据对接：小组件直接读同一套云端 API（Cloudflare Worker）
-- 功能范围：展示今日任务进度 / 圆环 / 阅读时长，还是更多
-- 交互限制：macOS widget 基本只读，点击只能跳转 App，确认是否接受
+### 调研完成
+
+结论：能做，推荐 **SwiftUI + WidgetKit** 做真正的 macOS 桌面/通知中心小组件；Tauri/Electron 只能做菜单栏 App、悬浮窗或桌面客户端，不适合作为系统 Widget 路线。
+
+详细调研与落地方案见：`macos小组件/README.md`
+
+### 后续可执行
+
+- Phase 1：做只读 Widget MVP，展示今日任务进度 / 阅读圆环 / 阅读统计 / 少量高优先级任务。
+- Phase 2：Worker 增加 `GET /api/widget-summary`，并给只读接口补 Bearer token 校验。
+- Phase 3：再评估用 App Intents 支持勾选完成任务等轻交互。
 
 ---
 
