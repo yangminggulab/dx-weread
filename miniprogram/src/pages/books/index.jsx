@@ -79,28 +79,28 @@ function drawRing2d(ctx, W, H, minutes, goal) {
     if (ov > 0) {
       const endAngle = start + Math.PI * 2 * ov
 
-      // Layer 3a: leading-edge arc with round cap at the front (same look as <100%),
-      // shadow for Apple-style depth.
-      ctx.save()
-      ctx.shadowColor = 'rgba(0,0,0,0.28)'
-      ctx.shadowBlur = 8
+      // Layer 3: overflow arc, butt caps — tail blends into base ring, no protrusion.
       ctx.beginPath()
       ctx.arc(cx, cy, r, start, endAngle, false)
       ctx.strokeStyle = '#4cd964'
       ctx.lineWidth = sw
-      ctx.lineCap = 'round'
-      ctx.stroke()
-      ctx.restore()
-
-      // Layer 3b: stamp a flat butt-cap over the six-o'clock tail.
-      // The round cap from layer 3a protrudes ~sw/2 backward from start;
-      // this short segment (±0.3 rad ≈ ±17°) covers it without adding shadow.
-      ctx.beginPath()
-      ctx.arc(cx, cy, r, start - 0.3, start + 0.3, false)
-      ctx.strokeStyle = '#4cd964'
-      ctx.lineWidth = sw
       ctx.lineCap = 'butt'
       ctx.stroke()
+
+      // Layer 4: filled circle at leading edge — acts as round cap.
+      // Shadow offset points toward center so it reads as "pressing on top of" the ring.
+      const capX = cx + r * Math.cos(endAngle)
+      const capY = cy + r * Math.sin(endAngle)
+      ctx.save()
+      ctx.shadowColor = 'rgba(0,0,0,0.35)'
+      ctx.shadowBlur = 6
+      ctx.shadowOffsetX = -Math.cos(endAngle) * 3
+      ctx.shadowOffsetY = -Math.sin(endAngle) * 3
+      ctx.beginPath()
+      ctx.arc(capX, capY, sw / 2, 0, Math.PI * 2)
+      ctx.fillStyle = '#4cd964'
+      ctx.fill()
+      ctx.restore()
     }
   } else {
     ctx.beginPath()
