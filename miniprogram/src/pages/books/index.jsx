@@ -163,14 +163,14 @@ function ReadingRing({ weekDaily, dailyReadTimes, totalReadDays, dayGoalMinutes 
             <View className='rring-stat-item'>
               <Text className='rring-label'>连续完成</Text>
               <View className='rring-val-row'>
-                <Text className='rring-val rring-val-plain'>{streakDays}</Text>
+                <Text className='rring-val rring-val-streak'>{streakDays}</Text>
                 <Text className='rring-unit'>天</Text>
               </View>
             </View>
             <View className='rring-stat-item'>
               <Text className='rring-label'>累积完成</Text>
               <View className='rring-val-row'>
-                <Text className='rring-val rring-val-plain'>{totalReadDays}</Text>
+                <Text className='rring-val rring-val-total'>{totalReadDays}</Text>
                 <Text className='rring-unit'>天</Text>
               </View>
             </View>
