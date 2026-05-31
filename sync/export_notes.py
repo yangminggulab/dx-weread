@@ -202,6 +202,9 @@ def export_book(notebook_book):
     return {"title": title, "author": book.get("author", ""), "filename": filename}
 
 
+INDEX_FILENAME = "微信读书笔记模块-README.md"
+
+
 def generate_index(exported):
     lines = [
         "# 微信读书笔记索引",
@@ -214,9 +217,9 @@ def generate_index(exported):
     ]
     for item in exported:
         lines.append(f"| {item['title']} | {item['author']} | [{item['filename']}](./{item['filename']}) |")
-    with open(OUTPUT_DIR / "README.md", "w", encoding="utf-8") as f:
+    with open(OUTPUT_DIR / INDEX_FILENAME, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-    logger.info(f"索引已生成: {OUTPUT_DIR / 'README.md'}")
+    logger.info(f"索引已生成: {OUTPUT_DIR / INDEX_FILENAME}")
 
 
 def run_export():

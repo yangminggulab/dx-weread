@@ -1,4 +1,4 @@
-# Agent Usage Monitor
+# Usage Monitor 模块 README
 
 一个独立的 Claude Code + OpenAI Codex 用量监控原型。它默认读取本机 session JSONL，只聚合元数据和 token 用量，不把 prompt、工具输出、正文内容展示到页面。
 

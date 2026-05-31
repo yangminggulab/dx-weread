@@ -423,5 +423,4 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 - `run_export()` — 导出全部笔记为 Markdown 文件
 - `export_book(notebook_book)` — 导出单本书笔记
 - `format_markdown(notebook_book, bookmark_payload, reviews)` — 格式化为 Markdown
-- `generate_index(exported)` — 生成 README.md 索引
-
+- `generate_index(exported)` — 生成 `微信读书笔记模块-README.md` 索引
