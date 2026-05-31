@@ -340,7 +340,7 @@ async function dispatchWereadSync(env, event) {
 
 export default {
   async scheduled(event, env, ctx) {
-    if (event.cron === "13 1-15 * * *") {
+    if (event.cron === "13 0-15,23 * * *") {
       ctx.waitUntil(dispatchWereadSync(env, event));
       return;
     }
