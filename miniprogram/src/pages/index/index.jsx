@@ -1008,7 +1008,12 @@ export default function TaskPage() {
               <Textarea className='form-input form-input-edit-tall'
                 placeholder='请输入任务名称'
                 value={editForm.title}
-                onInput={e => setEditForm(f => ({ ...f, title: e.detail.value }))} />
+                onInput={e => setEditForm(f => ({ ...f, title: e.detail.value }))}
+                adjustPosition={false}
+                showConfirmBar={false}
+                disableDefaultPadding
+                cursorSpacing={24}
+                maxlength={200} />
             </View>
             <View className='form-item'>
               <Text className='form-label'>类型</Text>
