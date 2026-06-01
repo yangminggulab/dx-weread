@@ -357,16 +357,19 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 - `TaskPage()` — 主组件，管理任务 CRUD、日记编辑、左右滑切换 tab
 - `loadData()` — 拉取全量数据
 - `loadDiaryToday()` — 轻量拉取今日日记
-- `loadDiary()` — 拉取完整日记（含归档，进入日记 tab 时懒加载）
+- `loadDiary()` — 拉取完整日记（含归档，进入日记 tab 时懒加载，`archiveLoadedRef` 防重复）
 - `handleStatusChange(task)` — 切换任务完成状态（乐观更新）
 - `handleDelete(id)` — 确认并删除任务
 - `handleAdd()` — 提交新任务
-- `openEdit(task)` / `handleEditSave()` — 编辑任务
+- `openEdit(task)` / `handleEditSave()` — 编辑任务；**点击弹窗外自动保存**，无保存/删除按钮；任务名称用 Textarea（从左上角起排）
 - `handleDiaryChange(content)` — 日记输入防抖自动保存
 - `openFullscreen(idx)` — 打开日记归档全屏阅读器
+- `recordArchiveView(sourceDiary, idx)` — 标记一条归档已读（stamp viewCount/lastViewedAt），**同时写本地 view meta**，不依赖服务端保存
 - `cleanDiaryContent(text)` — 日记内容清理
 - `normalizeDiaryPayload(payload)` — 标准化日记数据结构
 - `mergeDiaryArchiveViewMeta(baseArchive, overlayArchive)` — 合并归档浏览元数据
+- `pickPreferredArchiveIdx(archive)` — 从最近 30 天未读条目随机选往期日记；调用前先用本地 view meta 补充 `lastViewedAt`（防服务端丢失导致候选池失效）；不再强制"历史上的今天"优先
+- `readViewMeta()` / `persistViewMeta(archive)` — 读写 `diary_view_meta_v1`（`{ date → lastViewedAt }`），内存镜像 `_viewMetaCache` 避免高频 `getStorageSync`
 
 ### miniprogram/src/pages/books/index.jsx（读书书架页面）
 - `BooksPage()` — 主组件，展示在读书架/想读/读完三栏
