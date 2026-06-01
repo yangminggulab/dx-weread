@@ -1,8 +1,8 @@
 import Foundation
 
 enum WidgetConstants {
-    static let appGroupID = "group.com.yangminggu.taskwidget"
     static let defaultBaseURL = "https://yangminggu.com/tasks"
+    static let defaultToken = "ef7a6f5bedf74c2f20c3966c38f40809679644abf07ee776048f50623362ed99"
     static let widgetKind = "TaskReadingWidget"
 }
 
@@ -13,7 +13,7 @@ enum WidgetSettings {
     }
 
     static var store: UserDefaults {
-        UserDefaults(suiteName: WidgetConstants.appGroupID) ?? .standard
+        UserDefaults(suiteName: "group.com.yangminggu.taskwidget") ?? .standard
     }
 
     static var baseURLString: String {
@@ -24,7 +24,10 @@ enum WidgetSettings {
     }
 
     static var token: String {
-        store.string(forKey: Keys.token) ?? ""
+        let value = store.string(forKey: Keys.token) ?? WidgetConstants.defaultToken
+        return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? WidgetConstants.defaultToken
+            : value
     }
 
     static func save(baseURLString: String, token: String) {
