@@ -31,6 +31,7 @@ const DIARY_VIEW_WINDOW_DAYS = 30
 const TASKS_CACHE_KEY = 'tasks_cache_v1'
 const DIARY_CACHE_KEY = 'diary_cache_v2'
 const LEGACY_DIARY_CACHE_KEYS = ['diary_cache_v1']
+const DIARY_VIEW_META_KEY = 'diary_view_meta_v1'  // 轻量 view meta，单独持久化，不随 archive 一起被清空
 
 function getTodayStr() {
   const now = new Date()
@@ -159,6 +160,23 @@ function persistDiaryCache(diary) {
   } catch {}
 }
 
+// view meta 单独存一份 { date: lastViewedAt }，避免 persistDiaryCache 把 archive 存成 [] 导致时间戳丢失
+function readViewMeta() {
+  try { return Taro.getStorageSync(DIARY_VIEW_META_KEY) || {} } catch { return {} }
+}
+function persistViewMeta(archive) {
+  try {
+    const existing = readViewMeta()
+    const updated = { ...existing }
+    ;(archive || []).forEach(e => {
+      if (e?.date && e?.lastViewedAt && (!updated[e.date] || e.lastViewedAt > updated[e.date])) {
+        updated[e.date] = e.lastViewedAt
+      }
+    })
+    Taro.setStorageSync(DIARY_VIEW_META_KEY, updated)
+  } catch {}
+}
+
 function wasViewedRecently(entry, days = DIARY_VIEW_WINDOW_DAYS) {
   const lastViewedAt = String(entry?.lastViewedAt || '').trim()
   if (!lastViewedAt) return false
@@ -171,23 +189,23 @@ function isTodayInHistoryEntry(entry, mmdd, yyyy) {
   return entry?.date?.slice(5) === mmdd && entry?.date?.slice(0, 4) !== yyyy
 }
 
-// 优先显示最近一个月没看过的；同一优先级内仍优先"历史上的今天"
+// 从最近一个月没看过的条目里随机选；全都看过时从全部里选
+// 不再强制"历史上的今天"永远赢（会导致每天都刷出同一条）
 function pickPreferredArchiveIdx(archive) {
   if (!archive?.length) return null
-  const today  = new Date()
-  const yyyy   = String(today.getFullYear())
-  const mm     = String(today.getMonth() + 1).padStart(2, '0')
-  const dd     = String(today.getDate()).padStart(2, '0')
-  const mmdd   = `${mm}-${dd}`
-  const recentUnviewed = archive.reduce((acc, entry, idx) => {
+  // 用本地持久化的 view meta 补充服务端可能丢失的 lastViewedAt
+  const viewMeta = readViewMeta()
+  const enriched = archive.map(e => {
+    const stored = viewMeta[e?.date]
+    if (!stored) return e
+    const best = [e.lastViewedAt || '', stored].sort().slice(-1)[0]
+    return best !== e.lastViewedAt ? { ...e, lastViewedAt: best } : e
+  })
+  const unviewed = enriched.reduce((acc, entry, idx) => {
     if (!wasViewedRecently(entry)) acc.push(idx)
     return acc
   }, [])
-  const candidatePool = recentUnviewed.length
-    ? recentUnviewed
-    : archive.map((_, idx) => idx)
-  const todayInHistoryPool = candidatePool.filter(idx => isTodayInHistoryEntry(archive[idx], mmdd, yyyy))
-  const pool = todayInHistoryPool.length ? todayInHistoryPool : candidatePool
+  const pool = unviewed.length ? unviewed : enriched.map((_, idx) => idx)
   return pool[Math.floor(Math.random() * pool.length)]
 }
 
@@ -309,7 +327,9 @@ export default function TaskPage() {
     const normalized = normalizeDiaryPayload(sourceDiary)
     if (idx === null || idx === undefined || !normalized.archive[idx]) return normalized
     archiveViewDirtyRef.current = true
-    const updated = applyDiarySnapshot(stampArchiveEntryViewed(normalized, idx))
+    const stamped = stampArchiveEntryViewed(normalized, idx)
+    persistViewMeta(stamped.archive)  // 立即写本地，不依赖服务端是否保存成功
+    const updated = applyDiarySnapshot(stamped)
     if (syncIfReady) syncViewedArchiveIfNeeded(updated)
     return updated
   }, [applyDiarySnapshot, syncViewedArchiveIfNeeded])
@@ -420,17 +440,12 @@ export default function TaskPage() {
   useEffect(() => { loadDiaryToday() }, [loadDiaryToday])
   useEffect(() => { loadDiary() }, [loadDiary])   // 启动时后台加载完整归档
 
-  // 进入日记 tab 时补加载（如果后台还没完成）
-  useEffect(() => {
-    if (tab === 'diary') loadDiary()
-  }, [tab, loadDiary])
-
   useDidShow(() => {
     archiveLoadedRef.current = false
     loadDiaryToday()
     loadDiary()
     loadData()
-    // 每次回到 app 优先换到最近一个月没看过的；服务端回包后再补一次持久化
+    // 每次回到 app 前台，立即换一条往期日记（用本地 view meta，不依赖服务端是否已回包）
     const archive = diaryRef.current?.archive
     if (archive?.length > 0) {
       archiveInitializedRef.current = true  // 阻止 loadDiary 回调再次覆盖
@@ -451,8 +466,8 @@ export default function TaskPage() {
     }
     const normalized = normalizeDiaryPayload(diaryRef.current)
     persistDiaryCache(normalized)
-    // 今日内容或观看记录有变更时，都在切后台时补推一次
-    if (diaryTodayDirtyRef.current || normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
+    // archiveViewDirty 不再要求 archiveLoadedRef，避免网络慢时 view stamp 丢失
+    if (diaryTodayDirtyRef.current || normalized.today?.content?.trim() || archiveViewDirtyRef.current) {
       const hadDirtyViewMeta = archiveViewDirtyRef.current
       const hadDirtyToday = diaryTodayDirtyRef.current
       if (hadDirtyViewMeta) archiveViewDirtyRef.current = false
@@ -464,17 +479,20 @@ export default function TaskPage() {
     }
   })
 
-  // 离开日记 tab 时立即保存
+  // tab 切换：离开日记存档；切回日记重新选一条往期日记
   const prevTabRef = useRef(tab)
   useEffect(() => {
-    if (prevTabRef.current === 'diary' && tab !== 'diary') {
+    const leaving  = prevTabRef.current === 'diary' && tab !== 'diary'
+    const entering = prevTabRef.current !== 'diary' && tab === 'diary'
+
+    if (leaving) {
       if (diaryTimerRef.current) {
         clearTimeout(diaryTimerRef.current)
         diaryTimerRef.current = null
       }
       const normalized = normalizeDiaryPayload(diaryRef.current)
       persistDiaryCache(normalized)
-      if (diaryTodayDirtyRef.current || normalized.today?.content?.trim() || (archiveViewDirtyRef.current && archiveLoadedRef.current)) {
+      if (diaryTodayDirtyRef.current || normalized.today?.content?.trim() || archiveViewDirtyRef.current) {
         const hadDirtyViewMeta = archiveViewDirtyRef.current
         const hadDirtyToday = diaryTodayDirtyRef.current
         if (hadDirtyViewMeta) archiveViewDirtyRef.current = false
@@ -485,8 +503,22 @@ export default function TaskPage() {
         })
       }
     }
+
+    if (entering) {
+      // 切回日记 tab：立即换一条往期日记，不等服务端
+      const archive = diaryRef.current?.archive
+      if (archive?.length > 0) {
+        const nextIdx = pickPreferredArchiveIdx(archive)
+        if (nextIdx !== null) {
+          setRandomArchiveIdx(nextIdx)
+          recordArchiveView(diaryRef.current, nextIdx)
+        }
+      }
+      loadDiary()  // 若归档还未加载则补拉（archiveLoadedRef 守门，已加载则跳过）
+    }
+
     prevTabRef.current = tab
-  }, [tab])
+  }, [tab, recordArchiveView, loadDiary])
 
   const active    = tasks.filter(t => t.taskType === tab && normalizeStatus(t.status) !== 'completed')
   const completed = tasks.filter(t => t.taskType === tab && normalizeStatus(t.status) === 'completed')
