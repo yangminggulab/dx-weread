@@ -565,13 +565,10 @@ export default function TaskPage() {
   }
 
   async function handleEditSave() {
-    if (!editForm.title.trim()) {
-      Taro.showToast({ title: '请输入任务名称', icon: 'none' })
-      return
-    }
+    setEditTask(null)
+    if (!editForm.title.trim()) return
     const updatedTasks = tasks.map(t => t.id === editTask.id ? { ...t, ...editForm } : t)
     setTasks(updatedTasks)
-    setEditTask(null)
     try {
       await updateTask({ id: editTask.id, ...editForm })
       try {
@@ -962,12 +959,15 @@ export default function TaskPage() {
 
       {/* ── 编辑弹窗 ── */}
       {editTask && (
-        <View className='modal-mask' onClick={() => setEditTask(null)}>
+        <View className='modal-mask' onClick={handleEditSave}>
           <View className='modal-box' onClick={stopProp}>
-            <Text className='modal-title'>编辑任务</Text>
+            <View className='modal-header'>
+              <Text className='modal-title'>编辑任务</Text>
+              <View className='modal-header-delete' onClick={() => handleDelete(editTask.id)}><Text>删除</Text></View>
+            </View>
             <View className='form-item'>
               <Text className='form-label'>任务名称</Text>
-              <Input className='form-input form-input-tall'
+              <Input className='form-input form-input-edit-tall'
                 placeholder='请输入任务名称'
                 value={editForm.title}
                 onInput={e => setEditForm(f => ({ ...f, title: e.detail.value }))} />
@@ -995,10 +995,6 @@ export default function TaskPage() {
                   </View>
                 ))}
               </View>
-            </View>
-            <View className='modal-actions'>
-              <View className='btn-cancel btn-delete' onClick={() => handleDelete(editTask.id)}><Text>删除</Text></View>
-              <View className='btn-confirm' onClick={handleEditSave}><Text>保存</Text></View>
             </View>
           </View>
         </View>

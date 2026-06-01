@@ -1,5 +1,38 @@
 # 主项目 TODO
 
+## 编辑任务弹窗：去除按钮 + 自动保存
+
+### 目标
+小程序编辑任务弹窗改为自动保存，去掉底部"保存"和"删除"两个按钮，把释放的空间给任务名称输入框。
+
+### 改动文件
+`miniprogram/src/pages/index/index.jsx` 和 `index.scss`
+
+### 具体改动点
+
+1. **`handleEditSave` 改为自动保存逻辑**  
+   - 原来：验证 → 更新状态 → 关闭弹窗 → 保存服务器  
+   - 新的：先 `setEditTask(null)` 关闭 → 若 title 为空则直接 return → 否则更新状态并保存服务器  
+   - 点击弹窗遮罩（mask）触发 `handleEditSave`，实现"点外自动保存"
+
+2. **删除按钮移至弹窗标题行右侧**  
+   - 把原 `<View className='modal-actions'>` 整块删除（含"删除"和"保存"两个按钮）  
+   - 在 `modal-title` 外包一层 `modal-header` flex 容器，右侧放红色"删除"文字按钮  
+   - 新增 `.modal-header`（flex + space-between + margin-bottom: 36px）和 `.modal-header-delete`（红色小字）SCSS
+
+3. **任务名称输入框增高**  
+   - 编辑弹窗专用类 `form-input-edit-tall`，`min-height: 220px`（原 `form-input-tall` 为 88px，不改以免影响添加弹窗）  
+   - 编辑弹窗 Input 的 className 从 `form-input form-input-tall` 改为 `form-input form-input-edit-tall`
+
+### 注意事项
+- 添加弹窗（showAdd）的 modal-actions + 按钮**不动**，`.modal-actions` CSS 保留
+- 不改输入处理逻辑（`onInput` handler 不变）
+- 不改 `handleDelete` 逻辑
+
+### ✅ 已完成
+
+---
+
 ## 圆环进度条 >100% 交互修正
 
 ### 目标行为
