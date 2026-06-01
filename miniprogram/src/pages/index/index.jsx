@@ -161,8 +161,16 @@ function persistDiaryCache(diary) {
 }
 
 // view meta 单独存一份 { date: lastViewedAt }，避免 persistDiaryCache 把 archive 存成 [] 导致时间戳丢失
+// _viewMetaCache 是内存镜像，避免每次 pickPreferredArchiveIdx 都走同步 storage 读（官方明确禁止高频 getStorageSync）
+let _viewMetaCache = null
 function readViewMeta() {
-  try { return Taro.getStorageSync(DIARY_VIEW_META_KEY) || {} } catch { return {} }
+  if (_viewMetaCache !== null) return _viewMetaCache
+  try {
+    _viewMetaCache = Taro.getStorageSync(DIARY_VIEW_META_KEY) || {}
+  } catch {
+    _viewMetaCache = {}
+  }
+  return _viewMetaCache
 }
 function persistViewMeta(archive) {
   try {
@@ -173,6 +181,7 @@ function persistViewMeta(archive) {
         updated[e.date] = e.lastViewedAt
       }
     })
+    _viewMetaCache = updated  // 先更新内存镜像
     Taro.setStorageSync(DIARY_VIEW_META_KEY, updated)
   } catch {}
 }
