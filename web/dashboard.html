@@ -1226,7 +1226,7 @@ function App() {
   const nuid = useRef(1);
   const saveTimerRef = useRef(null);  // 待发的 debounce 计时器
   const savingRef    = useRef(false); // POST 请求是否还在途中
-  const learningBooks = useMemo(() => books.filter(b => !isWereadBook(b)), [books]);
+  const learningBooks = useMemo(() => books.filter(b => b.source === 'study' || (!b.source && !isWereadBook(b))), [books]);
   const wereadBooks = useMemo(() => books.filter(b => isWereadBook(b)), [books]);
   const wereadNotes = useMemo(() => notes.filter(n => isWereadNote(n)), [notes]);
   const applyServerPayload = useCallback((d) => {
@@ -1372,7 +1372,7 @@ function App() {
 
   const handleSaveBook = (form) => {
     if (projectModal === 'add') {
-      const b = { ...form, id: puid.current++ };
+      const b = { ...form, id: puid.current++, source: 'study' };
       setBooks(prev => [b, ...prev]);
       log('project', `加入书架「${b.title}」`);
     } else {

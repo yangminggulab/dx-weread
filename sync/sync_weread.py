@@ -318,8 +318,8 @@ def sync():
     r.raise_for_status()
     cloud = r.json()
 
-    # 保留非 weread 的 books / notes / updates
-    other_books   = [b for b in (cloud.get("books")   or []) if b.get("source")  != "weread"]
+    # 学习书架原样保留，不被 weread 同步覆盖；notes / updates 同理
+    study_books   = [b for b in (cloud.get("books")   or []) if b.get("source")  != "weread"]
     other_notes   = [n for n in (cloud.get("notes")   or []) if n.get("source")  != "weread"]
     other_updates = [u for u in (cloud.get("updates") or []) if u.get("type")    != "weread"]
 
@@ -395,7 +395,7 @@ def sync():
     }]
 
     cloud.update({
-        "books":           other_books + books,
+        "books":           study_books + books,
         "notes":           other_notes + notes,
         "updates":         other_updates + updates,
         "weekReadMinutes": week_read_minutes,
@@ -410,7 +410,7 @@ def sync():
     print(
         f"✅ Done: {len(books)} books  {len(notes)} notes  "
         f"热力图 {len(weread_stats['dailyReadTimes'])} 天  "
-        f"(非weread: {len(other_books)} books / {len(other_notes)} notes)"
+        f"(学习书架: {len(study_books)} books / 非weread notes: {len(other_notes)})"
     )
     return len(books)
 
