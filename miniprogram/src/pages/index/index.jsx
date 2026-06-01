@@ -964,7 +964,7 @@ export default function TaskPage() {
             <Text className='modal-title'>编辑任务</Text>
             <View className='form-item'>
               <Text className='form-label'>任务名称</Text>
-              <Input className='form-input form-input-edit-tall'
+              <Textarea className='form-input form-input-edit-tall'
                 placeholder='请输入任务名称'
                 value={editForm.title}
                 cursor={editForm.title.length}
