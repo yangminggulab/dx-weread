@@ -2,6 +2,32 @@
 
 任务、日记、微信读书三合一的个人面板，支持本地服务器和云端同时运行。
 
+## 开发经验备忘
+
+### 微信小程序 Textarea 在弹窗（modal/popup）里的正确写法
+
+原生 `Input` 不管 CSS 高度设多大，文字都垂直居中（单行组件）。弹窗里需要多行输入时必须用 `Textarea`。
+
+**Textarea 在 modal 里必须加以下 props，否则键盘弹起时会抖动/跳动：**
+
+```jsx
+<Textarea
+  value={...}
+  onInput={e => ...}
+  adjustPosition={false}    // ⭐ 最关键：禁止键盘弹起时微信自动上推页面，modal 里不设会整体跳位
+  showConfirmBar={false}     // 去掉键盘顶部"完成"栏，减少一次布局变化
+  disableDefaultPadding      // 去掉原生内边距，防止内容区跳动
+  cursorSpacing={24}         // 键盘与光标间保留固定间距，防止遮挡触发滚动补偿
+  maxlength={200}
+/>
+```
+
+**受控模式的平台限制：** 微信官方文档明确说明，`textarea` 的 `onInput` 返回值不会反映到组件上，即 textarea 不支持真正的受控模式。每次 `onInput` 后用新 `value` 强制覆盖会造成光标跳动。如需在 modal 里稳定使用，遵循上述 props 配置即可，不要额外绑定 `cursor` prop（`cursor={value.length}` 每次 re-render 都强制移光标，必然抖动）。
+
+**参考：** 日记页 `diary-textarea` 是经过验证的稳定写法，新增弹窗输入框时以它为模板。
+
+---
+
 ## 模块结构
 
 ```
