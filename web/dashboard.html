@@ -1224,6 +1224,7 @@ function App() {
   const uid  = useRef(1);
   const puid = useRef(1);
   const nuid = useRef(1);
+  const saveTimerRef = useRef(null);
   const learningBooks = useMemo(() => books.filter(b => !isWereadBook(b)), [books]);
   const wereadBooks = useMemo(() => books.filter(b => isWereadBook(b)), [books]);
   const wereadNotes = useMemo(() => notes.filter(n => isWereadNote(n)), [notes]);
@@ -1247,7 +1248,11 @@ function App() {
   const refreshFromServer = useCallback(async () => {
     try {
       const d = await apiRequest('/api/data');
-      applyServerPayload(d);
+      // 若有待发的保存计时器（用户刚编辑过、POST 还未发出），
+      // 跳过用旧服务器数据覆盖，避免把未保存的编辑冲掉
+      if (!saveTimerRef.current) {
+        applyServerPayload(d);
+      }
     } catch (_) {}
     try {
       if (!diaryTimerRef.current) {
@@ -1314,12 +1319,17 @@ function App() {
   useEffect(() => {
     if (!ready) return;
     const t = setTimeout(() => {
+      saveTimerRef.current = null;
       apiRequest('/api/data', {
         method: 'POST',
         body: JSON.stringify({ tasks, books, notes, updates, diary }),
       }).catch(() => {});
     }, 800);
-    return () => clearTimeout(t);
+    saveTimerRef.current = t;
+    return () => {
+      clearTimeout(t);
+      saveTimerRef.current = null;
+    };
   }, [diary, notes, ready, tasks, books, updates]);
 
   const handleDiaryChange = useCallback((content) => {
