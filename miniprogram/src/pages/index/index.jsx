@@ -961,15 +961,13 @@ export default function TaskPage() {
       {editTask && (
         <View className='modal-mask' onClick={handleEditSave}>
           <View className='modal-box' onClick={stopProp}>
-            <View className='modal-header'>
-              <Text className='modal-title'>编辑任务</Text>
-              <View className='modal-header-delete' onClick={() => handleDelete(editTask.id)}><Text>删除</Text></View>
-            </View>
+            <Text className='modal-title'>编辑任务</Text>
             <View className='form-item'>
               <Text className='form-label'>任务名称</Text>
               <Input className='form-input form-input-edit-tall'
                 placeholder='请输入任务名称'
                 value={editForm.title}
+                cursor={editForm.title.length}
                 onInput={e => setEditForm(f => ({ ...f, title: e.detail.value }))} />
             </View>
             <View className='form-item'>
