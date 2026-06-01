@@ -316,25 +316,28 @@ async function runDailyReset(env) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function dispatchWereadSync(env, event) {
-  const resp = await fetch(
-    "https://api.github.com/repos/yangminggulab/dx-weread/dispatches",
-    {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "dx-weread-cloudflare-cron",
-      },
-      body: JSON.stringify({
-        event_type: "weread-sync",
-        client_payload: { source: "cloudflare-cron", cron: event.cron },
-      }),
-    }
-  );
+  const body = JSON.stringify({
+    event_type: "weread-sync",
+    client_payload: { source: "cloudflare-cron", cron: event.cron },
+  });
+  const headers = {
+    Accept: "application/vnd.github+json",
+    Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "dx-weread-cloudflare-cron",
+  };
+  const url = "https://api.github.com/repos/yangminggulab/dx-weread/dispatches";
+
+  let resp = await fetch(url, { method: "POST", headers, body });
   if (!resp.ok) {
     const text = await resp.text();
-    console.error(`dispatchWereadSync failed: ${resp.status} ${text}`);
+    console.error(`dispatchWereadSync failed: ${resp.status} ${text}, retrying in 30s`);
+    await new Promise((r) => setTimeout(r, 30_000));
+    resp = await fetch(url, { method: "POST", headers, body });
+    if (!resp.ok) {
+      const text2 = await resp.text();
+      console.error(`dispatchWereadSync retry failed: ${resp.status} ${text2}`);
+    }
   }
 }
 
