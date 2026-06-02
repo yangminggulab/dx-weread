@@ -340,15 +340,6 @@ function TaskModal({ task, books, onSave, onClose }) {
             </div>
           </div>
 
-          <div>
-            <label className={lbl}>状态</label>
-            <div className="flex gap-1.5">
-              {Object.entries(STATUS).map(([k,v]) => (
-                <button key={k} className={btnSel(f.status===k)} onClick={()=>set('status',k)}>{v.label}</button>
-              ))}
-            </div>
-          </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={lbl}>优先级</label>
