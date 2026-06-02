@@ -385,7 +385,7 @@ function TaskModal({ task, books, onSave, onClose }) {
    TASK DETAIL PANEL
 ═══════════════════════════════════════════════════════════ */
 
-function TaskDetail({ task, books, onEdit, onDelete, onClose }) {
+function TaskDetail({ task, books, onEdit, onComplete, onClose }) {
   const proj = books.find(b=>b.id===task.projectId);
   const near = isNear(task.deadline);
   const over = isOver(task.deadline, task.status);
@@ -396,7 +396,7 @@ function TaskDetail({ task, books, onEdit, onDelete, onClose }) {
           <Pill text={STATUS[task.status].label} cls={STATUS[task.status].pill} />
           <div className="flex items-center gap-3">
             <button onClick={onEdit}   className="text-xs text-[#2d6a4f] hover:underline">编辑</button>
-            <button onClick={onDelete} className="text-xs text-red-400 hover:underline">删除</button>
+            <button onClick={onComplete} className="text-xs text-[#2d6a4f] hover:underline">完成</button>
             <button onClick={onClose}  className="text-[#bbb] hover:text-[#666] text-2xl font-light leading-none ml-1">×</button>
           </div>
         </div>
@@ -1475,7 +1475,7 @@ function App() {
       {detail && (
         <TaskDetail task={detail} books={learningBooks}
           onEdit={()=>{ setModal(detail); setDetail(null); }}
-          onDelete={()=>handleDelete(detail.id)}
+          onComplete={()=>{ handleToggle(detail.id); setDetail(null); }}
           onClose={()=>setDetail(null)}
         />
       )}
