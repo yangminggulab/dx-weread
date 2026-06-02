@@ -343,7 +343,7 @@ async function dispatchWereadSync(env, event) {
 
 export default {
   async scheduled(event, env, ctx) {
-    if (event.cron === "13 0-15,23 * * *") {
+    if (event.cron.startsWith("13 ")) {
       ctx.waitUntil(dispatchWereadSync(env, event));
       return;
     }
