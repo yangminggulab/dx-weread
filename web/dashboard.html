@@ -1312,7 +1312,7 @@ function App() {
       savingRef.current = true;
       apiRequest('/api/data', {
         method: 'POST',
-        body: JSON.stringify({ tasks, books, notes, updates, diary }),
+        body: JSON.stringify({ tasks, notes, updates }),
       }).finally(() => {
         savingRef.current = false;
       }).catch(() => {});
@@ -1322,7 +1322,7 @@ function App() {
       clearTimeout(t);
       saveTimerRef.current = null;
     };
-  }, [diary, notes, ready, tasks, books, updates]);
+  }, [diary, notes, ready, tasks, updates]);
 
   const handleDiaryChange = useCallback((content) => {
     const updated = { ...diary, today: { ...diary.today, content } };
@@ -1358,22 +1358,34 @@ function App() {
     if (t) log('note', `删除了「${t.title}」`);
   };
 
-  const handleSaveBook = (form) => {
-    if (projectModal === 'add') {
-      const b = { ...form, id: puid.current++, source: 'study' };
+  const handleSaveBook = async (form) => {
+    const isAdd = projectModal === 'add';
+    const editId = isAdd ? null : projectModal.id;
+    setProjectModal(null);
+    if (isAdd) {
+      const tempId = puid.current++;
+      const b = { ...form, id: tempId, source: 'study' };
       setBooks(prev => [b, ...prev]);
       log('project', `加入书架「${b.title}」`);
+      try {
+        const res = await apiRequest('/api/books/add', { method: 'POST', body: JSON.stringify(form) });
+        if (res?.book?.id != null) {
+          setBooks(prev => prev.map(x => x.id === tempId ? { ...x, id: res.book.id } : x));
+          puid.current = Math.max(puid.current, res.book.id + 1);
+        }
+      } catch (_) {}
     } else {
-      setBooks(prev => prev.map(x => x.id === projectModal.id ? { ...x, ...form } : x));
+      setBooks(prev => prev.map(x => x.id === editId ? { ...x, ...form } : x));
       log('project', `更新「${form.title}」进度`);
+      apiRequest('/api/books/update', { method: 'POST', body: JSON.stringify({ id: editId, ...form }) }).catch(() => {});
     }
-    setProjectModal(null);
   };
 
   const handleDeleteBook = (id) => {
     const b = books.find(x=>x.id===id);
     setBooks(prev => prev.filter(x=>x.id!==id));
     if (b) log('project', `移除「${b.title}」`);
+    apiRequest('/api/books/delete', { method: 'POST', body: JSON.stringify({ id }) }).catch(() => {});
   };
 
   const handleSaveNote = (form) => {

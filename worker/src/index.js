@@ -145,7 +145,7 @@ function normalizeAppData(payload) {
 
 function mergeDataForFullSave(existing, incoming) {
   const data = incoming && typeof incoming === "object" ? { ...incoming } : {};
-  for (const key of ["wereadStats", "weekReadDaily", "weekReadMinutes", "totalReadDays", "wereadSyncedAt", "time"]) {
+  for (const key of ["books", "wereadStats", "weekReadDaily", "weekReadMinutes", "totalReadDays", "wereadSyncedAt", "time"]) {
     if (data[key] == null && existing?.[key] != null) data[key] = existing[key];
   }
   return data;
@@ -463,6 +463,40 @@ export default {
         };
         await saveData(env.TASKS_KV, data);
         return json({ ok: true, note: data.notes[idx] });
+      }
+
+      if (path === "/api/books/add" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const data = await loadData(env.TASKS_KV);
+        const maxId = data.books.reduce((max, b) => Math.max(max, typeof b.id === "number" ? b.id : 0), 0);
+        const book = {
+          id: maxId + 1,
+          source: "study",
+          title: String(body.title || ""),
+          currentPage: Number(body.currentPage) || 0,
+          totalPage: Number(body.totalPage) || 0,
+        };
+        data.books = [book, ...data.books];
+        await saveData(env.TASKS_KV, data);
+        return json({ ok: true, book });
+      }
+
+      if (path === "/api/books/update" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const data = await loadData(env.TASKS_KV);
+        const idx = data.books.findIndex((b) => b.id === body.id);
+        if (idx === -1) return json({ ok: false, error: "not found" }, 404);
+        data.books[idx] = { ...data.books[idx], ...body };
+        await saveData(env.TASKS_KV, data);
+        return json({ ok: true, book: data.books[idx] });
+      }
+
+      if (path === "/api/books/delete" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        const data = await loadData(env.TASKS_KV);
+        data.books = data.books.filter((b) => b.id !== body.id);
+        await saveData(env.TASKS_KV, data);
+        return json({ ok: true });
       }
 
       if (path === "/api/diary" && request.method === "GET") {
