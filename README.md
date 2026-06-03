@@ -389,9 +389,11 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 - `loadData(kv)` / `saveData(kv, data)` — KV 读写 app 数据
 - `loadDiary(kv)` / `saveDiary(kv, diary)` — KV 读写日记
 - `loadCurrentDiary(kv)` — 加载日记并自动归档
-- `mergeDataForFullSave(existing, incoming)` — 合并增量数据
+- `mergeDataForFullSave(existing, incoming)` — 合并增量数据；incoming 不含 `books` 时从 KV 保留现有值（防批量 POST 清空书架）
 - `mergeDiaryUpdate(storedDiary, incomingDiary)` — 合并日记更新
 - `runDailyReset(env)` — 每日重置（归档日记、清除已完成任务）
+
+**学习书架原子接口**（`POST /api/books/add|update|delete`）：进度修改直接写单本书，不走整包覆盖，防止旧标签页竞态回滚。
 
 ### sync/weread/env.py
 - `load_dotenv(repo_root)` — 加载 `.env` 文件
