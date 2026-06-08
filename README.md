@@ -372,9 +372,12 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 ### miniprogram/src/pages/books/index.jsx（读书书架页面）
 - `BooksPage()` — 主组件，展示在读书架/想读/读完三栏
 - `loadData()` — 拉取 weread 书籍数据
-- `ReadingRing({ weekDaily, totalReadDays, dayGoalMinutes })` — Canvas 阅读进度环
+- `ReadingRing({ weekDaily, dailyReadTimes, dayGoalMinutes })` — Canvas 阅读进度环
 - `drawRing2d(ctx, W, H, minutes, goal)` — 绘制 2D 环形进度图
 - `getTodayMinutes(weekDaily)` — 计算今日阅读分钟数
+- `getStreakDays(dailyReadTimes, weekReadDaily, goalMinutes)` — 连续完成天数（含今日 weekReadDaily 补充）
+- `getStreakWeeks(dailyReadTimes, weekReadDaily, goalMinutes)` — 连续完成周数（一周内任意一天达标即算）
+- `getWeekMonday(d)` — 返回 d 所在周的周一 Date 对象
 
 ### miniprogram/src/pages/notes/index.jsx（读书笔记页面）
 - `NotesPage()` — 主组件，笔记 CRUD、日记条目展示、搜索
