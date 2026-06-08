@@ -27,6 +27,14 @@ function toDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function getWeekMonday(d) {
+  const day = d.getDay()
+  const monday = new Date(d)
+  monday.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
+  monday.setHours(0, 0, 0, 0)
+  return monday
+}
+
 function getStreakDays(dailyReadTimes, weekReadDaily, goalMinutes) {
   const completed = new Set(
     (dailyReadTimes || [])
@@ -43,6 +51,36 @@ function getStreakDays(dailyReadTimes, weekReadDaily, goalMinutes) {
   while (completed.has(toDateStr(d))) {
     streak++
     d.setDate(d.getDate() - 1)
+  }
+  return streak
+}
+
+function getStreakWeeks(dailyReadTimes, weekReadDaily, goalMinutes) {
+  const completed = new Set(
+    (dailyReadTimes || [])
+      .filter(d => (d.minutes ?? Math.round((d.seconds || 0) / 60)) >= goalMinutes)
+      .map(d => d.date)
+  )
+  if (getTodayMinutes(weekReadDaily) >= goalMinutes) completed.add(toDateStr(new Date()))
+  if (!completed.size) return 0
+
+  function weekHasCompleted(monday) {
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday)
+      d.setDate(monday.getDate() + i)
+      if (completed.has(toDateStr(d))) return true
+    }
+    return false
+  }
+
+  let monday = getWeekMonday(new Date())
+  if (!weekHasCompleted(monday)) {
+    monday.setDate(monday.getDate() - 7)
+  }
+  let streak = 0
+  while (weekHasCompleted(monday)) {
+    streak++
+    monday.setDate(monday.getDate() - 7)
   }
   return streak
 }
@@ -79,28 +117,28 @@ function drawRing2d(ctx, W, H, minutes, goal) {
     if (ov > 0) {
       const endAngle = start + Math.PI * 2 * ov
 
-      // Layer 3: overflow arc, butt caps — tail blends into base ring, no protrusion.
+      // Layer 3a: leading-edge arc with round cap at the front (same look as <100%),
+      // shadow for Apple-style depth.
+      ctx.save()
+      ctx.shadowColor = 'rgba(0,0,0,0.28)'
+      ctx.shadowBlur = 8
       ctx.beginPath()
       ctx.arc(cx, cy, r, start, endAngle, false)
       ctx.strokeStyle = '#4cd964'
       ctx.lineWidth = sw
+      ctx.lineCap = 'round'
+      ctx.stroke()
+      ctx.restore()
+
+      // Layer 3b: stamp a flat butt-cap over the six-o'clock tail.
+      // The round cap from layer 3a protrudes ~sw/2 backward from start;
+      // this short segment (±0.3 rad ≈ ±17°) covers it without adding shadow.
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, start - 0.3, start + 0.3, false)
+      ctx.strokeStyle = '#4cd964'
+      ctx.lineWidth = sw
       ctx.lineCap = 'butt'
       ctx.stroke()
-
-      // Layer 4: filled circle at leading edge — acts as round cap.
-      // Shadow offset points toward center so it reads as "pressing on top of" the ring.
-      const capX = cx + r * Math.cos(endAngle)
-      const capY = cy + r * Math.sin(endAngle)
-      ctx.save()
-      ctx.shadowColor = 'rgba(0,0,0,0.35)'
-      ctx.shadowBlur = 6
-      ctx.shadowOffsetX = -Math.cos(endAngle) * 3
-      ctx.shadowOffsetY = -Math.sin(endAngle) * 3
-      ctx.beginPath()
-      ctx.arc(capX, capY, sw / 2, 0, Math.PI * 2)
-      ctx.fillStyle = '#4cd964'
-      ctx.fill()
-      ctx.restore()
     }
   } else {
     ctx.beginPath()
@@ -112,9 +150,10 @@ function drawRing2d(ctx, W, H, minutes, goal) {
   }
 }
 
-function ReadingRing({ weekDaily, dailyReadTimes, totalReadDays, dayGoalMinutes }) {
+function ReadingRing({ weekDaily, dailyReadTimes, dayGoalMinutes }) {
   const todayMinutes = getTodayMinutes(weekDaily)
   const streakDays = getStreakDays(dailyReadTimes, weekDaily, dayGoalMinutes)
+  const streakWeeks = getStreakWeeks(dailyReadTimes, weekDaily, dayGoalMinutes)
 
   const execPaint = useCallback((min, goal) => {
     Taro.createSelectorQuery()
@@ -168,10 +207,10 @@ function ReadingRing({ weekDaily, dailyReadTimes, totalReadDays, dayGoalMinutes 
               </View>
             </View>
             <View className='rring-stat-item'>
-              <Text className='rring-label'>累积完成</Text>
+              <Text className='rring-label'>连续完成</Text>
               <View className='rring-val-row'>
-                <Text className='rring-val rring-val-total'>{totalReadDays}</Text>
-                <Text className='rring-unit'>天</Text>
+                <Text className='rring-val rring-val-total'>{streakWeeks}</Text>
+                <Text className='rring-unit'>周</Text>
               </View>
             </View>
           </View>
@@ -193,7 +232,6 @@ export default function BooksPage() {
   })
   const [tab, setTab] = useState('reading')
   const [weekDaily, setWeekDaily] = useState({})
-  const [totalReadDays, setTotalReadDays] = useState(0)
   const [dailyReadTimes, setDailyReadTimes] = useState([])
   const touchRef = useRef({ x: 0, y: 0, time: 0 })
 
@@ -203,7 +241,6 @@ export default function BooksPage() {
       const fetched = (data.books || []).filter(b => b.source === 'weread')
       setBooks(fetched)
       setWeekDaily(data.weekReadDaily || {})
-      setTotalReadDays(data.totalReadDays || 0)
       setDailyReadTimes(data.wereadStats?.dailyReadTimes || [])
       try { Taro.setStorageSync(BOOKS_CACHE_KEY, { books: fetched }) } catch {}
     } catch {
@@ -310,7 +347,6 @@ export default function BooksPage() {
           <ReadingRing
             weekDaily={weekDaily}
             dailyReadTimes={dailyReadTimes}
-            totalReadDays={totalReadDays}
             dayGoalMinutes={DAY_GOAL_MINUTES}
           />
         )}
