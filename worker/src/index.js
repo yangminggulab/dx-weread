@@ -366,8 +366,15 @@ export default {
         });
       }
 
-      const isWriteApi = path.startsWith("/api/") && request.method !== "GET" && request.method !== "OPTIONS";
-      if (isWriteApi && !isPersonalAuthorized(request, env)) {
+      if (path === "/api/login" && request.method === "POST") {
+        const body = await request.json().catch(() => ({}));
+        if (!body.password || body.password !== env.LOGIN_PASSWORD) {
+          return json({ error: "Unauthorized" }, 401);
+        }
+        return json({ token: env.API_TOKEN });
+      }
+
+      if (path.startsWith("/api/") && !isPersonalAuthorized(request, env)) {
         return json({ error: "Unauthorized" }, 401);
       }
 

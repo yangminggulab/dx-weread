@@ -107,12 +107,16 @@ const detectAppBasePath = () => {
 };
 const APP_BASE_PATH = detectAppBasePath();
 const PERSONAL_MODE = APP_BASE_PATH === PERSONAL_ROUTE_PREFIX;
-const PERSONAL_API_TOKEN = 'ef7a6f5bedf74c2f20c3966c38f40809679644abf07ee776048f50623362ed99';
+const AUTH_TOKEN_KEY = 'dx_auth_token';
+const getAuthToken = () => { try { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; } catch { return ''; } };
+const setAuthToken = t => { try { localStorage.setItem(AUTH_TOKEN_KEY, t); } catch {} };
+const clearAuthToken = () => { try { localStorage.removeItem(AUTH_TOKEN_KEY); } catch {} };
 const apiUrl = (path='') => `${APP_BASE_PATH}${path.startsWith('/') ? path : `/${path}`}`;
 const apiFetch = (path, options={}) => {
   const headers = { 'Content-Type': 'application/json', ...(options.headers||{}) };
   if (PERSONAL_MODE) {
-    headers['Authorization'] = `Bearer ${PERSONAL_API_TOKEN}`;
+    const token = getAuthToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
   }
   return fetch(apiUrl(path), { ...options, headers });
 };
@@ -120,6 +124,7 @@ const apiRequest = async (path, options={}) => {
   const res = await apiFetch(path, options);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401 && PERSONAL_MODE) { clearAuthToken(); window.location.reload(); }
     const err = new Error(data.error || `请求失败（${res.status}）`);
     err.status = res.status;
     err.data = data;
@@ -549,7 +554,68 @@ function NoteModal({ note, books, onSave, onClose }) {
 ═══════════════════════════════════════════════════════════ */
 
 
-function Header({ onAdd, onAddBook, personalMode }) {
+function LoginScreen({ onLogin }) {
+  const [pwd, setPwd] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async e => {
+    e.preventDefault();
+    const password = pwd.trim();
+    if (!password) return;
+    setLoading(true); setError('');
+    try {
+      const res = await fetch(apiUrl('/api/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.token) {
+        setAuthToken(data.token);
+        onLogin();
+      } else {
+        setError('密码错误');
+      }
+    } catch { setError('网络错误，请重试'); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#f7f5f0]">
+      <div className="bg-white rounded-2xl shadow-sm border border-[#e8e4dc] p-8 w-full max-w-xs">
+        <div className="flex justify-center mb-4">
+          <div className="w-10 h-10 rounded-xl bg-[#2d6a4f] flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+            </svg>
+          </div>
+        </div>
+        <h1 className="serif text-lg font-semibold text-[#2d2d2d] mb-6 text-center">My Project Library</h1>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            type="password"
+            value={pwd}
+            onChange={e => { setPwd(e.target.value); setError(''); }}
+            placeholder="访问密码"
+            className="w-full px-3.5 py-2.5 rounded-lg border border-[#e8e4dc] text-sm bg-[#fafaf8] text-[#333] placeholder-[#bbb]"
+            autoFocus
+          />
+          {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading || !pwd.trim()}
+            className="w-full py-2.5 rounded-lg bg-[#2d6a4f] hover:bg-[#1e4d38] text-white text-sm font-medium transition-colors disabled:opacity-40"
+          >
+            {loading ? '验证中…' : '进入'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function Header({ onAdd, onAddBook, personalMode, onLogout }) {
   const editionLabel = personalMode ? '个人版' : '本地版';
   return (
     <header className="sticky top-0 z-40 bg-[#f7f5f0]/96 backdrop-blur-sm border-b border-[#e8e4dc]">
@@ -582,6 +648,13 @@ function Header({ onAdd, onAddBook, personalMode }) {
             新增任务
           </button>
           <div className="w-7 h-7 rounded-full bg-[#2d6a4f] flex items-center justify-center text-white text-xs font-semibold ml-1">我</div>
+          {personalMode && (
+            <button onClick={onLogout} title="退出登录" className="ml-1 p-1.5 rounded-lg text-[#aaa] hover:text-[#555] hover:bg-[#f0ede6] transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </header>
@@ -1194,7 +1267,7 @@ function WereadRecent({ notes, updates }) {
    APP
 ═══════════════════════════════════════════════════════════ */
 
-function App() {
+function App({ onLogout = () => {} }) {
   const [ready,    setReady]   = useState(false);
   const [tasks,    setTasks]   = useState(INIT_TASKS);
   const [books,    setBooks]   = useState(INIT_BOOKS);
@@ -1430,6 +1503,7 @@ function App() {
         onAdd={()=>setModal('add')}
         onAddBook={()=>setProjectModal('add')}
         personalMode={PERSONAL_MODE}
+        onLogout={onLogout}
       />
 
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-10 pb-20">
@@ -1483,7 +1557,13 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+function Root() {
+  const [authed, setAuthed] = useState(!PERSONAL_MODE || Boolean(getAuthToken()));
+  if (PERSONAL_MODE && !authed) return <LoginScreen onLogin={() => setAuthed(true)} />;
+  return <App onLogout={() => { clearAuthToken(); window.location.reload(); }} />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
 </script>
 </body>
 </html>
