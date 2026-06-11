@@ -64,17 +64,39 @@ function includesSearchText(text, query) {
   return Boolean(source && target && source.includes(target))
 }
 
+function levenshteinDistance(a, b) {
+  const left = [...normalizeSearchValue(a)]
+  const right = [...normalizeSearchValue(b)]
+  if (left.length === 0) return right.length
+  if (right.length === 0) return left.length
+
+  let prev = Array.from({ length: right.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= left.length; i += 1) {
+    const curr = [i]
+    for (let j = 1; j <= right.length; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1
+      curr[j] = Math.min(
+        curr[j - 1] + 1,
+        prev[j] + 1,
+        prev[j - 1] + cost
+      )
+    }
+    prev = curr
+  }
+  return prev[right.length]
+}
+
 function fuzzyContains(text, query) {
   const source = normalizeSearchValue(text)
   const target = normalizeSearchValue(query)
   if (!source || !target) return false
   if (source.includes(target) || target.includes(source)) return true
+  if (target.length < 2 || source.length < 2) return false
 
-  let matched = 0
-  for (const char of target) {
-    if (source.includes(char)) matched += 1
-  }
-  return target.length >= 2 && matched / target.length >= 0.75
+  const distance = levenshteinDistance(source, target)
+  const maxLength = Math.max(source.length, target.length)
+  const threshold = maxLength <= 3 ? 1 : Math.max(1, Math.floor(maxLength * 0.28))
+  return distance <= threshold
 }
 
 function tagMatchesQuery(tag, query) {
