@@ -2,12 +2,25 @@
 # 一键同步日记：先拉云端合并，再把本地推上去
 set -e
 
-API_TOKEN="yhRvd9AGngE6Q2KvbQkP2aJMwDHVyFeChzsZJ7yo8S4"
-CLOUD="https://yangminggu.com/tasks"
-DIARY_FILE="$(dirname "$0")/../data/diary.json"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$ROOT_DIR/.env"
+CLOUD="${CLOUD_BASE_URL:-https://yangminggu.com/tasks}"
+DIARY_FILE="$ROOT_DIR/data/diary.json"
+
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+
+if [ -z "$API_TOKEN" ]; then
+  echo "❌ 缺少 API_TOKEN，请在 .env 或当前环境变量中配置"
+  exit 1
+fi
 
 echo "📥 Step 1: 从云端拉取日记..."
-CLOUD_DIARY=$(curl -s "$CLOUD/api/diary" -H "Authorization: Bearer $API_TOKEN")
+CLOUD_DIARY=$(curl -fsS "$CLOUD/api/diary" -H "Authorization: Bearer $API_TOKEN")
 
 echo "🔀 Step 2: 合并云端日记到本地..."
 python3 - "$DIARY_FILE" "$CLOUD_DIARY" << 'PYEOF'
@@ -108,7 +121,7 @@ print(f"   合并完成：archive 共 {len(merged['archive'])} 篇")
 PYEOF
 
 echo "📤 Step 3: 推送到云端..."
-RESULT=$(curl -s -X POST "$CLOUD/api/diary" \
+RESULT=$(curl -fsS -X POST "$CLOUD/api/diary" \
   -H "Authorization: Bearer $API_TOKEN" \
   -H "Content-Type: application/json" \
   -d @"$DIARY_FILE")
