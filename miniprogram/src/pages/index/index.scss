@@ -409,14 +409,18 @@
   color: #1c1c1c;
 }
 
-.diary-status {
-  font-size: 22px;
-  color: #aaa;
-}
-
 .diary-status-wrap {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+
+.diary-header-tag {
+  background: #eaf3ee;
+  border-radius: 6px;
+  color: #2d6a4f;
+  font-size: 20px;
+  padding: 2px 10px;
 }
 
 .diary-done-btn {
@@ -441,6 +445,76 @@
   padding: 0;
   padding-bottom: 24px;
   box-sizing: border-box;
+}
+
+.diary-tag-editor {
+  flex-shrink: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  border-top: 1px solid #f0ede8;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.diary-tag-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.diary-tag-editor-title {
+  color: #666;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.diary-tag-editor-scale {
+  color: #aaa;
+  font-size: 20px;
+}
+
+.diary-tag-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+}
+
+.diary-tag-score-name {
+  color: #333;
+  flex-shrink: 0;
+  font-size: 22px;
+  font-weight: 600;
+  width: 130px;
+}
+
+.diary-tag-score-options {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.diary-tag-score-option {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #ddd6ca;
+  border-radius: 8px;
+  color: #777;
+  display: flex;
+  font-size: 20px;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.diary-tag-score-active {
+  background: #2d6a4f;
+  border-color: #2d6a4f;
+  color: #fff;
+  font-weight: 700;
 }
 
 .diary-random-header {

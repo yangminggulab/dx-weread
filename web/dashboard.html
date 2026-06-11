@@ -49,6 +49,36 @@
 <script type="text/babel">
 const { useState, useMemo, useRef, useEffect, useCallback } = React;
 
+const DIARY_TAGS = ['学习卡壳','复习考试','焦虑内耗','灾难化','失眠亢奋','安静恢复','计划执行','决策止损','求职面试','人际边界'];
+
+function normalizeDiaryTagScores(scores = {}, tags = []) {
+  const next = {};
+  if (scores && typeof scores === 'object') {
+    DIARY_TAGS.forEach(tag => {
+      const value = Number.parseInt(scores[tag], 10);
+      if (Number.isFinite(value) && value > 0) next[tag] = Math.min(5, Math.max(1, value));
+    });
+  }
+  if (Array.isArray(tags)) {
+    tags.forEach(tag => {
+      if (DIARY_TAGS.includes(tag) && !next[tag]) next[tag] = 1;
+    });
+  }
+  return next;
+}
+
+function updateDiaryEntryTagScore(entry = {}, tag, score) {
+  const tagScores = normalizeDiaryTagScores(entry.tagScores, entry.tags);
+  const value = Number.parseInt(score, 10);
+  if (Number.isFinite(value) && value > 0) tagScores[tag] = Math.min(5, Math.max(1, value));
+  else delete tagScores[tag];
+  return {
+    ...entry,
+    tags: DIARY_TAGS.filter(t => tagScores[t] > 0),
+    tagScores,
+  };
+}
+
 /* ═══════════════════════════════════════════════════════════
    MOCK DATA
 ═══════════════════════════════════════════════════════════ */
@@ -702,7 +732,46 @@ function TodayFocus({ tasks, onClick }) {
   );
 }
 
-function DiarySection({ diary, onDiaryChange }) {
+function DiaryTagEditor({ entry, onScore }) {
+  const tagScores = normalizeDiaryTagScores(entry?.tagScores, entry?.tags);
+  return (
+    <div className="border-t border-[#eee9df] pt-3 mt-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold text-[#59665b]">问题标签</span>
+        <span className="text-[11px] text-[#aaa]">0-5</span>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+        {DIARY_TAGS.map(tag => {
+          const active = tagScores[tag] || 0;
+          return (
+            <div key={tag} className="flex items-center justify-between gap-2 bg-[#faf9f6] border border-[#eee9df] rounded-lg px-2 py-2">
+              <span className="text-xs font-medium text-[#39443b] whitespace-nowrap">{tag}</span>
+              <div className="flex gap-1">
+                {[0,1,2,3,4,5].map(score => (
+                  <button
+                    key={score}
+                    type="button"
+                    onClick={() => onScore(tag, score)}
+                    className={
+                      "w-6 h-6 rounded text-[11px] border transition " +
+                      (active === score
+                        ? "bg-[#2d6a4f] border-[#2d6a4f] text-white font-semibold"
+                        : "bg-white border-[#ddd6ca] text-[#777]")
+                    }
+                  >
+                    {score}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function DiarySection({ diary, onDiaryChange, onDiaryTagScore }) {
   const todayContent = diary?.today?.content || '';
   const [hovered, setHovered] = React.useState(false);
   return (
@@ -725,6 +794,7 @@ function DiarySection({ diary, onDiaryChange }) {
           value={todayContent}
           onChange={e => onDiaryChange(e.target.value)}
         />
+        <DiaryTagEditor entry={diary?.today} onScore={onDiaryTagScore} />
       </div>
     </section>
   );
@@ -1278,6 +1348,7 @@ function App({ onLogout = () => {} }) {
   const [diary,    setDiary]   = useState({ today: { date: '', content: '' }, archive: [] });
   const [diarySaving, setDiarySaving] = useState(false);
   const diaryTimerRef = useRef(null);
+  const diaryRef      = useRef({ today: { date: '', content: '' }, archive: [] });
   const [modal,        setModal]        = useState(null);
   const [detail,       setDetail]       = useState(null);
   const [projectModal, setProjectModal] = useState(null);
@@ -1319,7 +1390,7 @@ function App({ onLogout = () => {} }) {
     try {
       if (!diaryTimerRef.current) {
         const diaryData = await apiRequest('/api/diary');
-        if (diaryData?.today !== undefined) setDiary(diaryData);
+        if (diaryData?.today !== undefined) { diaryRef.current = diaryData; setDiary(diaryData); }
       }
     } catch (_) {}
   }, [applyServerPayload]);
@@ -1349,7 +1420,7 @@ function App({ onLogout = () => {} }) {
 
       try {
         const diaryData = await apiRequest('/api/diary');
-        if (!cancelled && diaryData?.today !== undefined) setDiary(diaryData);
+        if (!cancelled && diaryData?.today !== undefined) { diaryRef.current = diaryData; setDiary(diaryData); }
       } catch (_) {}
 
       if (!cancelled) setReady(true);
@@ -1397,17 +1468,29 @@ function App({ onLogout = () => {} }) {
     };
   }, [diary, notes, ready, tasks, updates]);
 
-  const handleDiaryChange = useCallback((content) => {
-    const updated = { ...diary, today: { ...diary.today, content } };
-    setDiary(updated);
+  const scheduleDiarySave = useCallback((updated, delay = 1500) => {
     if (diaryTimerRef.current) clearTimeout(diaryTimerRef.current);
     diaryTimerRef.current = setTimeout(() => {
       setDiarySaving(true);
       apiRequest('/api/diary', { method: 'POST', body: JSON.stringify(updated) })
         .catch(() => {})
         .finally(() => setDiarySaving(false));
-    }, 1500);
-  }, [diary]);
+    }, delay);
+  }, []);
+
+  const handleDiaryChange = useCallback((content) => {
+    const updated = { ...diaryRef.current, today: { ...diaryRef.current.today, content } };
+    diaryRef.current = updated;
+    setDiary(updated);
+    scheduleDiarySave(updated, 1500);
+  }, [scheduleDiarySave]);
+
+  const handleDiaryTagScore = useCallback((tag, score) => {
+    const updated = { ...diaryRef.current, today: updateDiaryEntryTagScore(diaryRef.current.today, tag, score) };
+    diaryRef.current = updated;
+    setDiary(updated);
+    scheduleDiarySave(updated, 600);
+  }, [scheduleDiarySave]);
 
   const log = (type, text) =>
     setUpdates(u => [{ id: Date.now(), type, text, time:'刚刚' }, ...u].slice(0, 8));
@@ -1510,7 +1593,7 @@ function App({ onLogout = () => {} }) {
         <div className="grid md:grid-cols-3 gap-6 items-stretch">
           <TodayFocus tasks={tasks} onClick={setDetail} />
           <Books books={learningBooks} onAdd={()=>setProjectModal('add')} onEdit={b=>setProjectModal(b)} onDelete={handleDeleteBook} />
-          <DiarySection diary={diary} onDiaryChange={handleDiaryChange} />
+          <DiarySection diary={diary} onDiaryChange={handleDiaryChange} onDiaryTagScore={handleDiaryTagScore} />
         </div>
         <PlanSection tasks={tasks} onToggle={handleToggle} onTask={setDetail} onAdd={()=>setModal('add')} />
         <div className="mt-8">

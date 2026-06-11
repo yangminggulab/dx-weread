@@ -49,7 +49,10 @@ class DiaryStoreTest(unittest.TestCase):
         )
 
         self.assertEqual(merged["today"]["content"], "新内容")
-        self.assertEqual(merged["archive"], [{"date": "2026-05-20", "content": "昨天", "viewCount": 0, "lastViewedAt": ""}])
+        self.assertEqual(
+            merged["archive"],
+            [{"date": "2026-05-20", "content": "昨天", "viewCount": 0, "lastViewedAt": "", "tags": [], "tagScores": {}}],
+        )
 
     def test_diary_update_allows_timestamped_empty_today(self):
         today = effective_diary_date()
@@ -69,6 +72,54 @@ class DiaryStoreTest(unittest.TestCase):
         )
 
         self.assertEqual(merged["today"]["content"], "保留")
+
+    def test_today_only_update_preserves_existing_tag_scores(self):
+        today = effective_diary_date()
+        merged = merge_diary_update(
+            {
+                "today": {
+                    "date": today,
+                    "content": "旧内容",
+                    "tags": ["焦虑内耗"],
+                    "tagScores": {"焦虑内耗": 4},
+                },
+                "archive": [],
+            },
+            {"today": {"date": today, "content": "新内容"}, "archive": []},
+        )
+
+        self.assertEqual(merged["today"]["content"], "新内容")
+        self.assertEqual(merged["today"]["tags"], ["焦虑内耗"])
+        self.assertEqual(merged["today"]["tagScores"], {"焦虑内耗": 4})
+
+    def test_archive_merge_keeps_higher_tag_score(self):
+        merged = merge_diary(
+            {
+                "today": {"date": "2026-05-21", "content": ""},
+                "archive": [
+                    {
+                        "date": "2026-05-20",
+                        "content": "焦虑但最后稳定下来",
+                        "tags": ["焦虑内耗"],
+                        "tagScores": {"焦虑内耗": 2},
+                    }
+                ],
+            },
+            {
+                "today": {"date": "2026-05-21", "content": ""},
+                "archive": [
+                    {
+                        "date": "2026-05-20",
+                        "content": "焦虑但最后稳定下来，先停止乱想再睡觉。",
+                        "tags": ["焦虑内耗", "安静恢复"],
+                        "tagScores": {"焦虑内耗": 5, "安静恢复": 4},
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(merged["archive"][0]["tagScores"], {"焦虑内耗": 5, "安静恢复": 4})
+        self.assertEqual(merged["archive"][0]["tags"], ["焦虑内耗", "安静恢复"])
 
 
 if __name__ == "__main__":

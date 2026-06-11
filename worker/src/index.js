@@ -9,6 +9,18 @@ const CORS_HEADERS = {
 const PERSONAL_ROUTE_PREFIX = "/tasks";
 const EMPTY_APP_DATA = { tasks: [], books: [], notes: [], updates: [] };
 const EMPTY_DIARY_DATA = { today: { date: "", content: "" }, archive: [] };
+const DIARY_TAGS = [
+  "学习卡壳",
+  "复习考试",
+  "焦虑内耗",
+  "灾难化",
+  "失眠亢奋",
+  "安静恢复",
+  "计划执行",
+  "决策止损",
+  "求职面试",
+  "人际边界",
+];
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -156,17 +168,73 @@ function coerceDiaryViewCount(value) {
   return Number.isFinite(count) && count > 0 ? count : 0;
 }
 
+function coerceTagScore(value) {
+  const score = Number.parseInt(value, 10);
+  if (!Number.isFinite(score)) return 0;
+  return Math.min(5, Math.max(0, score));
+}
+
+function normalizeDiaryTags(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const tags = [];
+  for (const item of value) {
+    const tag = String(item || "").trim();
+    if (DIARY_TAGS.includes(tag) && !seen.has(tag)) {
+      seen.add(tag);
+      tags.push(tag);
+    }
+  }
+  return tags;
+}
+
+function normalizeDiaryTagScores(scores, tags = []) {
+  const normalized = {};
+  if (scores && typeof scores === "object" && !Array.isArray(scores)) {
+    for (const [key, value] of Object.entries(scores)) {
+      const tag = String(key || "").trim();
+      if (!DIARY_TAGS.includes(tag)) continue;
+      const score = coerceTagScore(value);
+      if (score > 0) normalized[tag] = score;
+    }
+  }
+  for (const tag of normalizeDiaryTags(tags)) {
+    if (!normalized[tag]) normalized[tag] = 1;
+  }
+  return Object.fromEntries(DIARY_TAGS.filter((tag) => normalized[tag] > 0).map((tag) => [tag, normalized[tag]]));
+}
+
+function normalizeDiaryEntryTags(entry) {
+  const tagScores = normalizeDiaryTagScores(entry?.tagScores, entry?.tags);
+  return {
+    ...entry,
+    tags: DIARY_TAGS.filter((tag) => tagScores[tag] > 0),
+    tagScores,
+  };
+}
+
+function mergeDiaryTagScores(left, right) {
+  const leftScores = normalizeDiaryTagScores(left?.tagScores, left?.tags);
+  const rightScores = normalizeDiaryTagScores(right?.tagScores, right?.tags);
+  const merged = {};
+  for (const tag of DIARY_TAGS) {
+    const score = Math.max(leftScores[tag] || 0, rightScores[tag] || 0);
+    if (score > 0) merged[tag] = score;
+  }
+  return merged;
+}
+
 function normalizeDiaryArchiveEntry(entry) {
   if (!entry || typeof entry !== "object") return null;
   const date = String(entry.date || "").trim();
   if (!date) return null;
-  return {
+  return normalizeDiaryEntryTags({
     ...entry,
     date,
     content: String(entry.content || ""),
     viewCount: coerceDiaryViewCount(entry.viewCount),
     lastViewedAt: String(entry.lastViewedAt || "").trim(),
-  };
+  });
 }
 
 function mergeDiaryArchiveEntries(left, right) {
@@ -177,12 +245,15 @@ function mergeDiaryArchiveEntries(left, right) {
   const leftContent = String(normalizedLeft.content || "");
   const rightContent = String(normalizedRight.content || "");
   const primary = rightContent.length > leftContent.length ? normalizedRight : normalizedLeft;
+  const tagScores = mergeDiaryTagScores(normalizedLeft, normalizedRight);
   return {
     ...primary,
     date: primary.date || normalizedLeft.date || normalizedRight.date,
     content: rightContent.length > leftContent.length ? rightContent : leftContent,
     viewCount: Math.max(normalizedLeft.viewCount || 0, normalizedRight.viewCount || 0),
     lastViewedAt: [normalizedLeft.lastViewedAt || "", normalizedRight.lastViewedAt || ""].sort().slice(-1)[0] || "",
+    tags: DIARY_TAGS.filter((tag) => tagScores[tag] > 0),
+    tagScores,
   };
 }
 
@@ -193,11 +264,13 @@ function normalizeDiaryData(payload) {
     ? diary.archive.map(normalizeDiaryArchiveEntry).filter(Boolean)
     : [];
   return {
-    today: {
+    today: normalizeDiaryEntryTags({
       date: String(today.date || ""),
       content: String(today.content || ""),
       updatedAt: String(today.updatedAt || ""),
-    },
+      tags: today.tags,
+      tagScores: today.tagScores,
+    }),
     archive,
   };
 }
@@ -240,10 +313,18 @@ function shouldAcceptIncomingToday(incoming, stored) {
 function mergeDiaryUpdate(storedDiary, incomingDiary, incomingHadToday = true) {
   const stored = archiveDiaryIfNeeded(storedDiary);
   const incoming = archiveDiaryIfNeeded(incomingDiary);
+  const incomingRawToday = incomingDiary?.today && typeof incomingDiary.today === "object" ? incomingDiary.today : null;
+  const incomingTodayHasTags = Boolean(incomingRawToday && ("tags" in incomingRawToday || "tagScores" in incomingRawToday));
 
-  const today = incomingHadToday && shouldAcceptIncomingToday(incoming.today, stored.today)
+  let today = incomingHadToday && shouldAcceptIncomingToday(incoming.today, stored.today)
     ? { ...stored.today, ...incoming.today }
     : stored.today;
+  if (incomingHadToday && !incomingTodayHasTags) {
+    today = { ...today, tags: stored.today.tags || [], tagScores: stored.today.tagScores || {} };
+  } else if (incomingHadToday && incomingTodayHasTags) {
+    const tagScores = mergeDiaryTagScores(stored.today, incoming.today);
+    today = { ...today, tags: DIARY_TAGS.filter((tag) => tagScores[tag] > 0), tagScores };
+  }
   return {
     today,
     archive: mergeDiaryArchiveList([...(stored.archive || []), ...(incoming.archive || [])]),

@@ -8,6 +8,20 @@ from services.config import DIARY_FILE
 from services.json_store import backup_file, load_json_file, write_json_file
 
 
+DIARY_TAGS = [
+    "学习卡壳",
+    "复习考试",
+    "焦虑内耗",
+    "灾难化",
+    "失眠亢奋",
+    "安静恢复",
+    "计划执行",
+    "决策止损",
+    "求职面试",
+    "人际边界",
+]
+
+
 def empty_diary():
     return {"today": {"date": "", "content": ""}, "archive": []}
 
@@ -31,19 +45,71 @@ def _clean_diary_content(text: str) -> str:
     return text.strip()
 
 
+def _coerce_tag_score(value):
+    try:
+        return min(5, max(0, int(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _normalize_diary_tags(value):
+    if not isinstance(value, list):
+        return []
+    seen = set()
+    tags = []
+    for item in value:
+        tag = str(item or "").strip()
+        if tag in DIARY_TAGS and tag not in seen:
+            seen.add(tag)
+            tags.append(tag)
+    return tags
+
+
+def _normalize_diary_tag_scores(scores, tags=None):
+    normalized = {}
+    if isinstance(scores, dict):
+        for key, value in scores.items():
+            tag = str(key or "").strip()
+            if tag in DIARY_TAGS:
+                score = _coerce_tag_score(value)
+                if score > 0:
+                    normalized[tag] = score
+    for tag in _normalize_diary_tags(tags):
+        normalized.setdefault(tag, 1)
+    return {tag: normalized[tag] for tag in DIARY_TAGS if tag in normalized}
+
+
+def _entry_with_normalized_tags(entry):
+    tag_scores = _normalize_diary_tag_scores(entry.get("tagScores"), entry.get("tags"))
+    tags = [tag for tag in DIARY_TAGS if tag_scores.get(tag, 0) > 0]
+    return {**entry, "tags": tags, "tagScores": tag_scores}
+
+
+def _merge_diary_tag_scores(left, right):
+    left_scores = _normalize_diary_tag_scores((left or {}).get("tagScores"), (left or {}).get("tags"))
+    right_scores = _normalize_diary_tag_scores((right or {}).get("tagScores"), (right or {}).get("tags"))
+    merged = {}
+    for tag in DIARY_TAGS:
+        score = max(left_scores.get(tag, 0), right_scores.get(tag, 0))
+        if score > 0:
+            merged[tag] = score
+    return merged
+
+
 def _normalize_diary_archive_entry(entry):
     if not isinstance(entry, dict):
         return None
     date = str(entry.get("date", "")).strip()
     if not date:
         return None
-    return {
+    normalized = {
         **entry,
         "date": date,
         "content": str(entry.get("content", "")),
         "viewCount": _coerce_diary_view_count(entry.get("viewCount")),
         "lastViewedAt": str(entry.get("lastViewedAt", "")).strip(),
     }
+    return _entry_with_normalized_tags(normalized)
 
 
 def _merge_diary_archive_entry(left, right):
@@ -60,6 +126,7 @@ def _merge_diary_archive_entry(left, right):
     right_content = _clean_diary_content(secondary.get("content", ""))
     content = right_content if len(right_content) > len(left_content) else left_content
     last_viewed_at = max(str(primary.get("lastViewedAt", "") or ""), str(secondary.get("lastViewedAt", "") or ""))
+    tag_scores = _merge_diary_tag_scores(primary, secondary)
     return {
         **primary,
         "date": primary.get("date") or secondary.get("date") or "",
@@ -69,6 +136,8 @@ def _merge_diary_archive_entry(left, right):
             _coerce_diary_view_count(secondary.get("viewCount")),
         ),
         "lastViewedAt": last_viewed_at,
+        "tags": [tag for tag in DIARY_TAGS if tag_scores.get(tag, 0) > 0],
+        "tagScores": tag_scores,
     }
 
 
@@ -92,11 +161,11 @@ def _normalize_diary(diary):
         if normalized
     ]
     return {
-        "today": {
+        "today": _entry_with_normalized_tags({
             **today,
             "date": str(today.get("date", "")).strip(),
             "content": str(today.get("content", "")),
-        },
+        }),
         "archive": archive,
     }
 
@@ -138,6 +207,10 @@ def archive_diary_if_needed(diary=None):
 
 
 def merge_diary_update(stored_diary: dict, incoming_diary: dict) -> dict:
+    incoming_raw_today = (incoming_diary or {}).get("today") if isinstance(incoming_diary, dict) else None
+    incoming_today_has_tags = isinstance(incoming_raw_today, dict) and (
+        "tags" in incoming_raw_today or "tagScores" in incoming_raw_today
+    )
     stored_diary = archive_diary_if_needed(stored_diary)
     incoming_has_today = isinstance((incoming_diary or {}).get("today"), dict)
     incoming_diary = archive_diary_if_needed(incoming_diary)
@@ -160,6 +233,19 @@ def merge_diary_update(stored_diary: dict, incoming_diary: dict) -> dict:
             merged_today = {**stored_today, **incoming_today}
         elif timestamp_wins is None and (incoming_content.strip() or not stored_content.strip()):
             merged_today = {**stored_today, **incoming_today}
+        if not incoming_today_has_tags:
+            merged_today = {
+                **merged_today,
+                "tags": stored_today.get("tags", []),
+                "tagScores": stored_today.get("tagScores", {}),
+            }
+        else:
+            tag_scores = _merge_diary_tag_scores(stored_today, incoming_today)
+            merged_today = {
+                **merged_today,
+                "tags": [tag for tag in DIARY_TAGS if tag_scores.get(tag, 0) > 0],
+                "tagScores": tag_scores,
+            }
 
     valid_archive = [
         entry

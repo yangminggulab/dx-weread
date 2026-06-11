@@ -3,7 +3,7 @@
 个人效率面板，包含三个核心模块：
 
 - **任务**：添加、编辑、完成任务，每日自动重置已完成项
-- **日记**：每日写作，自动归档历史，支持随机回顾往期内容
+- **日记**：每日写作，自动归档历史，支持随机回顾往期内容；可对每篇日记打问题标签并评分（0–5），标签跨端同步、合并取最高分
 - **微信读书**：同步书架、阅读进度、划线笔记，展示每日/每周阅读时长统计
 
 同时提供微信小程序和网页版（`https://yangminggu.com/tasks`），数据存储在 Cloudflare Workers KV，云端完全独立运行，不依赖本地服务器。技术栈：Taro + Vue.js 前端，Cloudflare Workers 后端，Python + GitHub Actions 做微信读书定时同步。
@@ -263,13 +263,18 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 - `write_diary_file(diary)` — 备份并写入日记
 - `effective_diary_date()` — 返回今天日期（凌晨5点前回退到昨天）
 - `archive_diary_if_needed(diary)` — 日期变更时自动归档今天的日记
-- `merge_diary_update(stored_diary, incoming_diary)` — 合并日记更新（解决 today/archive 冲突）
+- `merge_diary_update(stored_diary, incoming_diary)` — 合并日记更新（解决 today/archive 冲突）；incoming 不含标签字段时保留 stored 标签，含时取两边最高分
 - `merge_diary(local_diary, cloud_diary)` — 合并本地与云端日记
 - `_clean_diary_content(text)` — 清理日记内容（移除旧版视频标签、时间戳、分隔线）
 - `_normalize_diary(diary)` — 标准化日记结构
 - `_normalize_diary_archive_entry(entry)` — 标准化单条归档
-- `_merge_diary_archive_entry(left, right)` — 合并两条归档（取更长内容、更高浏览数）
+- `_merge_diary_archive_entry(left, right)` — 合并两条归档（取更长内容、更高浏览数、最高标签分）
 - `_timestamp_order(incoming, stored)` — 时间戳比较决定合并优先级
+- `_coerce_tag_score(value)` — 标签分数规整（0–5 整数）
+- `_normalize_diary_tags(value)` — 过滤并去重标签列表（只保留 DIARY_TAGS 内合法值）
+- `_normalize_diary_tag_scores(scores, tags)` — 合并 tagScores 与旧版 tags，输出按 DIARY_TAGS 顺序排列的 score dict
+- `_entry_with_normalized_tags(entry)` — 从 tagScores 重算 tags 数组，两字段保持一致
+- `_merge_diary_tag_scores(left, right)` — 逐标签取 max(left_score, right_score)
 
 ### web/services/time_store.py
 - `empty_time_data()` — 空时间数据
@@ -323,7 +328,9 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 - `env_float(name, default)` — 读取浮点环境变量
 
 ### web/dashboard.html
-- 单个 HTML 文件，包含内联 Vue.js 应用，渲染任务/日记/读书三面板 UI
+- 单个 HTML 文件，包含内联 React 应用，渲染任务/日记/读书三面板 UI
+- `DiaryTagEditor({ entry, onScore })` — 日记标签评分编辑器（0–5 分选择器，今日日记面板内嵌）
+- `normalizeDiaryTagScores(scores, tags)` / `updateDiaryEntryTagScore(entry, tag, score)` — 前端标签规整与单条更新
 
 ### miniprogram/src/app.js
 - 小程序入口，初始化 Taro
@@ -361,6 +368,9 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 - `handleAdd()` — 提交新任务
 - `openEdit(task)` / `handleEditSave()` — 编辑任务；**点击弹窗外自动保存**，无保存/删除按钮；任务名称用 Textarea（从左上角起排）
 - `handleDiaryChange(content)` — 日记输入防抖自动保存
+- `handleTodayTagScore(tag, score)` — 今日标签评分，600ms 防抖后调 `saveDiaryMeta`
+- `handleArchiveTagScore(idx, tag, score)` — 归档日记标签评分，600ms 防抖后全量保存
+- `saveDiaryMeta(updated, { todayOnly })` — 标签专用保存；`todayOnly: true` 时只发今日，不影响本地归档缓存
 - `openFullscreen(idx)` — 打开日记归档全屏阅读器
 - `recordArchiveView(sourceDiary, idx)` — 标记一条归档已读（stamp viewCount/lastViewedAt），**同时写本地 view meta**，不依赖服务端保存
 - `cleanDiaryContent(text)` — 日记内容清理
@@ -368,6 +378,8 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 - `mergeDiaryArchiveViewMeta(baseArchive, overlayArchive)` — 合并归档浏览元数据
 - `pickPreferredArchiveIdx(archive)` — 从最近 30 天未读条目随机选往期日记；调用前先用本地 view meta 补充 `lastViewedAt`（防服务端丢失导致候选池失效）；不再强制"历史上的今天"优先
 - `readViewMeta()` / `persistViewMeta(archive)` — 读写 `diary_view_meta_v1`（`{ date → lastViewedAt }`），内存镜像 `_viewMetaCache` 避免高频 `getStorageSync`
+- `DiaryTagScoreEditor({ entry, onScore })` — 问题标签评分组件（0–5 选择器），嵌入今日日记和归档全屏
+- `coerceDiaryTagScore` / `normalizeDiaryTags` / `normalizeDiaryTagScores` / `withNormalizedDiaryTags` / `updateDiaryEntryTagScore` / `mergeDiaryTagScores` — 标签规整与合并工具函数
 
 ### miniprogram/src/pages/books/index.jsx（读书书架页面）
 - `BooksPage()` — 主组件，展示在读书架/想读/读完三栏
@@ -384,6 +396,7 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 - `loadData()` — 拉取笔记和日记数据
 - `handleAdd()` — 新建笔记
 - `pickRandomNotes(notes, count)` — 随机选取 N 条笔记
+- `diaryEntrySearchText(entry)` — 将日记内容、日期、标签名及"标签+分数"拼接为搜索文本，支持按标签搜索
 
 ### worker/src/index.js（Cloudflare Worker）
 - `fetch(request, env)` — Worker 主入口，路由 API 请求和 CRUD
@@ -393,8 +406,9 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 - `loadDiary(kv)` / `saveDiary(kv, diary)` — KV 读写日记
 - `loadCurrentDiary(kv)` — 加载日记并自动归档
 - `mergeDataForFullSave(existing, incoming)` — 合并增量数据；incoming 不含 `books` 时从 KV 保留现有值（防批量 POST 清空书架）
-- `mergeDiaryUpdate(storedDiary, incomingDiary)` — 合并日记更新
+- `mergeDiaryUpdate(storedDiary, incomingDiary)` — 合并日记更新；incoming 不含标签字段时保留 stored 标签，含时取两边最高分
 - `runDailyReset(env)` — 每日重置（归档日记、清除已完成任务）
+- `coerceTagScore` / `normalizeDiaryTags` / `normalizeDiaryTagScores` / `normalizeDiaryEntryTags` / `mergeDiaryTagScores` — Worker 端标签规整与合并工具函数
 
 **学习书架原子接口**（`POST /api/books/add|update|delete`）：进度修改直接写单本书，不走整包覆盖，防止旧标签页竞态回滚。
 

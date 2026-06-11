@@ -5,6 +5,7 @@ import { getData, addNote, getDiary } from '../../api/index'
 import './index.scss'
 
 const NOTES_CACHE_KEY = 'notes_cache_v1'
+const DIARY_TAGS = ['学习卡壳','复习考试','焦虑内耗','灾难化','失眠亢奋','安静恢复','计划执行','决策止损','求职面试','人际边界']
 
 function getTodayStr() {
   const d = new Date()
@@ -19,6 +20,32 @@ function pickRandomNotes(notes, count = 3) {
     picked.push(pool.splice(idx, 1)[0])
   }
   return picked
+}
+
+function normalizeDiaryTagScores(scores = {}, tags = []) {
+  const normalized = {}
+  if (scores && typeof scores === 'object' && !Array.isArray(scores)) {
+    DIARY_TAGS.forEach(tag => {
+      const score = Number.parseInt(scores[tag], 10)
+      if (Number.isFinite(score) && score > 0) normalized[tag] = Math.min(5, Math.max(1, score))
+    })
+  }
+  if (Array.isArray(tags)) {
+    tags.forEach(tag => {
+      if (DIARY_TAGS.includes(tag) && !normalized[tag]) normalized[tag] = 1
+    })
+  }
+  return normalized
+}
+
+function diaryEntrySearchText(entry) {
+  const tagScores = normalizeDiaryTagScores(entry.tagScores, entry.tags)
+  return [
+    entry.date,
+    entry.content,
+    ...Object.keys(tagScores),
+    ...Object.entries(tagScores).map(([tag, score]) => `${tag}${score}`)
+  ].join(' ')
 }
 
 const EMPTY_FORM = { title: '', summary: '', tags: '' }
@@ -47,9 +74,9 @@ export default function NotesPage() {
       try { Taro.setStorageSync(NOTES_CACHE_KEY, { notes: fetchedNotes }) } catch {}
       const entries = []
       if (diary.today?.date && diary.today?.content?.trim())
-        entries.push({ date: diary.today.date, content: diary.today.content })
+        entries.push({ date: diary.today.date, content: diary.today.content, tags: diary.today.tags || [], tagScores: diary.today.tagScores || {} })
       for (const e of (diary.archive || []))
-        if (e.date && e.content?.trim()) entries.push({ date: e.date, content: e.content })
+        if (e.date && e.content?.trim()) entries.push({ date: e.date, content: e.content, tags: e.tags || [], tagScores: e.tagScores || {} })
       setDiaryEntries(entries)
     } catch {
       Taro.showToast({ title: '加载失败', icon: 'error' })
@@ -81,7 +108,7 @@ export default function NotesPage() {
     : displayed
 
   const filteredDiary = search
-    ? diaryEntries.filter(e => e.content.includes(search) || e.date.includes(search))
+    ? diaryEntries.filter(e => diaryEntrySearchText(e).includes(search))
     : []
 
   async function handleAdd() {
@@ -169,6 +196,13 @@ export default function NotesPage() {
                   <Text className='note-tag diary-tag'>日记</Text>
                 </View>
                 <Text className='note-summary'>{entry.content}</Text>
+                <View className='note-footer'>
+                  <View className='note-tags'>
+                    {Object.entries(normalizeDiaryTagScores(entry.tagScores, entry.tags)).slice(0, 4).map(([tag, score]) => (
+                      <Text key={tag} className='note-tag diary-tag'>{tag} {score}</Text>
+                    ))}
+                  </View>
+                </View>
               </View>
             ))}
           </>

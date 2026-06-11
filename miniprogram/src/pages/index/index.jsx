@@ -32,6 +32,7 @@ const TASKS_CACHE_KEY = 'tasks_cache_v1'
 const DIARY_CACHE_KEY = 'diary_cache_v2'
 const LEGACY_DIARY_CACHE_KEYS = ['diary_cache_v1']
 const DIARY_VIEW_META_KEY = 'diary_view_meta_v1'  // 轻量 view meta，单独持久化，不随 archive 一起被清空
+const DIARY_TAGS = ['学习卡壳','复习考试','焦虑内耗','灾难化','失眠亢奋','安静恢复','计划执行','决策止损','求职面试','人际边界']
 
 function getTodayStr() {
   const now = new Date()
@@ -85,27 +86,95 @@ function coerceDiaryViewCount(value) {
   return Number.isFinite(count) && count > 0 ? count : 0
 }
 
+function coerceDiaryTagScore(value) {
+  const score = Number.parseInt(value, 10)
+  if (!Number.isFinite(score)) return 0
+  return Math.min(5, Math.max(0, score))
+}
+
+function normalizeDiaryTags(tags) {
+  if (!Array.isArray(tags)) return []
+  const seen = new Set()
+  const normalized = []
+  tags.forEach(item => {
+    const tag = String(item || '').trim()
+    if (DIARY_TAGS.includes(tag) && !seen.has(tag)) {
+      seen.add(tag)
+      normalized.push(tag)
+    }
+  })
+  return normalized
+}
+
+function normalizeDiaryTagScores(scores, tags = []) {
+  const normalized = {}
+  if (scores && typeof scores === 'object' && !Array.isArray(scores)) {
+    DIARY_TAGS.forEach(tag => {
+      const score = coerceDiaryTagScore(scores[tag])
+      if (score > 0) normalized[tag] = score
+    })
+  }
+  normalizeDiaryTags(tags).forEach(tag => {
+    if (!normalized[tag]) normalized[tag] = 1
+  })
+  return DIARY_TAGS.reduce((acc, tag) => {
+    if (normalized[tag] > 0) acc[tag] = normalized[tag]
+    return acc
+  }, {})
+}
+
+function withNormalizedDiaryTags(entry) {
+  const tagScores = normalizeDiaryTagScores(entry?.tagScores, entry?.tags)
+  return {
+    ...entry,
+    tags: DIARY_TAGS.filter(tag => tagScores[tag] > 0),
+    tagScores
+  }
+}
+
+function updateDiaryEntryTagScore(entry, tag, score) {
+  const tagScores = normalizeDiaryTagScores(entry?.tagScores, entry?.tags)
+  const value = coerceDiaryTagScore(score)
+  if (value > 0) tagScores[tag] = value
+  else delete tagScores[tag]
+  return withNormalizedDiaryTags({ ...entry, tagScores })
+}
+
+function mergeDiaryTagScores(baseEntry, overlayEntry) {
+  const baseScores = normalizeDiaryTagScores(baseEntry?.tagScores, baseEntry?.tags)
+  const overlayScores = normalizeDiaryTagScores(overlayEntry?.tagScores, overlayEntry?.tags)
+  const merged = {}
+  DIARY_TAGS.forEach(tag => {
+    const score = Math.max(baseScores[tag] || 0, overlayScores[tag] || 0)
+    if (score > 0) merged[tag] = score
+  })
+  return merged
+}
+
 function normalizeDiaryEntry(entry) {
   if (!entry || typeof entry !== 'object') return null
   const date = String(entry.date || '').trim()
   if (!date) return null
-  return {
+  return withNormalizedDiaryTags({
     ...entry,
     date,
     content: cleanDiaryContent(entry.content || ''),
     viewCount: coerceDiaryViewCount(entry.viewCount),
     lastViewedAt: String(entry.lastViewedAt || '').trim()
-  }
+  })
 }
 
 function mergeDiaryEntryViewMeta(baseEntry, overlayEntry) {
   const normalizedBase = normalizeDiaryEntry(baseEntry)
   const normalizedOverlay = normalizeDiaryEntry(overlayEntry)
   if (!normalizedBase || !normalizedOverlay) return normalizedBase || normalizedOverlay
+  const tagScores = mergeDiaryTagScores(normalizedBase, normalizedOverlay)
   return {
     ...normalizedBase,
     viewCount: Math.max(normalizedBase.viewCount || 0, normalizedOverlay.viewCount || 0),
-    lastViewedAt: [normalizedBase.lastViewedAt || '', normalizedOverlay.lastViewedAt || ''].sort().slice(-1)[0] || ''
+    lastViewedAt: [normalizedBase.lastViewedAt || '', normalizedOverlay.lastViewedAt || ''].sort().slice(-1)[0] || '',
+    tags: DIARY_TAGS.filter(tag => tagScores[tag] > 0),
+    tagScores
   }
 }
 
@@ -128,11 +197,11 @@ function normalizeDiaryPayload(payload) {
   const today = diary.today && typeof diary.today === 'object' ? diary.today : {}
 
   return {
-    today: {
+    today: withNormalizedDiaryTags({
       ...today,
       date: String(today.date || '').trim(),
       content: cleanDiaryContent(today.content || '')
-    },
+    }),
     archive: Array.isArray(diary.archive)
       ? diary.archive.map(normalizeDiaryEntry).filter(Boolean)
       : []
@@ -253,6 +322,40 @@ function SkeletonCards() {
   )
 }
 
+function DiaryTagScoreEditor({ entry, onScore }) {
+  const tagScores = normalizeDiaryTagScores(entry?.tagScores, entry?.tags)
+  return (
+    <View className='diary-tag-editor' onClick={e => e.stopPropagation?.()}>
+      <View className='diary-tag-editor-head'>
+        <Text className='diary-tag-editor-title'>问题标签</Text>
+        <Text className='diary-tag-editor-scale'>0-5</Text>
+      </View>
+      {DIARY_TAGS.map(tag => {
+        const active = tagScores[tag] || 0
+        return (
+          <View className='diary-tag-score-row' key={tag}>
+            <Text className='diary-tag-score-name'>{tag}</Text>
+            <View className='diary-tag-score-options'>
+              {[0, 1, 2, 3, 4, 5].map(score => (
+                <Text
+                  key={score}
+                  className={`diary-tag-score-option ${active === score ? 'diary-tag-score-active' : ''}`}
+                  onClick={e => {
+                    e.stopPropagation?.()
+                    onScore(tag, score)
+                  }}
+                >
+                  {score}
+                </Text>
+              ))}
+            </View>
+          </View>
+        )
+      })}
+    </View>
+  )
+}
+
 export default function TaskPage() {
   // 缓存在 useState 初始值里同步读取，第一帧即可渲染数据
   const [tasks, setTasks] = useState(() => {
@@ -278,6 +381,7 @@ export default function TaskPage() {
   const [diaryLoading, setDiaryLoading] = useState(() => !readCachedDiary())
   const [diarySaving, setDiarySaving]   = useState(false)
   const diaryTimerRef = useRef(null)
+  const tagTimerRef   = useRef(null)
 
   // 历史上的今天
   const [randomArchiveIdx, setRandomArchiveIdx] = useState(null)
@@ -647,6 +751,45 @@ export default function TaskPage() {
     }, 1500)
   }
 
+  async function saveDiaryMeta(updated, { todayOnly = false } = {}) {
+    try {
+      setDiarySaving(true)
+      const payload = todayOnly
+        ? normalizeDiaryPayload({ today: updated.today, archive: [] })
+        : normalizeDiaryPayload(updated)
+      persistDiaryCache(payload)
+      await saveDiary(payload)
+    } catch {
+      Taro.showToast({ title: '标签保存失败', icon: 'none' })
+    } finally {
+      setDiarySaving(false)
+    }
+  }
+
+  function handleTodayTagScore(tag, score) {
+    diaryTodayDirtyRef.current = true
+    const updated = {
+      ...diaryRef.current,
+      today: updateDiaryEntryTagScore({ ...diaryRef.current.today, date: getTodayStr() }, tag, score)
+    }
+    diaryRef.current = updated
+    setDiary(updated)
+    if (tagTimerRef.current) clearTimeout(tagTimerRef.current)
+    tagTimerRef.current = setTimeout(() => saveDiaryMeta(updated, { todayOnly: true }), 600)
+  }
+
+  function handleArchiveTagScore(idx, tag, score) {
+    const normalized = normalizeDiaryPayload(diaryRef.current)
+    if (!normalized.archive[idx]) return
+    const nextArchive = normalized.archive.slice()
+    nextArchive[idx] = updateDiaryEntryTagScore(nextArchive[idx], tag, score)
+    const updated = { ...normalized, archive: nextArchive }
+    diaryRef.current = updated
+    setDiary(updated)
+    if (tagTimerRef.current) clearTimeout(tagTimerRef.current)
+    tagTimerRef.current = setTimeout(() => saveDiaryMeta(updated), 600)
+  }
+
   function closeDiaryKeyboard(e) {
     e?.stopPropagation?.()
     diaryKeyboardHeightRef.current = 0
@@ -808,7 +951,9 @@ export default function TaskPage() {
                 <View className='diary-header'>
                   <Text className='diary-date'>{diary.today?.date || '今天'}</Text>
                   <View className='diary-status-wrap'>
-                    <Text className='diary-status'>{diarySaving ? '保存中...' : '自动保存'}</Text>
+                    {(diary.today?.tags || []).slice(0, 3).map(tag => (
+                      <Text key={tag} className='diary-header-tag'>{tag}</Text>
+                    ))}
                     <Text className='diary-done-btn' onClick={closeDiaryKeyboard}>完成</Text>
                   </View>
                 </View>
@@ -838,6 +983,7 @@ export default function TaskPage() {
                     maxlength={10000}
                   />
                 </ScrollView>
+                <DiaryTagScoreEditor entry={diary.today} onScore={handleTodayTagScore} />
               </View>
 
               {/* 下半：历史上的今天 / 往期日记 */}
@@ -943,6 +1089,10 @@ export default function TaskPage() {
               <Text className='diary-fs-close-icon'>✕</Text>
             </View>
           </View>
+          <DiaryTagScoreEditor
+            entry={diary.archive[fullscreenIdx]}
+            onScore={(tag, score) => handleArchiveTagScore(fullscreenIdx, tag, score)}
+          />
           <ScrollView scrollY className='diary-fs-body'>
             <Text className='diary-fs-text'>{diary.archive[fullscreenIdx]?.content}</Text>
           </ScrollView>
