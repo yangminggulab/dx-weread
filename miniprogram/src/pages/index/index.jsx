@@ -679,21 +679,19 @@ export default function TaskPage() {
     })
   }
 
-  async function handleAdd() {
-    if (!form.title.trim()) {
-      Taro.showToast({ title: '请输入任务名称', icon: 'none' })
-      return
-    }
+  async function handleAddClose() {
+    const snapshot = { ...form }
+    setShowAdd(false)
+    setForm(EMPTY_FORM)
+    if (!snapshot.title.trim()) return
     try {
-      const res = await addTask({ ...form, status: 'in_progress' })
+      const res = await addTask({ ...snapshot, status: 'in_progress' })
       const newTasks = [...tasks, res.task]
       setTasks(newTasks)
       try {
         const cached = Taro.getStorageSync(TASKS_CACHE_KEY) || {}
         Taro.setStorageSync(TASKS_CACHE_KEY, { ...cached, tasks: newTasks })
       } catch {}
-      setShowAdd(false)
-      setForm(EMPTY_FORM)
     } catch {
       Taro.showToast({ title: '添加失败', icon: 'error' })
     }
@@ -1106,15 +1104,20 @@ export default function TaskPage() {
 
       {/* ── 添加弹窗 ── */}
       {showAdd && (
-        <View className='modal-mask' onClick={() => setShowAdd(false)}>
+        <View className='modal-mask' onClick={handleAddClose}>
           <View className='modal-box' onClick={stopProp}>
             <Text className='modal-title'>新增任务</Text>
             <View className='form-item'>
               <Text className='form-label'>任务名称</Text>
-              <Input className='form-input form-input-tall'
+              <Textarea className='form-input form-input-edit-tall'
                 placeholder='请输入任务名称'
                 value={form.title}
-                onInput={e => setForm(f => ({ ...f, title: e.detail.value }))} />
+                onInput={e => setForm(f => ({ ...f, title: e.detail.value }))}
+                adjustPosition={false}
+                showConfirmBar={false}
+                disableDefaultPadding
+                cursorSpacing={24}
+                maxlength={200} />
             </View>
             <View className='form-item'>
               <Text className='form-label'>类型</Text>
@@ -1139,10 +1142,6 @@ export default function TaskPage() {
                   </View>
                 ))}
               </View>
-            </View>
-            <View className='modal-actions'>
-              <View className='btn-cancel' onClick={() => setShowAdd(false)}><Text>取消</Text></View>
-              <View className='btn-confirm' onClick={handleAdd}><Text>添加</Text></View>
             </View>
           </View>
         </View>
