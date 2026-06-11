@@ -585,6 +585,15 @@
   color: #1c1c1c;
 }
 
+.diary-fs-tags {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-right: 12px;
+}
+
 .diary-fs-close {
   width: 48px;
   height: 48px;

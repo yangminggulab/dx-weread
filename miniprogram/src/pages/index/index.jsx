@@ -1084,6 +1084,11 @@ export default function TaskPage() {
           onTouchEnd={handleFsTouchEnd}>
           <View className='diary-fs-header'>
             <Text className='diary-fs-date'>{diary.archive[fullscreenIdx]?.date}</Text>
+            <View className='diary-fs-tags'>
+              {(diary.archive[fullscreenIdx]?.tags || []).slice(0, 3).map(tag => (
+                <Text key={tag} className='diary-header-tag'>{tag}</Text>
+              ))}
+            </View>
             <View className='diary-fs-close' onClick={() => setDiaryFullscreen(false)}>
               <Text className='diary-fs-close-icon'>✕</Text>
             </View>
