@@ -70,12 +70,19 @@
   margin-bottom: 14px;
 }
 
+.note-header-date-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1;
+  gap: 8px;
+  margin-right: 16px;
+}
+
 .note-title {
   font-size: 30px;
   font-weight: 600;
   color: #1c1c1c;
-  flex: 1;
-  margin-right: 20px;
   line-height: 1.4;
 }
 

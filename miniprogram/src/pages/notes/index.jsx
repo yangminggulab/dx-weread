@@ -293,17 +293,15 @@ export default function NotesPage() {
         {filteredDiary.map((entry, i) => (
           <View key={`diary-${i}`} className='note-card card'>
             <View className='note-header'>
-              <Text className='note-title'>{entry.date}</Text>
-              <Text className='note-tag diary-tag'>日记</Text>
-            </View>
-            <Text className='note-summary'>{entry.content}</Text>
-            <View className='note-footer'>
-              <View className='note-tags'>
-                {Object.entries(normalizeDiaryTagScores(entry.tagScores, entry.tags)).slice(0, 4).map(([tag, score]) => (
+              <View className='note-header-date-tags'>
+                <Text className='note-title'>{entry.date}</Text>
+                {Object.entries(normalizeDiaryTagScores(entry.tagScores, entry.tags)).slice(0, 3).map(([tag, score]) => (
                   <Text key={tag} className='note-tag diary-tag'>{tag} {score}</Text>
                 ))}
               </View>
+              <Text className='note-tag diary-tag'>日记</Text>
             </View>
+            <Text className='note-summary'>{entry.content}</Text>
           </View>
         ))}
       </>
