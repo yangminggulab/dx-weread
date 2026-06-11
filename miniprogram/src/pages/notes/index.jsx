@@ -6,6 +6,18 @@ import './index.scss'
 
 const NOTES_CACHE_KEY = 'notes_cache_v1'
 const DIARY_TAGS = ['学习卡壳','复习考试','焦虑内耗','灾难化','失眠亢奋','安静恢复','计划执行','决策止损','求职面试','人际边界']
+const DIARY_TAG_COLORS = {
+  学习卡壳: { backgroundColor: '#e8f0f8', color: '#2d5f9e' },
+  复习考试: { backgroundColor: '#ede8f5', color: '#6040a0' },
+  焦虑内耗: { backgroundColor: '#fdf0e2', color: '#c06818' },
+  灾难化:   { backgroundColor: '#fae8e8', color: '#b02828' },
+  失眠亢奋: { backgroundColor: '#e8eaf5', color: '#3848a0' },
+  安静恢复: { backgroundColor: '#e4f0ea', color: '#286848' },
+  计划执行: { backgroundColor: '#e0f2f2', color: '#1e7878' },
+  决策止损: { backgroundColor: '#f2ece0', color: '#7e5c20' },
+  求职面试: { backgroundColor: '#f8f2e0', color: '#8a7020' },
+  人际边界: { backgroundColor: '#f8e4ee', color: '#a02858' },
+}
 const DIARY_TAG_ALIASES = {
   学习卡壳: ['学不进去', '不会做题', '卡住', '卡壳', '畏难', '学不会'],
   复习考试: ['考试', '复习', '备考', '刷题', '错题', '托福', '期末'],
@@ -296,10 +308,9 @@ export default function NotesPage() {
               <View className='note-header-date-tags'>
                 <Text className='note-title'>{entry.date}</Text>
                 {Object.entries(normalizeDiaryTagScores(entry.tagScores, entry.tags)).slice(0, 3).map(([tag, score]) => (
-                  <Text key={tag} className='note-tag diary-tag'>{tag} {score}</Text>
+                  <Text key={tag} className='note-tag diary-tag' style={DIARY_TAG_COLORS[tag] || {}}>{tag} {score}</Text>
                 ))}
               </View>
-              <Text className='note-tag diary-tag'>日记</Text>
             </View>
             <Text className='note-summary'>{entry.content}</Text>
           </View>
