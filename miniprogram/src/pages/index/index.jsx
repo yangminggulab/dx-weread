@@ -983,7 +983,6 @@ export default function TaskPage() {
                     maxlength={10000}
                   />
                 </ScrollView>
-                <DiaryTagScoreEditor entry={diary.today} onScore={handleTodayTagScore} />
               </View>
 
               {/* 下半：历史上的今天 / 往期日记 */}
@@ -1089,10 +1088,6 @@ export default function TaskPage() {
               <Text className='diary-fs-close-icon'>✕</Text>
             </View>
           </View>
-          <DiaryTagScoreEditor
-            entry={diary.archive[fullscreenIdx]}
-            onScore={(tag, score) => handleArchiveTagScore(fullscreenIdx, tag, score)}
-          />
           <ScrollView scrollY className='diary-fs-body'>
             <Text className='diary-fs-text'>{diary.archive[fullscreenIdx]?.content}</Text>
           </ScrollView>

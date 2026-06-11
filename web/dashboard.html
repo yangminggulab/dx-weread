@@ -794,7 +794,6 @@ function DiarySection({ diary, onDiaryChange, onDiaryTagScore }) {
           value={todayContent}
           onChange={e => onDiaryChange(e.target.value)}
         />
-        <DiaryTagEditor entry={diary?.today} onScore={onDiaryTagScore} />
       </div>
     </section>
   );
