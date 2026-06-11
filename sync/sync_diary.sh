@@ -33,20 +33,67 @@ def normalize(d):
         "archive": [e for e in (d.get("archive") or []) if isinstance(e, dict) and e.get("date")]
     }
 
+DIARY_TAGS = [
+    "学习卡壳",
+    "复习考试",
+    "焦虑内耗",
+    "灾难化",
+    "失眠亢奋",
+    "安静恢复",
+    "计划执行",
+    "决策止损",
+    "求职面试",
+    "人际边界",
+]
+
+def normalize_scores(entry):
+    scores = {}
+    raw_scores = entry.get("tagScores") if isinstance(entry.get("tagScores"), dict) else {}
+    for tag in DIARY_TAGS:
+        try:
+            score = max(0, min(5, int(raw_scores.get(tag, 0))))
+        except (TypeError, ValueError):
+            score = 0
+        if score > 0:
+            scores[tag] = score
+    for tag in entry.get("tags") or []:
+        if tag in DIARY_TAGS and tag not in scores:
+            scores[tag] = 1
+    return scores
+
+def merge_entry(local_entry, cloud_entry):
+    local_entry = local_entry or {}
+    cloud_entry = cloud_entry or {}
+    lc = str(local_entry.get("content", ""))
+    cc = str(cloud_entry.get("content", ""))
+    primary = cloud_entry if len(cc) > len(lc) else local_entry
+    secondary = local_entry if primary is cloud_entry else cloud_entry
+    scores = {}
+    local_scores = normalize_scores(local_entry)
+    cloud_scores = normalize_scores(cloud_entry)
+    for tag in DIARY_TAGS:
+        score = max(local_scores.get(tag, 0), cloud_scores.get(tag, 0))
+        if score > 0:
+            scores[tag] = score
+    merged = {**secondary, **primary}
+    merged["tags"] = [tag for tag in DIARY_TAGS if scores.get(tag, 0) > 0]
+    merged["tagScores"] = scores
+    return merged
+
 local = normalize(local)
 cloud = normalize(cloud)
 
-# today：取内容更长的
-lt = local["today"].get("content", "")
-ct = cloud["today"].get("content", "")
-merged_today = cloud["today"] if len(ct) > len(lt) else local["today"]
+# today：内容取更长的，标签评分合并取高分
+merged_today = merge_entry(local["today"], cloud["today"])
 
-# archive：按日期合并，内容更长的优先
+# archive：按日期合并，内容更长的优先，标签评分合并取高分
 amap = {e["date"]: e for e in local["archive"]}
 for e in cloud["archive"]:
     d = e.get("date")
     if not d: continue
-    if d not in amap or len(str(e.get("content",""))) > len(str(amap[d].get("content",""))):
+    if d in amap:
+        amap[d] = merge_entry(amap[d], e)
+    else:
         amap[d] = e
 
 merged = {

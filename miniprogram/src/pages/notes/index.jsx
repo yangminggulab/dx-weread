@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Taro from '@tarojs/taro'
 import { View, Text, ScrollView, Input, Textarea } from '@tarojs/components'
 import { getData, addNote, getDiary } from '../../api/index'
@@ -6,6 +6,18 @@ import './index.scss'
 
 const NOTES_CACHE_KEY = 'notes_cache_v1'
 const DIARY_TAGS = ['学习卡壳','复习考试','焦虑内耗','灾难化','失眠亢奋','安静恢复','计划执行','决策止损','求职面试','人际边界']
+const DIARY_TAG_ALIASES = {
+  学习卡壳: ['学不进去', '不会做题', '卡住', '卡壳', '畏难', '学不会'],
+  复习考试: ['考试', '复习', '备考', '刷题', '错题', '托福', '期末'],
+  焦虑内耗: ['焦虑', '内耗', '乱想', '担心', '害怕', '烦恼', '压力', '不安'],
+  灾难化: ['灾难', '灾难化', '想坏了', '最坏', '崩了', '完蛋'],
+  失眠亢奋: ['失眠', '睡', '睡不着', '睡不好', '睡觉', '睡眠', '入睡', '睡前', '熬夜', '醒了', '亢奋'],
+  安静恢复: ['休息', '恢复', '放松', '安静', '冥想', '调整呼吸', '修复', '缓一缓'],
+  计划执行: ['计划', '执行', '目标', '安排', '推进', '完成', 'todo'],
+  决策止损: ['决策', '止损', '沉没成本', '放弃', '选择', '取舍', '别冲动'],
+  求职面试: ['求职', '面试', '实习', '工作', '简历', 'boss', 'hr'],
+  人际边界: ['人际', '边界', '父母', '争吵', '朋友', '关系', '沟通']
+}
 
 function getTodayStr() {
   const d = new Date()
@@ -36,6 +48,80 @@ function normalizeDiaryTagScores(scores = {}, tags = []) {
     })
   }
   return normalized
+}
+
+function normalizeSearchValue(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[＃#]/g, '')
+    .replace(/\s+/g, '')
+}
+
+function includesSearchText(text, query) {
+  const source = normalizeSearchValue(text)
+  const target = normalizeSearchValue(query)
+  return Boolean(source && target && source.includes(target))
+}
+
+function fuzzyContains(text, query) {
+  const source = normalizeSearchValue(text)
+  const target = normalizeSearchValue(query)
+  if (!source || !target) return false
+  if (source.includes(target) || target.includes(source)) return true
+
+  let matched = 0
+  for (const char of target) {
+    if (source.includes(char)) matched += 1
+  }
+  return target.length >= 2 && matched / target.length >= 0.75
+}
+
+function tagMatchesQuery(tag, query) {
+  const target = normalizeSearchValue(query)
+  if (target.length < 2) {
+    return includesSearchText(tag, query) || (DIARY_TAG_ALIASES[tag] || []).some(alias => normalizeSearchValue(alias) === target)
+  }
+  if (includesSearchText(tag, query) || includesSearchText(query, tag)) return true
+  return (DIARY_TAG_ALIASES[tag] || []).some(alias =>
+    includesSearchText(alias, query) ||
+    includesSearchText(query, alias) ||
+    fuzzyContains(alias, query)
+  )
+}
+
+function getDiarySearchTags(query) {
+  return DIARY_TAGS.filter(tag => tagMatchesQuery(tag, query))
+}
+
+function getTagSearchScore(tagScores, query) {
+  return getDiarySearchTags(query).reduce((best, tag) => Math.max(best, tagScores[tag] || 0), 0)
+}
+
+function getLatestTime(value) {
+  const time = Date.parse(value || '')
+  return Number.isFinite(time) ? time : 0
+}
+
+function scoreNoteSearch(note, query) {
+  if (!query) return 0
+  let score = 0
+  if (includesSearchText(note.title, query)) score += 80
+  if (includesSearchText(note.summary, query)) score += 50
+  if ((note.tags || []).some(tag => includesSearchText(tag, query))) score += 70
+  if (!score && (note.tags || []).some(tag => fuzzyContains(tag, query))) score += 35
+  return score
+}
+
+function scoreDiarySearch(entry, query) {
+  if (!query) return 0
+  const tagScores = normalizeDiaryTagScores(entry.tagScores, entry.tags)
+  const matchedTagScore = getTagSearchScore(tagScores, query)
+  let score = matchedTagScore > 0 ? 1000 + matchedTagScore * 100 : 0
+  if (includesSearchText(entry.date, query)) score += 40
+  if (includesSearchText(entry.content, query)) score += 60
+  if (Object.keys(tagScores).some(tag => tagMatchesQuery(tag, query))) score += 40
+  return score
 }
 
 function diaryEntrySearchText(entry) {
@@ -98,18 +184,35 @@ export default function NotesPage() {
   }, [notes, todayStr, todayNotes.length])
 
   const displayed = todayNotes.length > 0 ? todayNotes : fallbackNotes
+  const hasSearch = normalizeSearchValue(search).length > 0
 
-  const filteredNotes = search
-    ? notes.filter(n =>
-        n.title.includes(search) ||
-        (n.summary || '').includes(search) ||
-        (n.tags || []).some(t => t.includes(search))
+  const filteredNotes = useMemo(() => {
+    if (!hasSearch) return displayed
+    return notes
+      .map((note, index) => ({ note, index, score: scoreNoteSearch(note, search) }))
+      .filter(item => item.score > 0)
+      .sort((a, b) =>
+        b.score - a.score ||
+        getLatestTime(b.note.updatedAt) - getLatestTime(a.note.updatedAt) ||
+        a.index - b.index
       )
-    : displayed
+      .map(item => item.note)
+  }, [displayed, hasSearch, notes, search])
 
-  const filteredDiary = search
-    ? diaryEntries.filter(e => diaryEntrySearchText(e).includes(search))
-    : []
+  const filteredDiary = useMemo(() => {
+    if (!hasSearch) return []
+    return diaryEntries
+      .map((entry, index) => ({ entry, index, score: scoreDiarySearch(entry, search) }))
+      .filter(item => item.score > 0 || diaryEntrySearchText(item.entry).includes(search))
+      .sort((a, b) =>
+        b.score - a.score ||
+        getLatestTime(b.entry.date) - getLatestTime(a.entry.date) ||
+        a.index - b.index
+      )
+      .map(item => item.entry)
+  }, [diaryEntries, hasSearch, search])
+
+  const showDiaryFirst = hasSearch && getDiarySearchTags(search).length > 0
 
   async function handleAdd() {
     if (!form.title.trim()) {
@@ -139,12 +242,58 @@ export default function NotesPage() {
 
   const hasResults = filteredNotes.length > 0 || filteredDiary.length > 0
 
+  function renderNoteCards() {
+    return filteredNotes.map(note => (
+      <View key={`note-${note.id}`} className='note-card card'>
+        <View className='note-header'>
+          <Text className='note-title'>{note.title}</Text>
+          <Text className='note-date'>{note.updatedAt}</Text>
+        </View>
+        {note.summary ? <Text className='note-summary'>{note.summary}</Text> : null}
+        <View className='note-footer'>
+          <View className='note-tags'>
+            {(note.tags || []).map((tag, i) => (
+              <Text key={i} className='note-tag'>#{tag}</Text>
+            ))}
+          </View>
+        </View>
+      </View>
+    ))
+  }
+
+  function renderDiaryCards(showDivider) {
+    if (filteredDiary.length === 0) return null
+    return (
+      <>
+        {showDivider && (
+          <View className='section-divider'><Text className='section-divider-text'>日记</Text></View>
+        )}
+        {filteredDiary.map((entry, i) => (
+          <View key={`diary-${i}`} className='note-card card'>
+            <View className='note-header'>
+              <Text className='note-title'>{entry.date}</Text>
+              <Text className='note-tag diary-tag'>日记</Text>
+            </View>
+            <Text className='note-summary'>{entry.content}</Text>
+            <View className='note-footer'>
+              <View className='note-tags'>
+                {Object.entries(normalizeDiaryTagScores(entry.tagScores, entry.tags)).slice(0, 4).map(([tag, score]) => (
+                  <Text key={tag} className='note-tag diary-tag'>{tag} {score}</Text>
+                ))}
+              </View>
+            </View>
+          </View>
+        ))}
+      </>
+    )
+  }
+
   return (
     <View className='notes-page'>
       <View className='page-header'>
         <Text className='page-title'>笔记</Text>
         <Text className='page-subtitle'>
-          {search
+          {hasSearch
             ? `${filteredNotes.length + filteredDiary.length} 个结果`
             : todayNotes.length > 0 ? `今天 ${todayNotes.length} 条` : '随机回顾'}
         </Text>
@@ -164,49 +313,12 @@ export default function NotesPage() {
       <ScrollView scrollY showScrollbar={false} className='notes-list'>
         {loading && <View className='empty'><Text>加载中...</Text></View>}
         {!loading && !hasResults && (
-          <View className='empty'><Text>{search ? '无匹配结果' : '暂无笔记 📝'}</Text></View>
+          <View className='empty'><Text>{hasSearch ? '无匹配结果' : '暂无笔记 📝'}</Text></View>
         )}
 
-        {filteredNotes.map(note => (
-          <View key={`note-${note.id}`} className='note-card card'>
-            <View className='note-header'>
-              <Text className='note-title'>{note.title}</Text>
-              <Text className='note-date'>{note.updatedAt}</Text>
-            </View>
-            {note.summary ? <Text className='note-summary'>{note.summary}</Text> : null}
-            <View className='note-footer'>
-              <View className='note-tags'>
-                {(note.tags || []).map((tag, i) => (
-                  <Text key={i} className='note-tag'>#{tag}</Text>
-                ))}
-              </View>
-            </View>
-          </View>
-        ))}
-
-        {filteredDiary.length > 0 && (
-          <>
-            {search && filteredNotes.length > 0 && (
-              <View className='section-divider'><Text className='section-divider-text'>日记</Text></View>
-            )}
-            {filteredDiary.map((entry, i) => (
-              <View key={`diary-${i}`} className='note-card card'>
-                <View className='note-header'>
-                  <Text className='note-title'>{entry.date}</Text>
-                  <Text className='note-tag diary-tag'>日记</Text>
-                </View>
-                <Text className='note-summary'>{entry.content}</Text>
-                <View className='note-footer'>
-                  <View className='note-tags'>
-                    {Object.entries(normalizeDiaryTagScores(entry.tagScores, entry.tags)).slice(0, 4).map(([tag, score]) => (
-                      <Text key={tag} className='note-tag diary-tag'>{tag} {score}</Text>
-                    ))}
-                  </View>
-                </View>
-              </View>
-            ))}
-          </>
-        )}
+        {showDiaryFirst ? renderDiaryCards(false) : null}
+        {renderNoteCards()}
+        {!showDiaryFirst ? renderDiaryCards(hasSearch && filteredNotes.length > 0) : null}
       </ScrollView>
 
       <View className='fab' onClick={() => setShowAdd(true)}>
