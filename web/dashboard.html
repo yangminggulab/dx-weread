@@ -742,7 +742,7 @@ function DiaryTagEditor({ entry, onScore }) {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
         {DIARY_TAGS.map(tag => {
-          const active = tagScores[tag] || 0;
+          const active = tagScores[tag] ?? null;
           return (
             <div key={tag} className="flex items-center justify-between gap-2 bg-[#faf9f6] border border-[#eee9df] rounded-lg px-2 py-2">
               <span className="text-xs font-medium text-[#39443b] whitespace-nowrap">{tag}</span>

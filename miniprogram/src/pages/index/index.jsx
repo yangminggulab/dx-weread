@@ -331,7 +331,7 @@ function DiaryTagScoreEditor({ entry, onScore }) {
         <Text className='diary-tag-editor-scale'>0-5</Text>
       </View>
       {DIARY_TAGS.map(tag => {
-        const active = tagScores[tag] || 0
+        const active = tagScores[tag] ?? null
         return (
           <View className='diary-tag-score-row' key={tag}>
             <Text className='diary-tag-score-name'>{tag}</Text>
