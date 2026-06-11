@@ -365,7 +365,7 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 - `loadDiary()` — 拉取完整日记（含归档，进入日记 tab 时懒加载，`archiveLoadedRef` 防重复）
 - `handleStatusChange(task)` — 切换任务完成状态（乐观更新）
 - `handleDelete(id)` — 确认并删除任务
-- `handleAdd()` — 提交新任务
+- `handleAddClose()` — 新增任务自动保存并关闭弹窗；标题为空则直接关闭不保存；**点击弹窗外自动保存**，无添加/取消按钮，输入框用 Textarea（同编辑弹窗）
 - `openEdit(task)` / `handleEditSave()` — 编辑任务；**点击弹窗外自动保存**，无保存/删除按钮；任务名称用 Textarea（从左上角起排）
 - `handleDiaryChange(content)` — 日记输入防抖自动保存
 - `handleTodayTagScore(tag, score)` — 今日标签评分，600ms 防抖后调 `saveDiaryMeta`
