@@ -376,18 +376,23 @@ def sync():
         "time":    "刚刚",
     }]
 
-    cloud.update({
-        "books":           study_books + books,
-        "notes":           other_notes + notes,
-        "updates":         other_updates + updates,
+    reading_update = {
+        "books":           books,
+        "notes":           notes if notes_ok else None,
+        "updates":         updates,
         "weekReadMinutes": week_read_minutes,
         "weekReadDaily":   week_read_daily,
         "totalReadDays":   total_read_days,
         "wereadStats":     weread_stats,
         "wereadSyncedAt":  synced_at,
-    })
+    }
+    if not notes_ok:
+        reading_update.pop("notes")
+    if not stats_ok:
+        for key in ["wereadStats", "weekReadDaily", "weekReadMinutes", "totalReadDays"]:
+            reading_update.pop(key, None)
 
-    push = requests.post(f"{CLOUD_BASE_URL}/api/data", json=cloud, headers=cloud_headers, timeout=30)
+    push = requests.post(f"{CLOUD_BASE_URL}/api/weread", json=reading_update, headers=cloud_headers, timeout=30)
     push.raise_for_status()
     print(
         f"✅ Done: {len(books)} books  {len(notes)} notes  "
