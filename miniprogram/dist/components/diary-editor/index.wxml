@@ -9,7 +9,6 @@
     cursor-spacing="32" maxlength="-1" />
   <view wx:if="{{entry.tags.length}}" class="editor-tags"><text wx:for="{{entry.tags}}" wx:key="*this" class="editor-tag">{{item}}</text></view>
   <view wx:if="{{automatic || entry.content.length || status === 'error' || status === 'storage-error'}}" class="editor-footer {{status === 'error' || status === 'storage-error' ? 'editor-footer-warning' : ''}}">
-    <button wx:if="{{automatic}}" class="editor-retry" bindtap="versions">版本历史</button>
     <text class="editor-count">{{entry.content.length || 0}} 字</text>
     <text wx:if="{{!saving && (status === 'error' || status === 'storage-error')}}" class="editor-status">{{labels[status]}}</text>
   </view>

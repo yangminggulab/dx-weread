@@ -6,8 +6,7 @@
     "pages/notes/index",
     "pages/diary/index",
     "pages/diary-history/index",
-    "pages/diary-reader/index",
-    "pages/diary-versions/index"
+    "pages/diary-reader/index"
   ],
   "window": {
     "backgroundTextStyle": "light",

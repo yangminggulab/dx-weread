@@ -96,12 +96,6 @@ Page({
   overwrite() {
     this._controller.save(true);
   },
-  openVersions() {
-    this.finish();
-    wx.navigateTo({
-      url: `/pages/diary-versions/index?date=${encodeURIComponent(this.data.today.date)}`
-    });
-  },
   openReader() {
     if (!this.data.preview) return;
     this.finish();

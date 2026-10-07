@@ -24,7 +24,6 @@ Component({
     focus() { this.setData({ editing: true }); this.triggerEvent('writing', { active: true }) },
     blur() { this.setData({ editing: false }); this.triggerEvent('writing', { active: false }); this.triggerEvent('flush') },
     finish() { this.setData({ editing: false }); this.triggerEvent('writing', { active: false }); this.triggerEvent('finish') },
-    versions() { this.triggerEvent('versions') },
     retry() { this.triggerEvent('save') },
     useCloud() { this.triggerEvent('cloud') },
     overwrite() { this.triggerEvent('overwrite') }

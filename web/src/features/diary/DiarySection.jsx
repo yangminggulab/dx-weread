@@ -21,7 +21,6 @@ export function DiarySection({ controller, state, fullPage = false, dashboard = 
           onChange={event => controller.edit(event.target.value)} onBlur={() => controller.save()} />
         <div className="border-t border-line-soft pt-3 mt-3 flex flex-wrap items-center gap-2 text-[11px]" role="status" aria-live="polite">
           <span className="text-muted">{state.entry?.content.length || 0} 字</span>
-          {state.automatic && <button className="text-muted underline" onClick={() => controller.loadVersions()}>版本历史</button>}
           {status && <span className="ml-auto text-warning">{status}</span>}
         </div>
         {state.conflict && <div className="mt-3 rounded-lg bg-warning-soft p-3 text-xs text-warning space-y-3">
@@ -30,17 +29,7 @@ export function DiarySection({ controller, state, fullPage = false, dashboard = 
             <div className="flex flex-wrap gap-3"><button disabled={state.saving} className="underline" onClick={() => controller.useCloud()}>使用云端内容</button>
               <button disabled={state.saving} className="underline" onClick={() => controller.keepDraft()}>核对后保存我的草稿</button></div></>}
         </div>}
-        {state.versionsOpen && <div className="mt-3 rounded-lg border border-line p-3 space-y-3" aria-label="日记版本历史">
-          <div className="flex justify-between"><strong className="text-xs">版本历史</strong><button className="text-xs underline" onClick={() => controller.closeVersions()}>关闭</button></div>
-          {state.versionsLoading && <p className="text-xs text-muted">正在读取…</p>}
-          {!state.versions.length && !state.versionsLoading && <p className="text-xs text-muted">暂无保存的版本</p>}
-          {state.versions.map(version => <div key={version.id} className="border-t border-line-soft pt-3 text-xs space-y-2">
-            <p className="text-muted">{new Date(version.createdAt).toLocaleString('zh-CN')} · {{ apple: 'Apple 客户端', web: '网页', miniprogram: '微信小程序', server: '云端' }[version.source] || '云端'}</p>
-            <p className="whitespace-pre-wrap max-h-32 overflow-auto select-text">{version.content || '（空白正文）'}</p>
-            <button className="text-accent underline" disabled={state.saving || state.loading} onClick={() => controller.restoreVersion(version)}>恢复此版本</button>
-          </div>)}
-          {state.versionsCursor && <button className="text-xs underline" disabled={state.versionsLoading} onClick={() => controller.loadVersions(true)}>更多版本</button>}
-        </div>}
+
       </div>
     </section>
   );

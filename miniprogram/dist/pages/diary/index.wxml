@@ -1,7 +1,7 @@
 <view class="diary-page {{writing ? 'diary-focused' : ''}}">
   <view class="diary-content">
     <view wx:if="{{syncError || refreshFailed}}" class="diary-load-warning"><text>{{syncError || '暂时无法连接云端，当前内容已保留，会自动重试'}}</text></view>
-    <diary-editor entry="{{today}}" status="{{saveStatus}}" saving="{{saving}}" conflict="{{conflict}}" automatic="{{automatic}}" bind:versions="openVersions"
+    <diary-editor entry="{{today}}" status="{{saveStatus}}" saving="{{saving}}" conflict="{{conflict}}" automatic="{{automatic}}"
       bind:edit="edit" bind:flush="flush" bind:finish="finish" bind:save="retrySave" bind:cloud="useCloud" bind:overwrite="overwrite" bind:writing="writingChanged" />
     <view hidden="{{writing}}" class="diary-history-section">
       <view class="diary-section-heading"><text class="diary-section-title">往期日记</text><button class="diary-all" bindtap="openHistory">全部 {{entryCount}} 篇 ›</button></view>

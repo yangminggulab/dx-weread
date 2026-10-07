@@ -79,9 +79,6 @@ Component({
       });
       this.triggerEvent('finish');
     },
-    versions() {
-      this.triggerEvent('versions');
-    },
     retry() {
       this.triggerEvent('save');
     },

@@ -28,7 +28,6 @@ Page({
   retrySave() { this._controller.save() },
   useCloud() { this._controller.useCloud() },
   overwrite() { this._controller.save(true) },
-  openVersions() { this.finish(); wx.navigateTo({ url: `/pages/diary-versions/index?date=${encodeURIComponent(this.data.today.date)}` }) },
   openReader() { if (!this.data.preview) return; this.finish(); rememberDiary(this._controller.diary); wx.navigateTo({ url: `/pages/diary-reader/index?date=${encodeURIComponent(this.data.preview.date)}` }) },
   openHistory() { this.finish(); rememberDiary(this._controller.diary); wx.navigateTo({ url: '/pages/diary-history/index' }) },
   recallPreview() { this._controller.recall(); this._controller.syncViews() }

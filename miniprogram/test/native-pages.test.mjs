@@ -7,7 +7,7 @@ const app = JSON.parse(fs.readFileSync(new URL('../dist/app.json', import.meta.u
 test('native project keeps original AppID, routes and tab bar without Taro runtime', () => {
   const project = JSON.parse(fs.readFileSync(new URL('../dist/project.config.json', import.meta.url)))
   assert.equal(project.appid, 'wx3d9fea31502b4488')
-  assert.deepEqual(app.pages, ['pages/index/index', 'pages/books/index', 'pages/notes/index', 'pages/diary/index', 'pages/diary-history/index', 'pages/diary-reader/index', 'pages/diary-versions/index'])
+  assert.deepEqual(app.pages, ['pages/index/index', 'pages/books/index', 'pages/notes/index', 'pages/diary/index', 'pages/diary-history/index', 'pages/diary-reader/index'])
   assert.deepEqual(app.tabBar.list.map(tab => tab.text), ['任务', '日记', '书单', '笔记'])
   assert.equal(fs.existsSync(new URL('../dist/taro.js', import.meta.url)), false)
   assert.equal(fs.existsSync(new URL('../dist/vendors.js', import.meta.url)), false)
