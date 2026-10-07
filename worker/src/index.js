@@ -8,6 +8,9 @@ const CORS_HEADERS = {
 };
 
 const PERSONAL_ROUTE_PREFIX = "/tasks";
+// Capability changes must invalidate the same revision polled by existing
+// clients, even when no business document changed during a deployment.
+const SYNC_CAPABILITIES = { readingWriteVersion: 1, diaryEntryWriteVersion: 1, diarySyncVersion: 1 };
 const EMPTY_APP_DATA = { tasks: [], books: [], notes: [], updates: [] };
 const EMPTY_DIARY_DATA = { today: { date: "", content: "" }, archive: [] };
 const DIARY_TAGS = [
@@ -598,11 +601,10 @@ const worker = {
       ctx.waitUntil(dispatchWereadSync(env, event));
       return;
     }
-    ctx.waitUntil(env.TASKS_STATE
-      ? env.TASKS_STATE.get(env.TASKS_STATE.idFromName("personal")).fetch(new Request("https://state.internal/tasks/__internal/reset", {
+    if (!env.TASKS_STATE) throw new Error("TaskState binding is required; legacy KV is migration-only");
+    ctx.waitUntil(env.TASKS_STATE.get(env.TASKS_STATE.idFromName("personal")).fetch(new Request("https://state.internal/tasks/__internal/reset", {
           method: "POST", headers: { Authorization: `Bearer ${env.API_TOKEN}` },
-        }))
-      : runDailyReset(env));
+        })));
   },
 
   async fetch(request, env) {
@@ -637,10 +639,15 @@ const worker = {
       if (path.startsWith("/api/") && env.TASKS_STATE) {
         return await env.TASKS_STATE.get(env.TASKS_STATE.idFromName("personal")).fetch(request);
       }
+      // Missing deployment bindings must never expose or modify an obsolete KV
+      // snapshot. Only the transactional TaskState adapter may serve data APIs.
+      if (path.startsWith("/api/") && !env.DIARY_SYNC_ATOMIC) {
+        return json({ error: "云端暂时不可用，客户端会保留内容并自动重试" }, 503);
+      }
 
       if (path === "/api/sync-state" && request.method === "GET") {
-        return json({ revision: Number(await env.TASKS_KV.get("sync_version")) || 0, readingWriteVersion: 1, diaryEntryWriteVersion: 1,
-          diarySyncVersion: env.DIARY_SYNC_ATOMIC ? 1 : 0 });
+        return json({ revision: Number(await env.TASKS_KV.get("sync_version")) || 0, ...SYNC_CAPABILITIES,
+          diarySyncVersion: env.DIARY_SYNC_ATOMIC ? SYNC_CAPABILITIES.diarySyncVersion : 0 });
       }
 
       if (path === "/api/data" && request.method === "GET") {
@@ -1030,6 +1037,11 @@ export class TaskState {
       await this.initialize();
       try {
         return await this.ctx.storage.transaction(async storage => {
+          const capabilities = JSON.stringify(SYNC_CAPABILITIES);
+          if (await storage.get("sync_capabilities") !== capabilities) {
+            await storage.put("sync_capabilities", capabilities);
+            await storage.put("sync_version", (await storage.get("sync_version") || 0) + 1);
+          }
           if (new URL(request.url).pathname === "/tasks/__internal/reset" && request.method === "POST") {
             return json(await runDailyReset(this.storageEnvironment(storage)));
           }

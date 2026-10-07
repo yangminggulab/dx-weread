@@ -11,10 +11,11 @@ export class WorkspaceController {
     this.request = request; this.cache = cache; this.personal = personal;
     this.schedule = (...args) => schedule(...args); this.cancel = id => cancel(id);
     this.listeners = new Set(); this.epoch = 0; this.readingEpoch = 0; this.timer = null; this.saving = null; this.refreshing = null;
+    this.taskConflict = false; this.disposed = false;
     const cached = cache?.read();
     this.data = cached ? normalize(cached) : null;
     this.base = this.data ? snapshot(this.data) : null;
-    this.state = { data: this.data, loading: !this.data, error: '', syncError: '', saving: false };
+    this.state = { data: this.data, loading: !this.data, error: '', syncError: '', taskConflict: false, saving: false };
   }
   subscribe = listener => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
   getSnapshot = () => this.state;
@@ -64,7 +65,7 @@ export class WorkspaceController {
   async flushTasks() {
     this.cancel(this.timer); this.timer = null;
     if (this.saving) return this.saving;
-    if (!this.dirty() || this.state.syncError) return;
+    if (!this.dirty() || this.taskConflict) return;
     this.publish({ saving: true });
     this.saving = (async () => {
       try {
@@ -76,10 +77,15 @@ export class WorkspaceController {
           this.base = snapshot(saved); this.data = normalize({ ...rebased,
             ...(readingEpoch !== this.readingEpoch ? { books: this.data.books } : {}),
           }); this.epoch++;
-          this.persistCache(); this.publish();
+          this.persistCache(); this.publish({ syncError: '', taskConflict: false });
         }
       } catch (error) {
-        this.publish({ syncError: error.status === 409 ? '其他端修改了相同任务，当前编辑已保留，请核对后重试。' : '任务保存失败，当前编辑已保留，请检查网络后重试。' });
+        this.taskConflict = error.status === 409;
+        this.publish({ taskConflict: this.taskConflict, syncError: this.taskConflict ? '其他端修改了相同任务，当前编辑已保留，请核对后重试。' : '暂时无法连接云端，当前编辑已保留，会自动重试。' });
+        if (!this.taskConflict && !this.disposed) {
+          this.cancel(this.timer);
+          this.timer = this.schedule(() => { this.timer = null; this.flushTasks(); }, 30000);
+        }
       } finally { this.saving = null; this.publish({ saving: false }); }
     })();
     return this.saving;
@@ -88,7 +94,7 @@ export class WorkspaceController {
     try {
       const remote = normalize(await this.request('/api/data'));
       this.data = normalize(rebaseAppEdits(this.base, snapshot(this.data), remote));
-      this.base = snapshot(remote); this.epoch++; this.publish({ syncError: '' });
+      this.base = snapshot(remote); this.epoch++; this.taskConflict = false; this.publish({ syncError: '', taskConflict: false });
       return this.flushTasks();
     } catch { this.publish({ syncError: '获取云端任务失败，当前编辑已保留。' }); }
   }
@@ -100,5 +106,5 @@ export class WorkspaceController {
       : this.data.books.filter(b => b.id !== deletedID) };
     this.persistCache(); this.publish();
   }
-  dispose() { this.flushTasks(); this.listeners.clear(); }
+  dispose() { this.disposed = true; this.flushTasks(); this.listeners.clear(); }
 }

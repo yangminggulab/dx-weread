@@ -35,7 +35,7 @@ test('choosing cloud drops only the conflicted draft and sends no extra save', a
 test('network failure retains draft, baseline and a working retry', async () => {
   const f = diaryFixture(); await f.controller.refresh(); f.controller.edit('Draft');
   f.handler(() => { throw new Error('offline'); }); assert.equal(await f.controller.save(), false);
-  assert.equal(f.repository.read()['2026-10-07'].baseUpdatedAt, 'v1'); assert.match(f.controller.state.error, /保存失败/);
+  assert.equal(f.repository.read()['2026-10-07'].baseUpdatedAt, 'v1'); assert.match(f.controller.state.error, /自动重试/);
   f.handler(null); assert.equal(await f.controller.save(), true); assert.equal(f.remote().today.content, 'Draft');
 });
 test('typing during save retains newer text and advances only through this writer receipt', async () => {

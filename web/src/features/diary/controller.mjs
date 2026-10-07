@@ -105,7 +105,7 @@ export class DiaryController {
         if (error.status === 409 && error.data?.entry) this.conflicts[date] = normalizeEntry(error.data.entry);
         this.error = error.status === 409 ? '其他端已更新这一天的日记，草稿已保留。'
           : error.status === 404 ? '暂时无法按日期保存，草稿已保留，请确认服务已更新。'
-          : '保存失败，草稿已保留，请检查网络后重试。';
+          : '暂时无法连接云端，草稿已保留，会自动重试。';
         return false;
       }
     });
@@ -146,7 +146,7 @@ export class DiaryController {
         this.error = ''; this.persistCache();
         if (this.drafts[this.date()] && !this.conflicts[this.date()]) this.scheduleSave();
         return true;
-      } catch { this.error = '日记刷新失败，当前内容已保留，请重试。'; return false; }
+      } catch { this.error = '日记刷新失败，当前内容已保留，会自动重试。'; return false; }
       finally { this.loading = false; this.refreshing = null; this.publish(); }
     });
     return this.refreshing;

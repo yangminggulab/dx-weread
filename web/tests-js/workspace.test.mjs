@@ -6,6 +6,21 @@ import { deferred } from './helpers.mjs';
 
 const original = () => ({ tasks: [{ id: 1, title: 'Original', taskType: 'daily', status: 'todo' }], books: [], notes: [{ id: 'wr_note', title: 'Source note' }], updates: [] });
 function workspace(request) { return new WorkspaceController({ request, schedule: () => 1, cancel: () => {} }); }
+test('transient task failure retries automatically while a real field conflict remains protected', async () => {
+  const timers = new Map(); let timerID = 0, failure = true, writes = 0;
+  const c = new WorkspaceController({ schedule: fn => { timers.set(++timerID, fn); return timerID; }, cancel: id => timers.delete(id),
+    request: async (_, options) => {
+      if (!options) return original(); writes++;
+      if (failure) throw new Error('offline');
+      const submitted = JSON.parse(options.body); return { ok: true, data: { ...original(), tasks: submitted.tasks } };
+    } });
+  await c.refresh(); c.toggleTask(1); await c.flushTasks();
+  assert.equal(c.state.taskConflict, false); assert.match(c.state.syncError, /自动重试/); assert.equal(timers.size, 1);
+  failure = false; const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(fn => fn()); await c.saving;
+  assert.equal(writes, 2); assert.equal(c.dirty(), false); assert.equal(c.state.syncError, '');
+  c.request = async () => { throw Object.assign(new Error('conflict'), { status: 409 }); };
+  c.toggleTask(1); await c.flushTasks(); assert.equal(c.state.taskConflict, true); assert.equal(timers.size, 0);
+});
 test('failed initial load does not invent example tasks or enable writes', async () => {
   const c = workspace(async () => { throw new Error('offline'); }); await c.refresh();
   assert.equal(c.data, null); assert.equal(c.base, null); assert.match(c.state.error, /刷新失败/);

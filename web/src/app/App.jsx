@@ -32,7 +32,7 @@ export function App({ onLogout }) {
       <h1 id="workspace-title" className="sr-only">个人工作台</h1>
       <div className="workspace-notices">
         {state.error && <div role="alert" className="workspace-notice">{state.error}<button className="ml-3 underline" onClick={() => workspace.refresh()}>重试</button></div>}
-        {state.syncError && <div role="alert" className="workspace-notice">{state.syncError}<button className="ml-3 underline" onClick={() => { if (window.confirm('核对后采用当前页面修改的任务字段，保留云端其他修改，是否继续？')) workspace.retryTasks(); }}>核对后保留当前修改并重试</button></div>}
+        {state.syncError && <div role="alert" className="workspace-notice">{state.syncError}{state.taskConflict && <button className="ml-3 underline" onClick={() => { if (window.confirm('核对后采用当前页面修改的任务字段，保留云端其他修改，是否继续？')) workspace.retryTasks(); }}>核对后保留当前修改并重试</button>}</div>}
         {reading.state.error && !reading.state.editor && <div role="alert" className="workspace-notice">{reading.state.error}</div>}
         {state.loading && <p className="text-sm text-muted" role="status">正在读取任务与读书数据…</p>}
       </div>

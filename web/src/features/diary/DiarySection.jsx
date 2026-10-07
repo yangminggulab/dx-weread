@@ -3,8 +3,7 @@ import { SectionHead } from '../../shared/components.jsx';
 
 export function DiarySection({ controller, state, fullPage = false, dashboard = false, onExpand }) {
   const [showHistory, setShowHistory] = useState(false);
-  const status = state.storageError || (state.saving ? '保存中…' : state.conflict ? '有其他端更新，草稿已保留'
-    : state.error || (state.restored ? '已恢复草稿，等待核对云端' : state.dirty ? '本机已保存 · 等待同步' : state.loading ? '正在读取云端' : '已同步'));
+  const status = state.storageError || state.error || (state.conflict ? '有其他端更新，草稿已保留' : '');
   const dates = [...new Set([...state.history.map(entry => entry.date), ...state.drafts])].filter(date => date !== controller.diary.today.date).sort().reverse();
   return (
     <section id={dashboard ? 'diary' : undefined} className={dashboard ? 'dashboard-diary' : fullPage ? "diary-editor" : "flex flex-col h-full"} aria-label="日记书写区">
@@ -23,9 +22,7 @@ export function DiarySection({ controller, state, fullPage = false, dashboard = 
         <div className="border-t border-line-soft pt-3 mt-3 flex flex-wrap items-center gap-2 text-[11px]" role="status" aria-live="polite">
           <span className="text-muted">{state.entry?.content.length || 0} 字</span>
           {state.automatic && <button className="text-muted underline" onClick={() => controller.loadVersions()}>版本历史</button>}
-          <span className={`ml-auto ${state.error || state.conflict || state.storageError ? 'text-warning' : 'text-muted'}`}>{status}</span>
-          {state.dirty && !state.conflict && <button className="text-accent underline" disabled={state.saving || state.restored} onClick={() => controller.save()}>保存</button>}
-          {state.error && !state.conflict && <button className="text-accent underline" onClick={() => controller.refresh()}>重新同步</button>}
+          {status && <span className="ml-auto text-warning">{status}</span>}
         </div>
         {state.conflict && <div className="mt-3 rounded-lg bg-warning-soft p-3 text-xs text-warning space-y-3">
           <p>{state.conflict.unavailable ? '这一天暂时没有云端记录，草稿已保留。' : '云端版本已有更新，请核对后选择：'}</p>

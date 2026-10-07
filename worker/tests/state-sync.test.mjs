@@ -214,6 +214,36 @@ test('lightweight sync revision stays stable on reads and changes after app or d
   assert.ok((await (await f.request('sync-state')).json()).revision > beforeDiary);
 });
 
+test('capability rollout wakes existing revision-only clients without modifying business documents', async () => {
+  const f = fixture();
+  const before = await (await f.request('data')).json();
+  const diaryBefore = await (await f.request('diary')).json();
+  const previous = (await (await f.request('sync-state')).json()).revision;
+  await f.storage.put('sync_capabilities', JSON.stringify({ readingWriteVersion: 1, diaryEntryWriteVersion: 1, diarySyncVersion: 0 }));
+  const updated = await (await f.request('sync-state')).json();
+  assert.equal(updated.revision, previous + 1);
+  assert.equal(updated.diarySyncVersion, 1);
+  assert.deepEqual(await (await f.request('data')).json(), before);
+  assert.deepEqual(await (await f.request('diary')).json(), diaryBefore);
+  const restarted = new TaskState({ storage: f.storage }, f.env);
+  f.env.TASKS_STATE.get = () => restarted;
+  assert.equal((await (await f.request('sync-state')).json()).revision, updated.revision);
+  await f.storage.delete('sync_capabilities'); // Existing deployed objects have no marker.
+  assert.equal((await (await f.request('sync-state')).json()).revision, updated.revision + 1);
+  assert.equal((await (await f.request('sync-state')).json()).revision, updated.revision + 1);
+});
+
+test('failed requests cannot acknowledge or repeatedly advance a capability rollout', async () => {
+  const f = fixture();
+  await f.request('data');
+  const previous = await f.storage.get('sync_version');
+  await f.storage.delete('sync_capabilities');
+  assert.equal((await f.request('tasks/update', { id: 999, title: 'Missing' })).status, 404);
+  assert.equal(await f.storage.get('sync_capabilities'), undefined);
+  assert.equal(await f.storage.get('sync_version'), previous);
+  assert.equal((await (await f.request('sync-state')).json()).revision, previous + 1);
+});
+
 
 test('legacy diary clients can save repeatedly with the original GET timestamp', async () => {
   const f = fixture();
@@ -420,13 +450,14 @@ test('receipt storage failure rolls back all version snapshots and the canonical
   assert.equal(result.status, 500); assert.deepEqual(f.storage.values, snapshot);
 });
 
-test('unserialized KV never advertises or accepts automatic sync, and version bodies require authentication', async () => {
+test('missing TaskState binding fails closed for every data API and Cron, never exposing obsolete KV', async () => {
   const f = fixture(); const noAtomic = { ...f.env, TASKS_STATE: null };
   const get = path => worker.fetch(new Request(`https://example.test/tasks/api/${path}`, { headers: { Authorization: 'Bearer test' } }), noAtomic);
-  assert.equal((await (await get('diary')).json()).syncVersion, undefined);
+  for (const route of ['diary', 'data', 'essays', 'sync-state']) assert.equal((await get(route)).status, 503);
   const write = await worker.fetch(new Request('https://example.test/tasks/api/diary/sync', { method: 'POST',
     headers: { Authorization: 'Bearer test', 'Content-Type': 'application/json' }, body: '{}' }), noAtomic);
   assert.equal(write.status, 503);
+  await assert.rejects(worker.scheduled({ cron: '0 * * * *' }, noAtomic, { waitUntil() { throw new Error('Must not run reset'); } }), /TaskState binding is required/);
   const unauthorized = await worker.fetch(new Request('https://example.test/tasks/api/diary/versions?date=2026-10-07'), f.env);
   assert.equal(unauthorized.status, 401);
 });

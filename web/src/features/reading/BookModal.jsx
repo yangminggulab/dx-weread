@@ -21,7 +21,7 @@ export function BookModal({ controller, state }) {
             : <p>这本书已不在云端书架，草稿已保留，可复制内容后关闭。</p>}
         </div>}
         {state.closing ? <div className="px-6 pb-5 text-sm space-y-3"><p>还有未保存的修改。</p><div className="flex flex-wrap gap-3"><button type="button" className="underline" onClick={() => controller.keepAndClose()}>保留草稿并关闭</button><button type="button" className="underline text-danger" onClick={() => controller.discardAndClose()}>放弃修改</button><button type="button" className="underline" onClick={() => controller.publish({ closing: false })}>继续编辑</button></div></div>
-          : <div className="px-6 py-4 border-t border-line flex justify-end gap-3"><button type="button" disabled={state.saving} onClick={() => controller.close()}>关闭</button><button type="submit" disabled={state.saving || state.conflict} className="px-5 py-2 bg-accent text-white rounded-lg disabled:opacity-50">{state.saving ? '保存中…' : '保存'}</button></div>}
+          : <div className="px-6 py-4 border-t border-line flex justify-end gap-3"><button type="button" disabled={state.saving} onClick={() => controller.close()}>关闭</button><button type="submit" disabled={state.saving || state.conflict} className="px-5 py-2 bg-accent text-white rounded-lg disabled:opacity-50">保存</button></div>}
       </form>
     </div>
   </div>;
