@@ -470,3 +470,10 @@ GitHub Actions Secrets（仓库 Settings → Secrets）：
 **受控模式的平台限制：** 微信官方文档明确说明，`textarea` 的 `onInput` 返回值不会反映到组件上，即 textarea 不支持真正的受控模式。每次 `onInput` 后用新 `value` 强制覆盖会造成光标跳动。如需在 modal 里稳定使用，遵循上述 props 配置即可，不要额外绑定 `cursor` prop（`cursor={value.length}` 每次 re-render 都强制移光标，必然抖动）。
 
 **参考：** 日记页 `diary-textarea` 是经过验证的稳定写法，新增弹窗输入框时以它为模板。
+
+
+## 网页宽屏工作台（2026-10-07）
+
+网页版源码已按任务、日记、读书分模块，构建命令为 `npm run build`，生成 `web/dashboard.html`，继续通过 `yangminggu.com/tasks` 提供服务。左列点击聚焦标题切换每日 / 每周 / 长期任务，中列为两类书架，右列为日记与阅读足迹，笔记使用宽幅阅读区。使用蓝色任务操作、紫色阅读组件和紫色阅读热力。目录、数据保护、测试与设计来源见 [网页说明](web/README.md) 和 [设计思路](web/docs/设计思路.md)。
+
+本次发布包含网页及其所需的日记、读书 API 保护与自动日记版本保全；Apple / 小程序客户端界面未包含在本次发布中。`miniprogram/src/utils/diary-sync.mjs` 是网页引用的纯同步操作辅助模块，本次只提交该模块及其请求队列依赖。

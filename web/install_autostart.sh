@@ -1,6 +1,6 @@
 #!/bin/bash
 # 把 server.py 注册为 macOS 登录时自动启动的后台服务
-# 用法: bash scripts/install_autostart.sh
+# 用法: bash web/install_autostart.sh
 
 set -e
 
@@ -12,7 +12,7 @@ else
 fi
 PLIST_NAME="com.yangminggu.taskserver"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_NAME}.plist"
-LOG_DIR="$PROJECT_DIR/logs"
+LOG_DIR="$PROJECT_DIR/data/logs"
 
 mkdir -p "$LOG_DIR"
 
@@ -69,4 +69,4 @@ echo "常用命令："
 echo "  查看状态：launchctl list | grep yangminggu"
 echo "  手动停止：launchctl unload ~/Library/LaunchAgents/${PLIST_NAME}.plist"
 echo "  手动启动：launchctl load ~/Library/LaunchAgents/${PLIST_NAME}.plist"
-echo "  卸载自启：bash scripts/uninstall_autostart.sh"
+echo "  卸载自启：bash web/uninstall_autostart.sh"

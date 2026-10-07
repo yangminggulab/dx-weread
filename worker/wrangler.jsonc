@@ -4,7 +4,13 @@
   "compatibility_date": "2024-01-01",
   "workers_dev": true,
   "rules": [
-    { "type": "Text", "globs": ["**/*.html"], "fallthrough": false }
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.html"
+      ],
+      "fallthrough": false
+    }
   ],
   "kv_namespaces": [
     {
@@ -19,6 +25,25 @@
     }
   ],
   "triggers": {
-    "crons": ["0 * * * *", "13 0-15,23 * * *"]
-  }
+    "crons": [
+      "0 * * * *",
+      "13 0-15,23 * * *"
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TASKS_STATE",
+        "class_name": "TaskState"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-task-state",
+      "new_sqlite_classes": [
+        "TaskState"
+      ]
+    }
+  ]
 }

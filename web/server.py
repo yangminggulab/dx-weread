@@ -19,7 +19,7 @@ sys.path.insert(0, str(_WEB_DIR))
 
 from routes.api import handle_request
 from services.cloud_sync import start_background_jobs as start_cloud_background_jobs
-from services.config import LOCAL_BRIDGE_ALLOWED_ORIGINS, ROOT_DIR
+from services.config import LOCAL_BRIDGE_ALLOWED_ORIGINS
 from services.storage import coerce_int_id
 from services.weread_sync import start_background_jobs as start_weread_background_jobs
 
@@ -79,7 +79,7 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
 
         if path in ("/", "/dashboard.html"):
-            html_path = os.path.join(ROOT_DIR, "dashboard.html")
+            html_path = _WEB_DIR / "dashboard.html"
             try:
                 data = open(html_path, "rb").read()
                 self.send_response(200)

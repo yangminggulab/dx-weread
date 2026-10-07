@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 
 from services.cloud_sync import pull_from_cloud
-from services.diary_store import load_diary_file, merge_diary_update
+from services.diary_store import DIARY_LOCK, load_diary_file, merge_diary_update
+from services.diary_writes import update_diary_entry
 from services.storage import archive_diary_if_needed, empty_weread_stats, load_app_data, write_diary_file
 from services.weread_sync import run_weread_sync, save_combined_data, weread_status_payload
 from sync.weread import WeReadApiError, load_weread_api_key
@@ -27,13 +28,22 @@ def handle_request(method, path, body):
             return _weread_sync()
 
         if method == "GET" and path == "/api/diary":
-            diary = archive_diary_if_needed()
-            write_diary_file(diary)
+            with DIARY_LOCK:
+                diary = archive_diary_if_needed()
+                write_diary_file(diary)
             return 200, diary
 
+        if method == "POST" and path == "/api/diary/entry":
+            with DIARY_LOCK:
+                status, receipt, diary = update_diary_entry(archive_diary_if_needed(), body)
+                if diary is not None:
+                    write_diary_file(diary)
+            return status, receipt
+
         if method == "POST" and path == "/api/diary":
-            diary = merge_diary_update(load_diary_file(), body or {})
-            write_diary_file(diary)
+            with DIARY_LOCK:
+                diary = merge_diary_update(load_diary_file(), body or {})
+                write_diary_file(diary)
             return 200, {"ok": True}
 
         if method in ("GET", "POST") and path == "/api/sync/pull":

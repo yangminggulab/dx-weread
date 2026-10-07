@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "build": "node worker/scripts/build.js",
-    "check:worker": "node --check worker/src/index.js"
+    "test:web": "node --test web/tests-js/*.test.mjs",
+    "check:worker": "node --check worker/src/index.js",
+    "deploy": "npm --prefix worker run deploy"
   }
 }

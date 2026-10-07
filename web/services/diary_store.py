@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from threading import RLock
+from zoneinfo import ZoneInfo
 
 from services.config import DIARY_FILE
 from services.json_store import backup_file, load_json_file, write_json_file
+
+DIARY_LOCK = RLock()
 
 
 DIARY_TAGS = [
@@ -171,16 +175,18 @@ def _normalize_diary(diary):
 
 
 def load_diary_file():
-    return _normalize_diary(load_json_file(DIARY_FILE, empty_diary()))
+    with DIARY_LOCK:
+        return _normalize_diary(load_json_file(DIARY_FILE, empty_diary()))
 
 
 def write_diary_file(diary):
-    backup_file(DIARY_FILE, "diary", keep=1)
-    write_json_file(DIARY_FILE, _normalize_diary(diary))
+    with DIARY_LOCK:
+        backup_file(DIARY_FILE, "diary", keep=1)
+        write_json_file(DIARY_FILE, _normalize_diary(diary))
 
 
 def effective_diary_date():
-    now = datetime.now()
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
     if now.hour < 5:
         return (now - timedelta(days=1)).date().isoformat()
     return now.date().isoformat()
