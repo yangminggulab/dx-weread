@@ -31,7 +31,7 @@ test('native task form survives request failure and retry adds one task', async 
   const env = runtime(), page = env.mount('index')
   page.openAdd(); page.inputTitle(event({}, 'New task'))
   env.fail('tasks/add'); await page.saveForm()
-  assert.equal(page.data.showForm, true); assert.equal(page.data.form.title, 'New task')
+  assert.equal(page.data.showForm, true); assert.equal(page._form.title, 'New task')
   env.fail(undefined); await page.saveForm()
   assert.equal(page.data.showForm, false); assert.equal(page.data.active[0].title, 'New task')
 })

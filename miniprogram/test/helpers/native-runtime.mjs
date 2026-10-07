@@ -16,6 +16,8 @@ export function runtime(initial = ORIGINAL) {
   const syncValues = new Map()
   const kv = { get: async key => syncValues.get(key), put: async (key, value) => syncValues.set(key, value) }
   let writeOverride, readOverride, failPath
+  let window = { windowHeight: 640, screenHeight: 812, screenTop: 88, windowWidth: 375 }
+  const keyboardListeners = new Set(), resizeListeners = new Set()
   const wx = {
     getStorageSync: key => clone(storage.get(key)),
     setStorageSync: (key, value) => storage.set(key, clone(value)),
@@ -24,7 +26,10 @@ export function runtime(initial = ORIGINAL) {
     navigateBack: () => navigations.push('back'),
     navigateTo: options => navigations.push(options.url),
     nextTick: callback => callback(),
-    createSelectorQuery() { return { in() { return this }, select() { return this }, fields() { return this }, exec(callback) { callback([null]) } } },
+    getWindowInfo: () => clone(window),
+    onKeyboardHeightChange: callback => keyboardListeners.add(callback), offKeyboardHeightChange: callback => keyboardListeners.delete(callback),
+    onWindowResize: callback => resizeListeners.add(callback), offWindowResize: callback => resizeListeners.delete(callback),
+    createSelectorQuery() { return { in() { return this }, select() { return this }, fields() { return this }, boundingClientRect(callback) { this.rect = callback; return this }, exec(callback) { if (this.rect) this.rect(null); if (callback) callback([null]) } } },
     request(options) {
       const endpoint = new URL(options.url).pathname.replace('/tasks/api/', '')
       const operation = async () => {
@@ -94,6 +99,9 @@ export function runtime(initial = ORIGINAL) {
   }
   return {
     load, mount, storage, timers, intervals, writes, navigations, wx,
+    keyboardListeners, resizeListeners,
+    keyboard(height) { keyboardListeners.forEach(callback => callback({ height })) },
+    resize(value) { window = { ...window, ...value }; resizeListeners.forEach(callback => callback({ size: clone(window) })) },
     cloud: () => clone(cloud),
     setCloud(value) { cloud = clone(value) }, setData(value) { data = clone(value) }, setEssays(value) { essays = clone(value) },
     setWrite(fn) { writeOverride = fn }, setGet(fn) { readOverride = fn }, fail(path) { failPath = path },

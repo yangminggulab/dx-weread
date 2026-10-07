@@ -3,6 +3,7 @@ page { height: auto; min-height: 100%; overflow: visible; background: var(--bg);
 .diary-content { box-sizing: border-box; padding: 28rpx 36rpx calc(36rpx + env(safe-area-inset-bottom)); }
 .diary-load-warning { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin-bottom: 24rpx; padding: 16rpx 20rpx; border-radius: 16rpx; background: var(--warning-soft); color: var(--warning); font-size: 24rpx; line-height: 1.6; }
 .diary-load-warning button { margin: 0; padding: 8rpx; color: var(--accent); background: transparent; font-size: 24rpx; line-height: 1.6; }
+.diary-history-muted { visibility: hidden; pointer-events: none; }
 .diary-history-section { margin-top: 32rpx; }
 .diary-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin-bottom: 10rpx; }
 .diary-section-title { color: var(--ink); font-size: 28rpx; font-weight: 500; line-height: 1.5; }

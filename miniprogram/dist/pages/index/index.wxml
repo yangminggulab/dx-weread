@@ -24,13 +24,13 @@
       </view>
     </scroll-view>
   </view>
-  <view wx:if="{{showForm}}" class="modal-mask" bindtap="noop">
-    <view class="modal-box" catchtap="noop">
+  <view wx:if="{{showForm}}" class="modal-mask" style="bottom:{{sheetBottom || 0}}px" bindtap="noop">
+    <scroll-view class="modal-box" scroll-y="{{true}}" scroll-into-view="{{sheetField}}" style="height:{{sheetHeight}}px" catchtap="noop"><view class="modal-content">
       <text class="modal-title">{{editID != null ? '编辑任务' : '新增任务'}}</text>
-      <view class="form-item"><text class="form-label">任务名称</text><textarea class="form-input form-input-edit-tall" value="{{form.title}}" placeholder="请输入任务名称" bindinput="inputTitle" adjust-position="{{true}}" show-confirm-bar="{{true}}" fixed="{{true}}" maxlength="200" /></view>
+      <view class="form-item" id="sheet-title"><text class="form-label">任务名称</text><view class="form-control"><textarea class="form-native-textarea" value="{{form.title}}" placeholder="请输入任务名称" data-field="title" bindfocus="sheetFocus" bindinput="inputTitle" adjust-position="{{false}}" auto-height="{{false}}" disable-default-padding="{{true}}" show-confirm-bar="{{true}}" fixed="{{true}}" maxlength="200" /></view></view>
       <view class="form-item"><text class="form-label">类型</text><view class="form-options"><view wx:for="{{typeOptions}}" wx:key="key" data-key="{{item.key}}" bindtap="selectType" class="option-btn {{form.taskType === item.key ? 'option-active' : ''}}">{{item.label}}</view></view></view>
       <view class="form-item"><text class="form-label">优先级</text><view class="form-options"><view wx:for="{{priorityOptions}}" wx:key="key" data-key="{{item.key}}" bindtap="selectPriority" class="option-btn {{form.priority === item.key ? 'option-active' : ''}}">{{item.label}}</view></view></view>
       <view class="modal-actions"><view class="btn-cancel" bindtap="dismissForm">取消</view><view class="btn-confirm" bindtap="saveForm">保存</view></view>
-    </view>
+    </view></scroll-view>
   </view>
 </view>

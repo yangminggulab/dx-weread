@@ -2,6 +2,7 @@ const api = require('../../api/index')
 const { createPageRefresh } = require('../../utils/page-refresh')
 const { readCache, writeCache } = require('../../utils/cache')
 const { TYPE_TABS, PRIORITY_MAP, CATEGORY_MAP, EMPTY_FORM, TYPE_LABEL, PRIORITY_LABEL, normalizeStatus } = require('../../features/tasks/model.mjs')
+const { createKeyboardSheet } = require('../../utils/keyboard-sheet')
 const KEY = 'tasks_cache_v1'
 Page({
   data: {
@@ -12,6 +13,7 @@ Page({
     priorityOptions: Object.keys(PRIORITY_LABEL).map(key => ({ key, label: PRIORITY_LABEL[key] }))
   },
   onLoad() {
+    this._sheet = createKeyboardSheet(this)
     this._tasks = readCache(KEY, {}).tasks || []
     this._pending = new Set()
     this._mutationVersion = 0
@@ -19,9 +21,9 @@ Page({
     this.updateTasks(this._tasks)
     this._refresh = createPageRefresh(() => this.loadData(), this)
   },
-  onShow() { this._refresh.start() },
-  onHide() { this._refresh.stop() },
-  onUnload() { this._refresh.stop(); this._disposed = true },
+  onShow() { if (this.data.showForm && this._form) this.setData({ form: { ...this._form } }, () => this._sheet.open()); this._refresh.start() },
+  onHide() { this._refresh.stop(); this._sheet.close() },
+  onUnload() { this._refresh.stop(); this._sheet.dispose(); this._disposed = true },
   async loadData() {
     if (this._loading) return false
     this._loading = true
@@ -73,21 +75,23 @@ Page({
     if (!TYPE_TABS.some(item => item.key === tab)) return
     this.setData({ tab }); this.updateTasks(this._tasks)
   },
-  openAdd() { this.setData({ showForm: true, editID: null, form: { ...EMPTY_FORM, taskType: this.data.tab } }) },
+  openAdd() { this._form = { ...EMPTY_FORM, taskType: this.data.tab }; this.setData({ showForm: true, editID: null, form: { ...this._form } }, () => this._sheet.open()) },
   openEdit(e) {
     const task = this._tasks.find(item => String(item.id) === String(e.currentTarget.dataset.id))
-    if (task) this.setData({ showForm: true, editID: task.id, form: { title: task.title || '', taskType: task.taskType || 'weekly', priority: task.priority || 'medium', category: task.category || 'study' } })
+    if (task) { this._form = { title: task.title || '', taskType: task.taskType || 'weekly', priority: task.priority || 'medium', category: task.category || 'study' }; this.setData({ showForm: true, editID: task.id, form: { ...this._form } }, () => this._sheet.open()) }
   },
-  inputTitle(e) { this.setData({ 'form.title': e.detail.value }) },
-  selectType(e) { this.setData({ 'form.taskType': e.currentTarget.dataset.key }) },
-  selectPriority(e) { this.setData({ 'form.priority': e.currentTarget.dataset.key }) },
-  dismissForm() { if (!this.data.formSaving) this.setData({ showForm: false }) },
+  // Native typing stays in the textarea; only the form model changes on each key.
+  inputTitle(e) { if (this._form) this._form.title = e.detail.value },
+  sheetFocus(e) { this._sheet.focus(e) },
+  selectType(e) { this._form.taskType = e.currentTarget.dataset.key; this.setData({ 'form.taskType': this._form.taskType }) },
+  selectPriority(e) { this._form.priority = e.currentTarget.dataset.key; this.setData({ 'form.priority': this._form.priority }) },
+  dismissForm() { if (!this.data.formSaving) { this._sheet.close(); wx.hideKeyboard(); this.setData({ showForm: false }) } },
   noop() {},
   async saveForm() {
     if (this.data.formSaving) return
-    if (!this.data.form.title.trim()) { this.dismissForm(); return }
+    if (!this._form || !this._form.title.trim()) { this.dismissForm(); return }
     this.setData({ formSaving: true })
-    const form = { ...this.data.form }, id = this.data.editID
+    const form = { ...this._form }, id = this.data.editID
     try {
       if (id != null) {
         this.recordTaskWrite(id)
@@ -102,7 +106,7 @@ Page({
         this.updateTasks([...this._tasks, receipt.task])
       }
       this.cacheTasks()
-      if (!this._disposed) this.setData({ showForm: false })
+      if (!this._disposed) { this._sheet.close(); wx.hideKeyboard(); this.setData({ showForm: false }) }
     } catch { wx.showToast({ title: '保存失败，请重试', icon: 'none' }) }
     finally { if (!this._disposed) this.setData({ formSaving: false }) }
   },

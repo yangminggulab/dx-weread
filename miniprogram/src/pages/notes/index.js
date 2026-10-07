@@ -3,12 +3,14 @@ const search = require('../../utils/notes-search.mjs')
 const { createPageRefresh } = require('../../utils/page-refresh')
 const { readCache, writeCache } = require('../../utils/cache')
 const build = require('../../build-info')
+const { createKeyboardSheet } = require('../../utils/keyboard-sheet')
 const KEY = 'notes_cache_v1'
 const EMPTY_FORM = { title: '', summary: '', tags: '' }
 
 Page({
   data: { search: '', sections: [], subtitle: '随机回顾', warning: '', loading: true, emptyText: '暂无笔记', resultPage: 0, resultPages: 1, showAdd: false, form: { ...EMPTY_FORM }, saving: false, version: `v${build.version} · ${build.revision}` },
   onLoad() {
+    this._sheet = createKeyboardSheet(this)
     this._notes = readCache(KEY, {}).notes || []
     this._diaries = []; this._essays = []; this._fallback = []
     this._status = { notes: this._notes.length ? 'ready' : 'loading', diary: 'loading', essays: 'loading' }
@@ -16,9 +18,9 @@ Page({
     this.pickFallback(); this.updateResults()
     this._refresh = createPageRefresh(() => this.refreshAll(), this)
   },
-  onShow() { this._refresh.start() },
-  onHide() { this._refresh.stop() },
-  onUnload() { this._refresh.stop(); clearTimeout(this._searchTimer); this._seq++; this._disposed = true },
+  onShow() { if (this.data.showAdd && this._form) this.setData({ form: { ...this._form } }, () => this._sheet.open()); this._refresh.start() },
+  onHide() { this._refresh.stop(); this._sheet.close() },
+  onUnload() { this._sheet.dispose(); this._refresh.stop(); clearTimeout(this._searchTimer); this._seq++; this._disposed = true },
   pickFallback() {
     const pool = this._notes.slice(), picked = []
     while (picked.length < 3 && pool.length) picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0])
@@ -86,19 +88,21 @@ Page({
   previousResults() { if (this._resultPage > 0) { this._resultPage--; this.updateResults() } },
   nextResults() { if (this._resultPage + 1 < this.data.resultPages) { this._resultPage++; this.updateResults() } },
   clearSearch() { this._resultPage = 0; clearTimeout(this._searchTimer); this._query = ''; this.setData({ search: '' }); this.updateResults() },
-  openAdd() { this.setData({ showAdd: true, form: { ...EMPTY_FORM } }) },
-  dismissAdd() { if (!this.data.saving) this.setData({ showAdd: false }) },
+  openAdd() { this._form = { ...EMPTY_FORM }; this.setData({ showAdd: true, form: { ...this._form } }, () => this._sheet.open()) },
+  dismissAdd() { if (!this.data.saving) { this._sheet.close(); wx.hideKeyboard(); this.setData({ showAdd: false }) } },
   noop() {},
-  inputForm(e) { this.setData({ [`form.${e.currentTarget.dataset.field}`]: e.detail.value }) },
+  inputForm(e) { const field = e.currentTarget.dataset.field; if (this._form && Object.hasOwnProperty.call(this._form, field)) this._form[field] = e.detail.value },
+  sheetFocus(e) { this._sheet.focus(e) },
   async saveNote() {
     if (this.data.saving) return
-    if (!this.data.form.title.trim()) { wx.showToast({ title: '请输入笔记标题', icon: 'none' }); return }
-    const form = { ...this.data.form }
+    if (!this._form || !this._form.title.trim()) { wx.showToast({ title: '请输入笔记标题', icon: 'none' }); return }
+    const form = { ...this._form }
     this.setData({ saving: true })
     try {
       const result = await api.addNote({ title: form.title, summary: form.summary, tags: form.tags.split(/[,，\s]+/).filter(Boolean), projectId: null })
       if (this._disposed) return
       this._notes = [result.note, ...this._notes]; writeCache(KEY, { notes: this._notes }); this.pickFallback()
+      this._sheet.close(); wx.hideKeyboard()
       this.setData({ resultPage: 0, resultPages: 1, showAdd: false, form: { ...EMPTY_FORM } }); this.updateResults()
       wx.showToast({ title: '已保存', icon: 'success' })
     } catch { wx.showToast({ title: '保存失败，请重试', icon: 'none' }) }

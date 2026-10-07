@@ -23,11 +23,11 @@
     </view>
       </view>
   </scroll-view>
-  <view wx:if="{{showAdd}}" class="modal-mask" bindtap="dismissAdd"><view class="modal-box" catchtap="noop">
+  <view wx:if="{{showAdd}}" class="modal-mask" style="bottom:{{sheetBottom || 0}}px" bindtap="dismissAdd"><scroll-view class="modal-box" scroll-y="{{true}}" scroll-into-view="{{sheetField}}" style="height:{{sheetHeight}}px" catchtap="noop"><view class="modal-content">
     <text class="modal-title">新建笔记</text>
-    <view class="form-item"><text class="form-label">标题</text><input class="form-input" placeholder="笔记标题" value="{{form.title}}" data-field="title" bindinput="inputForm" /></view>
-    <view class="form-item"><text class="form-label">内容摘要</text><textarea class="form-textarea" placeholder="简要记录内容..." value="{{form.summary}}" data-field="summary" bindinput="inputForm" maxlength="-1" fixed="{{true}}" adjust-position="{{true}}" /></view>
-    <view class="form-item"><text class="form-label">标签（逗号分隔）</text><input class="form-input" placeholder="如：学习, LLM, 技术" value="{{form.tags}}" data-field="tags" bindinput="inputForm" /></view>
+    <view class="form-item" id="sheet-title"><text class="form-label">标题</text><view class="form-control"><input class="form-native-input" placeholder="笔记标题" value="{{form.title}}" data-field="title" bindfocus="sheetFocus" bindinput="inputForm" adjust-position="{{false}}" /></view></view>
+    <view class="form-item" id="sheet-summary"><text class="form-label">内容摘要</text><view class="form-control"><textarea class="form-native-textarea form-native-summary" placeholder="简要记录内容..." value="{{form.summary}}" data-field="summary" bindfocus="sheetFocus" bindinput="inputForm" maxlength="-1" fixed="{{true}}" auto-height="{{false}}" disable-default-padding="{{true}}" adjust-position="{{false}}" /></view></view>
+    <view class="form-item" id="sheet-tags"><text class="form-label">标签（逗号分隔）</text><view class="form-control"><input class="form-native-input" placeholder="如：学习, LLM, 技术" value="{{form.tags}}" data-field="tags" bindfocus="sheetFocus" bindinput="inputForm" adjust-position="{{false}}" /></view></view>
     <view class="modal-actions"><view class="btn-cancel" bindtap="dismissAdd">取消</view><view class="btn-confirm" bindtap="saveNote">保存</view></view>
-  </view></view>
+  </view></scroll-view></view>
 </view>

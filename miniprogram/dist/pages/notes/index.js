@@ -10,6 +10,9 @@ const {
   writeCache
 } = require('../../utils/cache');
 const build = require('../../build-info');
+const {
+  createKeyboardSheet
+} = require('../../utils/keyboard-sheet');
 const KEY = 'notes_cache_v1';
 const EMPTY_FORM = {
   title: '',
@@ -34,6 +37,7 @@ Page({
     version: `v${build.version} · ${build.revision}`
   },
   onLoad() {
+    this._sheet = createKeyboardSheet(this);
     this._notes = readCache(KEY, {}).notes || [];
     this._diaries = [];
     this._essays = [];
@@ -51,12 +55,19 @@ Page({
     this._refresh = createPageRefresh(() => this.refreshAll(), this);
   },
   onShow() {
+    if (this.data.showAdd && this._form) this.setData({
+      form: {
+        ...this._form
+      }
+    }, () => this._sheet.open());
     this._refresh.start();
   },
   onHide() {
     this._refresh.stop();
+    this._sheet.close();
   },
   onUnload() {
+    this._sheet.dispose();
     this._refresh.stop();
     clearTimeout(this._searchTimer);
     this._seq++;
@@ -230,27 +241,36 @@ Page({
     this.updateResults();
   },
   openAdd() {
+    this._form = {
+      ...EMPTY_FORM
+    };
     this.setData({
       showAdd: true,
       form: {
-        ...EMPTY_FORM
+        ...this._form
       }
-    });
+    }, () => this._sheet.open());
   },
   dismissAdd() {
-    if (!this.data.saving) this.setData({
-      showAdd: false
-    });
+    if (!this.data.saving) {
+      this._sheet.close();
+      wx.hideKeyboard();
+      this.setData({
+        showAdd: false
+      });
+    }
   },
   noop() {},
   inputForm(e) {
-    this.setData({
-      [`form.${e.currentTarget.dataset.field}`]: e.detail.value
-    });
+    const field = e.currentTarget.dataset.field;
+    if (this._form && Object.hasOwnProperty.call(this._form, field)) this._form[field] = e.detail.value;
+  },
+  sheetFocus(e) {
+    this._sheet.focus(e);
   },
   async saveNote() {
     if (this.data.saving) return;
-    if (!this.data.form.title.trim()) {
+    if (!this._form || !this._form.title.trim()) {
       wx.showToast({
         title: '请输入笔记标题',
         icon: 'none'
@@ -258,7 +278,7 @@ Page({
       return;
     }
     const form = {
-      ...this.data.form
+      ...this._form
     };
     this.setData({
       saving: true
@@ -276,6 +296,8 @@ Page({
         notes: this._notes
       });
       this.pickFallback();
+      this._sheet.close();
+      wx.hideKeyboard();
       this.setData({
         resultPage: 0,
         resultPages: 1,
