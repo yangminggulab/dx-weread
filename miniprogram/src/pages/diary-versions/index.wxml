@@ -1,0 +1,22 @@
+<view class="versions-page">
+  <text class="title">{{date}} · 版本历史</text>
+  <text class="description">恢复后，当前云端正文仍会保留在版本历史中。</text>
+  <text wx:if="{{error}}" class="warning">{{error}}</text>
+  <view wx:if="{{selected}}" class="version-card">
+    <text class="description">原始正文 · {{bodyIndex + 1}} / {{bodyPages}}</text>
+    <text class="body" selectable="{{true}}">{{bodyPage || '（空白正文）'}}</text>
+    <button disabled="{{bodyIndex === 0}}" data-step="-1" bindtap="bodyStep">上一段</button>
+    <button disabled="{{bodyIndex + 1 >= bodyPages}}" data-step="1" bindtap="bodyStep">下一段</button>
+    <button bindtap="closeBody">关闭原文</button>
+  </view>
+  <view wx:for="{{versions}}" wx:key="id" class="version-card">
+    <text class="description">{{item.time}} · {{item.label}}</text>
+    <text class="body" selectable="{{true}}">{{item.content || '（空白正文）'}}</text>
+    <button wx:if="{{item.shortened}}" data-id="{{item.id}}" bindtap="openBody">查看完整原文</button>
+    <button disabled="{{loading}}" data-id="{{item.id}}" bindtap="restore">恢复此版本</button>
+  </view>
+  <text wx:if="{{loading}}" class="description">正在读取…</text>
+  <text wx:if="{{!loading && !versions.length && !error}}" class="description">暂无保存的版本</text>
+  <button wx:if="{{cursor}}" disabled="{{loading}}" data-more="true" bindtap="load">更多版本</button>
+  <button wx:if="{{error}}" disabled="{{loading}}" bindtap="load">重试读取</button>
+</view>

@@ -1,1 +1,303 @@
-"use strict";(wx["webpackJsonp"]=wx["webpackJsonp"]||[]).push([[795],{5802:function(e,n,t){var r=t(2180),a=t(1413),c=t(2688),o=t(7762),s=t(5861),l=t(9439),i=t(1002),u=t(3433),d=t(7294),f=t(2954),h=t.n(f),m=t(1515),g=t(3228),x=t(5893),v="notes_cache_v1",p=["\u5b66\u4e60\u5361\u58f3","\u590d\u4e60\u8003\u8bd5","\u7126\u8651\u5185\u8017","\u707e\u96be\u5316","\u5931\u7720\u4ea2\u594b","\u5b89\u9759\u6062\u590d","\u8ba1\u5212\u6267\u884c","\u51b3\u7b56\u6b62\u635f","\u6c42\u804c\u9762\u8bd5","\u4eba\u9645\u8fb9\u754c"],j={"\u5b66\u4e60\u5361\u58f3":{backgroundColor:"#e8f0f8",color:"#2d5f9e"},"\u590d\u4e60\u8003\u8bd5":{backgroundColor:"#ede8f5",color:"#6040a0"},"\u7126\u8651\u5185\u8017":{backgroundColor:"#fdf0e2",color:"#c06818"},"\u707e\u96be\u5316":{backgroundColor:"#fae8e8",color:"#b02828"},"\u5931\u7720\u4ea2\u594b":{backgroundColor:"#e8eaf5",color:"#3848a0"},"\u5b89\u9759\u6062\u590d":{backgroundColor:"#e4f0ea",color:"#286848"},"\u8ba1\u5212\u6267\u884c":{backgroundColor:"#e0f2f2",color:"#1e7878"},"\u51b3\u7b56\u6b62\u635f":{backgroundColor:"#f2ece0",color:"#7e5c20"},"\u6c42\u804c\u9762\u8bd5":{backgroundColor:"#f8f2e0",color:"#8a7020"},"\u4eba\u9645\u8fb9\u754c":{backgroundColor:"#f8e4ee",color:"#a02858"}},N={"\u5b66\u4e60\u5361\u58f3":["\u5b66\u4e0d\u8fdb\u53bb","\u4e0d\u4f1a\u505a\u9898","\u5361\u4f4f","\u5361\u58f3","\u754f\u96be","\u5b66\u4e0d\u4f1a"],"\u590d\u4e60\u8003\u8bd5":["\u8003\u8bd5","\u590d\u4e60","\u5907\u8003","\u5237\u9898","\u9519\u9898","\u6258\u798f","\u671f\u672b"],"\u7126\u8651\u5185\u8017":["\u7126\u8651","\u5185\u8017","\u4e71\u60f3","\u62c5\u5fc3","\u5bb3\u6015","\u70e6\u607c","\u538b\u529b","\u4e0d\u5b89"],"\u707e\u96be\u5316":["\u707e\u96be","\u707e\u96be\u5316","\u60f3\u574f\u4e86","\u6700\u574f","\u5d29\u4e86","\u5b8c\u86cb"],"\u5931\u7720\u4ea2\u594b":["\u5931\u7720","\u7761","\u7761\u4e0d\u7740","\u7761\u4e0d\u597d","\u7761\u89c9","\u7761\u7720","\u5165\u7761","\u7761\u524d","\u71ac\u591c","\u9192\u4e86","\u4ea2\u594b"],"\u5b89\u9759\u6062\u590d":["\u4f11\u606f","\u6062\u590d","\u653e\u677e","\u5b89\u9759","\u51a5\u60f3","\u8c03\u6574\u547c\u5438","\u4fee\u590d","\u7f13\u4e00\u7f13"],"\u8ba1\u5212\u6267\u884c":["\u8ba1\u5212","\u6267\u884c","\u76ee\u6807","\u5b89\u6392","\u63a8\u8fdb","\u5b8c\u6210","todo"],"\u51b3\u7b56\u6b62\u635f":["\u51b3\u7b56","\u6b62\u635f","\u6c89\u6ca1\u6210\u672c","\u653e\u5f03","\u9009\u62e9","\u53d6\u820d","\u522b\u51b2\u52a8"],"\u6c42\u804c\u9762\u8bd5":["\u6c42\u804c","\u9762\u8bd5","\u5b9e\u4e60","\u5de5\u4f5c","\u7b80\u5386","boss","hr"],"\u4eba\u9645\u8fb9\u754c":["\u4eba\u9645","\u8fb9\u754c","\u7236\u6bcd","\u4e89\u5435","\u670b\u53cb","\u5173\u7cfb","\u6c9f\u901a"]};function y(){var e=new Date;return"".concat(e.getFullYear(),"-").concat(String(e.getMonth()+1).padStart(2,"0"),"-").concat(String(e.getDate()).padStart(2,"0"))}function b(e){var n=arguments.length>1&&void 0!==arguments[1]?arguments[1]:3,t=(0,u.Z)(e),r=[];while(r.length<n&&t.length>0){var a=Math.floor(Math.random()*t.length);r.push(t.splice(a,1)[0])}return r}function Z(){var e=arguments.length>0&&void 0!==arguments[0]?arguments[0]:{},n=arguments.length>1&&void 0!==arguments[1]?arguments[1]:[],t={};return e&&"object"===(0,i.Z)(e)&&!Array.isArray(e)&&p.forEach(function(n){var r=Number.parseInt(e[n],10);Number.isFinite(r)&&r>0&&(t[n]=Math.min(5,Math.max(1,r)))}),Array.isArray(n)&&n.forEach(function(e){p.includes(e)&&!t[e]&&(t[e]=1)}),t}function S(e){return String(e||"").trim().toLowerCase().replace(/[\uff03#]/g,"").replace(/\s+/g,"")}function k(e,n){var t=S(e),r=S(n);return Boolean(t&&r&&t.includes(r))}function G(e,n){var t=(0,u.Z)(S(e)),r=(0,u.Z)(S(n));if(0===t.length)return r.length;if(0===r.length)return t.length;for(var a=Array.from({length:r.length+1},function(e,n){return n}),c=1;c<=t.length;c+=1){for(var o=[c],s=1;s<=r.length;s+=1){var l=t[c-1]===r[s-1]?0:1;o[s]=Math.min(o[s-1]+1,a[s]+1,a[s-1]+l)}a=o}return a[r.length]}function C(e,n){var t=S(e),r=S(n);if(!t||!r)return!1;if(t.includes(r)||r.includes(t))return!0;if(r.length<2||t.length<2)return!1;var a=G(t,r),c=Math.max(t.length,r.length),o=c<=3?1:Math.max(1,Math.floor(.28*c));return a<=o}function w(e,n){var t=S(n);return t.length<2?k(e,n)||(N[e]||[]).some(function(e){return S(e)===t}):!(!k(e,n)&&!k(n,e))||(N[e]||[]).some(function(e){return k(e,n)||k(n,e)||C(e,n)})}function M(e){return p.filter(function(n){return w(n,e)})}function I(e,n){return M(n).reduce(function(n,t){return Math.max(n,e[t]||0)},0)}function A(e){var n=Date.parse(e||"");return Number.isFinite(n)?n:0}function T(e,n){if(!n)return 0;var t=0;return k(e.title,n)&&(t+=80),k(e.summary,n)&&(t+=50),(e.tags||[]).some(function(e){return k(e,n)})&&(t+=70),!t&&(e.tags||[]).some(function(e){return C(e,n)})&&(t+=35),t}function B(e,n){if(!n)return 0;var t=Z(e.tagScores,e.tags),r=I(t,n),a=r>0?1e3+100*r:0;return k(e.date,n)&&(a+=40),k(e.content,n)&&(a+=60),Object.keys(t).some(function(e){return w(e,n)})&&(a+=40),a}function O(e){var n=Z(e.tagScores,e.tags);return[e.date,e.content].concat((0,u.Z)(Object.keys(n)),(0,u.Z)(Object.entries(n).map(function(e){var n=(0,l.Z)(e,2),t=n[0],r=n[1];return"".concat(t).concat(r)}))).join(" ")}var E={title:"",summary:"",tags:""};function F(){var e=(0,d.useState)(function(){try{var e=h().getStorageSync(v);return(null===e||void 0===e?void 0:e.notes)||[]}catch(e){return[]}}),n=(0,l.Z)(e,2),t=n[0],r=n[1],i=(0,d.useState)([]),f=(0,l.Z)(i,2),p=f[0],N=f[1],k=(0,d.useState)(function(){try{var e;return!(null!==(e=h().getStorageSync(v))&&void 0!==e&&e.notes)}catch(e){return!0}}),G=(0,l.Z)(k,2),C=G[0],w=G[1],I=(0,d.useState)(""),F=(0,l.Z)(I,2),L=F[0],P=F[1],D=(0,d.useState)(!1),Y=(0,l.Z)(D,2),J=Y[0],_=Y[1],X=(0,d.useState)(E),q=(0,l.Z)(X,2),z=q[0],H=q[1],K=(0,d.useState)([]),Q=(0,l.Z)(K,2),R=Q[0],U=Q[1],V=(0,d.useCallback)((0,s.Z)((0,c.Z)().m(function e(){var n,t,a,s,i,u,d,f,m,x,p,j;return(0,c.Z)().w(function(e){while(1)switch(e.p=e.n){case 0:return e.p=0,e.n=1,Promise.all([(0,g.Yu)(),(0,g.jX)()]);case 1:a=e.v,s=(0,l.Z)(a,2),i=s[0],u=s[1],d=i.notes||[],r(d);try{h().setStorageSync(v,{notes:d})}catch(e){}f=[],null!==(n=u.today)&&void 0!==n&&n.date&&null!==(t=u.today)&&void 0!==t&&null!==(t=t.content)&&void 0!==t&&t.trim()&&f.push({date:u.today.date,content:u.today.content,tags:u.today.tags||[],tagScores:u.today.tagScores||{}}),m=(0,o.Z)(u.archive||[]);try{for(m.s();!(x=m.n()).done;)j=x.value,j.date&&null!==(p=j.content)&&void 0!==p&&p.trim()&&f.push({date:j.date,content:j.content,tags:j.tags||[],tagScores:j.tagScores||{}})}catch(e){m.e(e)}finally{m.f()}N(f),e.n=3;break;case 2:e.p=2,e.v,h().showToast({title:"\u52a0\u8f7d\u5931\u8d25",icon:"error"});case 3:return e.p=3,w(!1),e.f(3);case 4:return e.a(2)}},e,null,[[0,2,3,4]])})),[]);(0,d.useEffect)(function(){V()},[V]);var W=y(),$=t.filter(function(e){return e.updatedAt===W});(0,d.useEffect)(function(){$.length>0?U([]):U(b(t))},[t,W,$.length]);var ee=$.length>0?$:R,ne=S(L).length>0,te=(0,d.useMemo)(function(){return ne?t.map(function(e,n){return{note:e,index:n,score:T(e,L)}}).filter(function(e){return e.score>0}).sort(function(e,n){return n.score-e.score||A(n.note.updatedAt)-A(e.note.updatedAt)||e.index-n.index}).map(function(e){return e.note}):ee},[ee,ne,t,L]),re=(0,d.useMemo)(function(){return ne?p.map(function(e,n){return{entry:e,index:n,score:B(e,L)}}).filter(function(e){return e.score>0||O(e.entry).includes(L)}).sort(function(e,n){return n.score-e.score||A(n.entry.date)-A(e.entry.date)||e.index-n.index}).map(function(e){return e.entry}):[]},[p,ne,L]),ae=ne&&M(L).length>0;function ce(){return oe.apply(this,arguments)}function oe(){return oe=(0,s.Z)((0,c.Z)().m(function e(){var n,a,o;return(0,c.Z)().w(function(e){while(1)switch(e.p=e.n){case 0:if(z.title.trim()){e.n=1;break}return h().showToast({title:"\u8bf7\u8f93\u5165\u7b14\u8bb0\u6807\u9898",icon:"none"}),e.a(2);case 1:return n={title:z.title,summary:z.summary,tags:z.tags?z.tags.split(/[,\uff0c\s]+/).filter(Boolean):[],projectId:null},e.p=2,e.n=3,(0,g.AL)(n);case 3:a=e.v,o=[a.note].concat((0,u.Z)(t)),r(o);try{h().setStorageSync(v,{notes:o})}catch(e){}_(!1),H(E),h().showToast({title:"\u5df2\u4fdd\u5b58",icon:"success"}),e.n=5;break;case 4:e.p=4,e.v,h().showToast({title:"\u4fdd\u5b58\u5931\u8d25",icon:"error"});case 5:return e.a(2)}},e,null,[[2,4]])})),oe.apply(this,arguments)}function se(e){e.stopPropagation()}var le=te.length>0||re.length>0;function ie(){return te.map(function(e){return(0,x.jsxs)(m.G7,{className:"note-card card",children:[(0,x.jsxs)(m.G7,{className:"note-header",children:[(0,x.jsx)(m.xv,{className:"note-title",children:e.title}),(0,x.jsx)(m.xv,{className:"note-date",children:e.updatedAt})]}),e.summary?(0,x.jsx)(m.xv,{className:"note-summary",children:e.summary}):null,(0,x.jsx)(m.G7,{className:"note-footer",children:(0,x.jsx)(m.G7,{className:"note-tags",children:(e.tags||[]).map(function(e,n){return(0,x.jsxs)(m.xv,{className:"note-tag",children:["#",e]},n)})})})]},"note-".concat(e.id))})}function ue(e){return 0===re.length?null:(0,x.jsxs)(x.Fragment,{children:[e&&(0,x.jsx)(m.G7,{className:"section-divider",children:(0,x.jsx)(m.xv,{className:"section-divider-text",children:"\u65e5\u8bb0"})}),re.map(function(e,n){return(0,x.jsxs)(m.G7,{className:"note-card card",children:[(0,x.jsx)(m.G7,{className:"note-header",children:(0,x.jsxs)(m.G7,{className:"note-header-date-tags",children:[(0,x.jsx)(m.xv,{className:"note-title",children:e.date}),Object.entries(Z(e.tagScores,e.tags)).slice(0,3).map(function(e){var n=(0,l.Z)(e,2),t=n[0],r=n[1];return(0,x.jsxs)(m.xv,{className:"note-tag diary-tag",style:j[t]||{},children:[t," ",r]},t)})]})}),(0,x.jsx)(m.xv,{className:"note-summary",children:e.content})]},"diary-".concat(n))})]})}return(0,x.jsxs)(m.G7,{className:"notes-page",children:[(0,x.jsxs)(m.G7,{className:"page-header",children:[(0,x.jsx)(m.xv,{className:"page-title",children:"\u7b14\u8bb0"}),(0,x.jsx)(m.xv,{className:"page-subtitle",children:ne?"".concat(te.length+re.length," \u4e2a\u7ed3\u679c"):$.length>0?"\u4eca\u5929 ".concat($.length," \u6761"):"\u968f\u673a\u56de\u987e"})]}),(0,x.jsxs)(m.G7,{className:"search-bar",children:[(0,x.jsx)(m.xv,{className:"search-icon",children:"\ud83d\udd0d"}),(0,x.jsx)(m.II,{className:"search-input",placeholder:"\u641c\u7d22\u7b14\u8bb0\u548c\u65e5\u8bb0",value:L,onInput:function(e){return P(e.detail.value)}}),L?(0,x.jsx)(m.xv,{className:"search-clear",onClick:function(){return P("")},children:"\u2715"}):null]}),(0,x.jsxs)(m.pf,{scrollY:!0,showScrollbar:!1,className:"notes-list",children:[C&&(0,x.jsx)(m.G7,{className:"empty",children:(0,x.jsx)(m.xv,{children:"\u52a0\u8f7d\u4e2d..."})}),!C&&!le&&(0,x.jsx)(m.G7,{className:"empty",children:(0,x.jsx)(m.xv,{children:ne?"\u65e0\u5339\u914d\u7ed3\u679c":"\u6682\u65e0\u7b14\u8bb0 \ud83d\udcdd"})}),ae?ue(!1):null,ie(),ae?null:ue(ne&&te.length>0)]}),(0,x.jsx)(m.G7,{className:"fab",onClick:function(){return _(!0)},children:(0,x.jsx)(m.xv,{className:"fab-icon",children:"+"})}),J&&(0,x.jsx)(m.G7,{className:"modal-mask",onClick:function(){return _(!1)},children:(0,x.jsxs)(m.G7,{className:"modal-box",onClick:se,children:[(0,x.jsx)(m.xv,{className:"modal-title",children:"\u65b0\u5efa\u7b14\u8bb0"}),(0,x.jsxs)(m.G7,{className:"form-item",children:[(0,x.jsx)(m.xv,{className:"form-label",children:"\u6807\u9898"}),(0,x.jsx)(m.II,{className:"form-input",placeholder:"\u7b14\u8bb0\u6807\u9898",value:z.title,onInput:function(e){return H(function(n){return(0,a.Z)((0,a.Z)({},n),{},{title:e.detail.value})})}})]}),(0,x.jsxs)(m.G7,{className:"form-item",children:[(0,x.jsx)(m.xv,{className:"form-label",children:"\u5185\u5bb9\u6458\u8981"}),(0,x.jsx)(m.gx,{className:"form-textarea",placeholder:"\u7b80\u8981\u8bb0\u5f55\u5185\u5bb9...",value:z.summary,onInput:function(e){return H(function(n){return(0,a.Z)((0,a.Z)({},n),{},{summary:e.detail.value})})}})]}),(0,x.jsxs)(m.G7,{className:"form-item",children:[(0,x.jsx)(m.xv,{className:"form-label",children:"\u6807\u7b7e\uff08\u9017\u53f7\u5206\u9694\uff09"}),(0,x.jsx)(m.II,{className:"form-input",placeholder:"\u5982\uff1a\u5b66\u4e60, LLM, \u6280\u672f",value:z.tags,onInput:function(e){return H(function(n){return(0,a.Z)((0,a.Z)({},n),{},{tags:e.detail.value})})}})]}),(0,x.jsxs)(m.G7,{className:"modal-actions",children:[(0,x.jsx)(m.G7,{className:"btn-cancel",onClick:function(){return _(!1)},children:(0,x.jsx)(m.xv,{children:"\u53d6\u6d88"})}),(0,x.jsx)(m.G7,{className:"btn-confirm",onClick:ce,children:(0,x.jsx)(m.xv,{children:"\u4fdd\u5b58"})})]})]})})]})}var L={navigationBarTitleText:"\u7b14\u8bb0",navigationBarBackgroundColor:"#2d6a4f",navigationBarTextStyle:"white"};Page((0,r.createPageConfig)(F,"pages/notes/index",{root:{cn:[]}},L||{}))}},function(e){var n=function(n){return e(e.s=n)};e.O(0,[107,216,592],function(){return n(5802)});e.O()}]);
+"use strict";
+
+const api = require('../../api/index');
+const search = require("../../utils/notes-search.js");
+const {
+  createPageRefresh
+} = require('../../utils/page-refresh');
+const {
+  readCache,
+  writeCache
+} = require('../../utils/cache');
+const build = require('../../build-info');
+const KEY = 'notes_cache_v1';
+const EMPTY_FORM = {
+  title: '',
+  summary: '',
+  tags: ''
+};
+Page({
+  data: {
+    search: '',
+    sections: [],
+    subtitle: '随机回顾',
+    warning: '',
+    loading: true,
+    emptyText: '暂无笔记',
+    resultPage: 0,
+    resultPages: 1,
+    showAdd: false,
+    form: {
+      ...EMPTY_FORM
+    },
+    saving: false,
+    version: `v${build.version} · ${build.revision}`
+  },
+  onLoad() {
+    this._notes = readCache(KEY, {}).notes || [];
+    this._diaries = [];
+    this._essays = [];
+    this._fallback = [];
+    this._status = {
+      notes: this._notes.length ? 'ready' : 'loading',
+      diary: 'loading',
+      essays: 'loading'
+    };
+    this._seq = 0;
+    this._query = '';
+    this._resultPage = 0;
+    this.pickFallback();
+    this.updateResults();
+    this._refresh = createPageRefresh(() => this.refreshAll(), this);
+  },
+  onShow() {
+    this._refresh.start();
+  },
+  onHide() {
+    this._refresh.stop();
+  },
+  onUnload() {
+    this._refresh.stop();
+    clearTimeout(this._searchTimer);
+    this._seq++;
+    this._disposed = true;
+  },
+  pickFallback() {
+    const pool = this._notes.slice(),
+      picked = [];
+    while (picked.length < 3 && pool.length) picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    this._fallback = picked;
+  },
+  async refreshAll() {
+    const seq = ++this._seq;
+    this._status = {
+      notes: 'loading',
+      diary: 'loading',
+      essays: 'loading'
+    };
+    this.updateResults();
+    const run = async (name, request, accept) => {
+      try {
+        const value = await request();
+        if (seq !== this._seq || this._disposed) return false;
+        accept(value);
+        this._status[name] = 'ready';
+        this.updateResults();
+        return true;
+      } catch {
+        if (seq === this._seq && !this._disposed) {
+          this._status[name] = 'error';
+          this.updateResults();
+        }
+        ;
+        return false;
+      }
+    };
+    const results = await Promise.all([run('notes', api.getData, data => {
+      this._notes = data.notes || [];
+      writeCache(KEY, {
+        notes: this._notes
+      });
+      this.pickFallback();
+    }), run('diary', async () => {
+      await api.waitForDiarySaves();
+      return api.getDiary();
+    }, data => {
+      this._diaries = search.buildDiaryEntries(data);
+    }), run('essays', api.getEssays, data => {
+      this._essays = data.items || [];
+    })]);
+    return results.every(Boolean);
+  },
+  updateResults() {
+    if (this._disposed) return;
+    const now = new Date(),
+      today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayNotes = this._notes.filter(note => note.updatedAt === today);
+    const fallback = todayNotes.length ? todayNotes : this._fallback;
+    const notes = search.filterNotes(this._notes, this._query, fallback);
+    const diaries = search.filterDiary(this._diaries, this._query);
+    const essays = search.filterEssays(this._essays, this._query);
+    const hasSearch = Boolean(search.normalizeSearchValue(this._query));
+    const diaryFirst = hasSearch && search.getDiarySearchTags(this._query).length > 0;
+    const noteSection = {
+      kind: 'note',
+      title: '',
+      items: notes.map(note => ({
+        id: note.id,
+        title: note.title,
+        summary: note.summary || '',
+        updatedAt: note.updatedAt || '',
+        tags: note.tags || [],
+        key: `note-${note.id}`
+      }))
+    };
+    const diarySection = {
+      kind: 'diary',
+      title: diaryFirst ? '' : notes.length ? '日记' : '',
+      items: diaries.map(entry => ({
+        date: entry.date,
+        content: entry.content,
+        key: `diary-${entry.date}`,
+        displayTags: Object.entries(search.normalizeDiaryTagScores(entry.tagScores, entry.tags)).slice(0, 3).map(([tag, score]) => ({
+          tag,
+          score
+        }))
+      }))
+    };
+    const essaySection = {
+      kind: 'essay',
+      title: notes.length || diaries.length ? '长篇思想' : '',
+      items: essays.map(essay => ({
+        id: essay.id,
+        title: essay.title,
+        content: essay.content,
+        date: essay.date || '',
+        key: `essay-${essay.id}`
+      }))
+    };
+    const count = notes.length + diaries.length + essays.length;
+    const names = {
+      notes: '笔记',
+      diary: '日记',
+      essays: '长篇思想'
+    };
+    const failures = Object.keys(this._status).filter(name => this._status[name] === 'error').map(name => names[name]);
+    const ordered = diaryFirst ? [diarySection, noteSection, essaySection] : [noteSection, diarySection, essaySection];
+    const pages = [[]];
+    let bytes = 0;
+    ordered.forEach(section => section.items.forEach(item => {
+      // Conservative UTF-8 estimate; keep a page well below setData's payload limit.
+      const size = JSON.stringify(item).length * 3;
+      if (pages[pages.length - 1].length && (pages[pages.length - 1].length >= 10 || bytes + size > 600000)) {
+        pages.push([]);
+        bytes = 0;
+      }
+      pages[pages.length - 1].push({
+        section,
+        item
+      });
+      bytes += size;
+    }));
+    this._resultPage = Math.min(this._resultPage, pages.length - 1);
+    const visible = pages[this._resultPage];
+    const sections = ordered.map(section => ({
+      kind: section.kind,
+      title: section.title,
+      items: visible.filter(row => row.section === section).map(row => row.item)
+    })).filter(section => section.items.length);
+    this.setData({
+      sections,
+      resultPage: this._resultPage,
+      resultPages: pages.length,
+      subtitle: search.normalizeSearchValue(this.data.search) !== search.normalizeSearchValue(this._query) ? '搜索中…' : hasSearch ? `${count} 个结果` : todayNotes.length ? `今天 ${todayNotes.length} 条` : '随机回顾',
+      warning: failures.length ? `${failures.join('、')}加载失败，点此重试` : '',
+      loading: !this._notes.length && !this._diaries.length && !this._essays.length && Object.values(this._status).some(status => status === 'loading'),
+      emptyText: hasSearch ? '无匹配结果' : '暂无笔记'
+    });
+  },
+  inputSearch(e) {
+    this._resultPage = 0;
+    this.setData({
+      search: e.detail.value
+    });
+    clearTimeout(this._searchTimer);
+    this.updateResults();
+    this._searchTimer = setTimeout(() => {
+      this._query = this.data.search;
+      this.updateResults();
+    }, 200);
+  },
+  previousResults() {
+    if (this._resultPage > 0) {
+      this._resultPage--;
+      this.updateResults();
+    }
+  },
+  nextResults() {
+    if (this._resultPage + 1 < this.data.resultPages) {
+      this._resultPage++;
+      this.updateResults();
+    }
+  },
+  clearSearch() {
+    this._resultPage = 0;
+    clearTimeout(this._searchTimer);
+    this._query = '';
+    this.setData({
+      search: ''
+    });
+    this.updateResults();
+  },
+  openAdd() {
+    this.setData({
+      showAdd: true,
+      form: {
+        ...EMPTY_FORM
+      }
+    });
+  },
+  dismissAdd() {
+    if (!this.data.saving) this.setData({
+      showAdd: false
+    });
+  },
+  noop() {},
+  inputForm(e) {
+    this.setData({
+      [`form.${e.currentTarget.dataset.field}`]: e.detail.value
+    });
+  },
+  async saveNote() {
+    if (this.data.saving) return;
+    if (!this.data.form.title.trim()) {
+      wx.showToast({
+        title: '请输入笔记标题',
+        icon: 'none'
+      });
+      return;
+    }
+    const form = {
+      ...this.data.form
+    };
+    this.setData({
+      saving: true
+    });
+    try {
+      const result = await api.addNote({
+        title: form.title,
+        summary: form.summary,
+        tags: form.tags.split(/[,，\s]+/).filter(Boolean),
+        projectId: null
+      });
+      if (this._disposed) return;
+      this._notes = [result.note, ...this._notes];
+      writeCache(KEY, {
+        notes: this._notes
+      });
+      this.pickFallback();
+      this.setData({
+        resultPage: 0,
+        resultPages: 1,
+        showAdd: false,
+        form: {
+          ...EMPTY_FORM
+        }
+      });
+      this.updateResults();
+      wx.showToast({
+        title: '已保存',
+        icon: 'success'
+      });
+    } catch {
+      wx.showToast({
+        title: '保存失败，请重试',
+        icon: 'none'
+      });
+    } finally {
+      if (!this._disposed) this.setData({
+        saving: false
+      });
+    }
+  }
+});

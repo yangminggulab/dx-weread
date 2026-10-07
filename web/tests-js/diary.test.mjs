@@ -105,3 +105,30 @@ test('diary timer callbacks use their native receiver instead of the controller'
   const c = new DiaryController({ ...f.options, schedule: function () { assert.equal(this, undefined); return 1; }, cancel: function () { assert.equal(this, undefined); } });
   await c.refresh(); c.edit('Timer regression'); assert.equal(await c.save(), true);
 });
+
+test('recovered historical drafts automatically save in the foreground without selecting them or leaving the page', async () => {
+  const f = diaryFixture();
+  f.repository.put('2026-10-06', { entry: { date: '2026-10-06', content: 'Recovered historical draft' }, baseContent: 'Past', baseUpdatedAt: 'a1', editID: 'historical-edit' });
+  const controller = new DiaryController(f.options);
+  assert.equal(await controller.save('2026-10-06'), false, 'must validate remote data first');
+  await controller.refresh(); assert.equal(controller.state.entry.date, '2026-10-07');
+  const callbacks = [...f.timers.values()]; f.timers.clear(); await Promise.all(callbacks.map(fn => fn()));
+  assert.equal(f.remote().archive[0].content, 'Recovered historical draft');
+  assert.equal(f.remote().today.content, 'Original'); assert.equal(controller.hasUnsaved(), false);
+});
+
+test('historical draft retry is independent from current-day editing and repeated refreshes do not replace its timer', async () => {
+  const f = diaryFixture();
+  f.repository.put('2026-10-06', { entry: { date: '2026-10-06', content: 'Offline historical draft' }, baseContent: 'Past', baseUpdatedAt: 'a1', editID: 'past-offline' });
+  const controller = new DiaryController(f.options); await controller.refresh();
+  const send = f.options.request; let offline = true;
+  controller.request = (path, options) => { if (offline && options?.method === 'POST') throw new Error('offline'); return send(path, options); };
+  const callbacks = [...f.timers.values()]; f.timers.clear(); await Promise.all(callbacks.map(fn => fn()));
+  assert.ok(controller.drafts['2026-10-06']); assert.equal(controller.retryTimers.size, 1);
+  const retry = controller.retryTimers.get('2026-10-06');
+  await controller.refresh(); assert.equal(controller.retryTimers.get('2026-10-06'), retry);
+  controller.edit('Today newer input'); offline = false;
+  const retries = [...f.timers.values()]; f.timers.clear(); await Promise.all(retries.map(fn => fn()));
+  assert.equal(f.remote().archive[0].content, 'Offline historical draft');
+  assert.equal(f.remote().today.content, 'Today newer input'); assert.equal(controller.hasUnsaved(), false);
+});

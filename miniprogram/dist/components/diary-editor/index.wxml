@@ -1,0 +1,20 @@
+<view class="editor-card {{editing ? 'editor-editing' : ''}}">
+  <view class="editor-heading">
+    <view class="editor-heading-text"><text class="editor-title">{{dateTitle}}</text><text wx:if="{{dateSubtitle}}" class="editor-date">{{dateSubtitle}}</text></view>
+    <button wx:if="{{editing}}" class="editor-done" catchtap="finish">完成</button>
+  </view>
+  <textarea class="editor-input" placeholder="写下今天的想法…" placeholder-class="editor-placeholder" value="{{entry.content}}"
+    bindinput="input" bindfocus="focus" bindblur="blur" bindconfirm="finish" auto-height="{{true}}"
+    adjust-position="{{true}}" show-confirm-bar="{{true}}" disable-default-padding="{{true}}"
+    cursor-spacing="32" maxlength="-1" />
+  <view wx:if="{{entry.tags.length}}" class="editor-tags"><text wx:for="{{entry.tags}}" wx:key="*this" class="editor-tag">{{item}}</text></view>
+  <view wx:if="{{automatic || entry.content.length || status === 'error' || status === 'storage-error'}}" class="editor-footer {{status === 'error' || status === 'storage-error' ? 'editor-footer-warning' : ''}}">
+    <button wx:if="{{automatic}}" class="editor-retry" bindtap="versions">版本历史</button>
+    <text class="editor-count">{{entry.content.length || 0}} 字</text>
+    <text wx:if="{{!saving && (status === 'error' || status === 'storage-error')}}" class="editor-status">{{labels[status]}}</text>
+  </view>
+  <view wx:if="{{conflict}}" class="editor-conflict">
+    <text>其他端已更新日记，你的草稿已保留。</text>
+    <view class="editor-conflict-actions"><button bindtap="useCloud">使用云端内容</button><button wx:if="{{conflict.date === entry.date}}" bindtap="overwrite">用草稿覆盖</button></view>
+  </view>
+</view>

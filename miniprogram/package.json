@@ -1,37 +1,23 @@
 {
   "name": "yangminggu-miniprogram",
-  "version": "1.0.0",
+  "version": "1.3.9",
   "private": true,
   "description": "杨明谷任务管理小程序",
-  "templateInfo": {
-    "name": "default",
-    "typescript": false,
-    "css": "scss"
-  },
   "scripts": {
-    "build:weapp": "taro build --type weapp",
-    "dev:weapp": "npm run build:weapp -- --watch"
+    "build:weapp": "node scripts/build-native.cjs",
+    "dev:weapp": "node scripts/build-native.cjs --watch",
+    "test:search": "node --test test/notes-search.test.mjs",
+    "test:sync": "node --test test/cloud-sync.test.mjs",
+    "test:build-compat": "node --test test/build-compat.test.mjs",
+    "test:diary": "node --test test/diary-page.test.mjs",
+    "test:native": "node --test test/native-pages.test.mjs",
+    "test": "node --test test/*.test.mjs"
   },
-  "browserslist": [
-    "last 3 versions",
-    "Android >= 4.1",
-    "ios >= 8"
-  ],
-  "dependencies": {
-    "@tarojs/components": "3.6.23",
-    "@tarojs/plugin-framework-react": "^3.6.23",
-    "@tarojs/plugin-platform-weapp": "3.6.23",
-    "@tarojs/react": "3.6.23",
-    "@tarojs/runtime": "3.6.23",
-    "@tarojs/taro": "3.6.23",
-    "babel-preset-taro": "^3.6.23",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@tarojs/cli": "3.6.23",
-    "@tarojs/webpack5-runner": "3.6.23",
-    "sass": "^1.55.0",
-    "webpack": "^5.88.2"
+    "@babel/core": "7.29.0",
+    "@babel/plugin-transform-modules-commonjs": "7.28.6",
+    "@babel/plugin-transform-optional-chaining": "7.28.6",
+    "@babel/plugin-transform-nullish-coalescing-operator": "7.28.6"
   }
 }

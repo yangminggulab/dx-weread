@@ -1,1 +1,203 @@
-"use strict";(wx["webpackJsonp"]=wx["webpackJsonp"]||[]).push([[974],{8662:function(e,t,a){var n=a(2180),r=a(3433),s=a(2688),i=a(5861),c=a(9439),l=a(7294),o=a(2954),u=a.n(o),d=a(1515),h=a(3228),g=a(5893),v="books_cache_v2",f=30,x=[{key:"reading",label:"\u5728\u8bfb"},{key:"want",label:"\u60f3\u8bfb"},{key:"finished",label:"\u8bfb\u5b8c"}];function m(e){var t=new Date,a=Math.floor(new Date(t.getFullYear(),t.getMonth(),t.getDate()).getTime()/1e3),n=a+86400;return Object.entries(e||{}).reduce(function(e,t){var r=(0,c.Z)(t,2),s=r[0],i=r[1],l=parseInt(s);return e+(l>=a&&l<n?i:0)},0)}function k(e){return"".concat(e.getFullYear(),"-").concat(String(e.getMonth()+1).padStart(2,"0"),"-").concat(String(e.getDate()).padStart(2,"0"))}function b(e){var t=e.getDay(),a=new Date(e);return a.setDate(e.getDate()-(0===t?6:t-1)),a.setHours(0,0,0,0),a}function j(e,t,a){var n=new Set((e||[]).filter(function(e){var t;return(null!==(t=e.minutes)&&void 0!==t?t:Math.round((e.seconds||0)/60))>=a}).map(function(e){return e.date}));if(m(t)>=a&&n.add(k(new Date)),!n.size)return 0;var r=0,s=new Date;n.has(k(s))||s.setDate(s.getDate()-1);while(n.has(k(s)))r++,s.setDate(s.getDate()-1);return r}function w(e,t,a){var n=new Set((e||[]).filter(function(e){var t;return(null!==(t=e.minutes)&&void 0!==t?t:Math.round((e.seconds||0)/60))>=a}).map(function(e){return e.date}));if(m(t)>=a&&n.add(k(new Date)),!n.size)return 0;function r(e){for(var t=0;t<7;t++){var a=new Date(e);if(a.setDate(e.getDate()+t),n.has(k(a)))return!0}return!1}var s=b(new Date);r(s)||s.setDate(s.getDate()-7);var i=0;while(r(s))i++,s.setDate(s.getDate()-7);return i}function p(e,t,a,n,r){var s=t/2,i=a/2,c=Math.round(.2*Math.min(t,a)),l=Math.min(t,a)/2-c/2-2,o=r>0?n/r:0,u=Math.PI/2;if(e.clearRect(0,0,t,a),e.beginPath(),e.arc(s,i,l,0,2*Math.PI),e.strokeStyle="#d4f0dc",e.lineWidth=c,e.lineCap="butt",e.stroke(),!(o<=0))if(o>=1){e.beginPath(),e.arc(s,i,l,0,2*Math.PI),e.strokeStyle="#4cd964",e.lineWidth=c,e.lineCap="butt",e.stroke();var d=o%1;if(d>0){var h=u+2*Math.PI*d;e.save(),e.shadowColor="rgba(0,0,0,0.28)",e.shadowBlur=8,e.beginPath(),e.arc(s,i,l,u,h,!1),e.strokeStyle="#4cd964",e.lineWidth=c,e.lineCap="round",e.stroke(),e.restore(),e.beginPath(),e.arc(s,i,l,u-.3,u+.3,!1),e.strokeStyle="#4cd964",e.lineWidth=c,e.lineCap="butt",e.stroke()}}else e.beginPath(),e.arc(s,i,l,u,u+2*Math.PI*o,!1),e.strokeStyle="#4cd964",e.lineWidth=c,e.lineCap="round",e.stroke()}function y(e){var t=e.weekDaily,a=e.dailyReadTimes,n=e.dayGoalMinutes,r=m(t),s=j(a,t,n),i=w(a,t,n),h=(0,l.useCallback)(function(e,t){u().createSelectorQuery().select("#wr-ring").fields({node:!0,size:!0}).exec(function(a){var n=(0,c.Z)(a,1),r=n[0];if(null!==r&&void 0!==r&&r.node){var s=r.node,i=s.getContext("2d"),l=u().getSystemInfoSync().pixelRatio,o=r.width||110,d=r.height||110;s.width=o*l,s.height=d*l,i.scale(l,l),p(i,o,d,e,t)}})},[]);(0,o.useReady)(function(){u().nextTick(function(){return h(r,n)})}),(0,l.useEffect)(function(){u().nextTick(function(){return h(r,n)});var e=setTimeout(function(){return h(r,n)},500);return function(){return clearTimeout(e)}},[r,n,h]);var v=Math.floor(r/60),f=r%60,x=v>0?"".concat(v,"\u65f6").concat(f,"\u5206"):"".concat(f,"\u5206\u949f");return(0,g.jsx)(d.G7,{className:"rring-card",children:(0,g.jsxs)(d.G7,{className:"rring-row",children:[(0,g.jsx)(d.G7,{className:"rring-wrap",children:(0,g.jsx)(d.Xz,{type:"2d",id:"wr-ring",className:"rring-canvas"})}),(0,g.jsx)(d.G7,{className:"rring-stats",children:(0,g.jsxs)(d.G7,{className:"rring-stats-inner",children:[(0,g.jsxs)(d.G7,{className:"rring-stat-item",children:[(0,g.jsx)(d.xv,{className:"rring-label",children:"\u4eca\u65e5\u9605\u8bfb"}),(0,g.jsx)(d.xv,{className:"rring-val",children:x})]}),(0,g.jsxs)(d.G7,{className:"rring-stat-item",children:[(0,g.jsx)(d.xv,{className:"rring-label",children:"\u8fde\u7eed\u5b8c\u6210"}),(0,g.jsxs)(d.G7,{className:"rring-val-row",children:[(0,g.jsx)(d.xv,{className:"rring-val rring-val-streak",children:s}),(0,g.jsx)(d.xv,{className:"rring-unit",children:"\u5929"})]})]}),(0,g.jsxs)(d.G7,{className:"rring-stat-item",children:[(0,g.jsx)(d.xv,{className:"rring-label",children:"\u8fde\u7eed\u5b8c\u6210"}),(0,g.jsxs)(d.G7,{className:"rring-val-row",children:[(0,g.jsx)(d.xv,{className:"rring-val rring-val-total",children:i}),(0,g.jsx)(d.xv,{className:"rring-unit",children:"\u5468"})]})]})]})})]})})}function N(){var e=(0,l.useState)(function(){try{var e=u().getStorageSync(v);return(null===e||void 0===e?void 0:e.books)||[]}catch(e){return[]}}),t=(0,c.Z)(e,2),a=t[0],n=t[1],m=(0,l.useState)(function(){try{var e;return!(null!==(e=u().getStorageSync(v))&&void 0!==e&&e.books)}catch(e){return!0}}),k=(0,c.Z)(m,2),b=k[0],j=k[1],w=(0,l.useState)("reading"),p=(0,c.Z)(w,2),N=p[0],S=p[1],D=(0,l.useState)({}),G=(0,c.Z)(D,2),M=G[0],T=G[1],P=(0,l.useState)([]),C=(0,c.Z)(P,2),Z=C[0],R=C[1],I=(0,l.useRef)({x:0,y:0,time:0}),Y=(0,l.useCallback)((0,i.Z)((0,s.Z)().m(function e(){var t,a,r;return(0,s.Z)().w(function(e){while(1)switch(e.p=e.n){case 0:return e.p=0,e.n=1,(0,h.Yu)();case 1:a=e.v,r=(a.books||[]).filter(function(e){return"weread"===e.source}),n(r),T(a.weekReadDaily||{}),R((null===(t=a.wereadStats)||void 0===t?void 0:t.dailyReadTimes)||[]);try{u().setStorageSync(v,{books:r})}catch(e){}e.n=3;break;case 2:e.p=2,e.v,u().showToast({title:"\u52a0\u8f7d\u5931\u8d25",icon:"error"});case 3:return e.p=3,j(!1),e.f(3);case 4:return e.a(2)}},e,null,[[0,2,3,4]])})),[]);(0,l.useEffect)(function(){Y()},[Y]),(0,o.useDidShow)(function(){Y()});var B=a.filter(function(e){var t;return"finished"===e.status||(null!==(t=e.progressPercent)&&void 0!==t?t:0)>=90}),W=function(e){return e._bookId||e.id},z=new Set(B.map(W)),E=a.filter(function(e){return!z.has(W(e))&&"reading"===e.status}).sort(function(e,t){return(t.readTimestamp||t.sourceUpdatedTimestamp||0)-(e.readTimestamp||e.sourceUpdatedTimestamp||0)}),F=E.slice(0,3),O=E.slice(3),X=[].concat((0,r.Z)(a.filter(function(e){return!z.has(W(e))&&"want"===e.status})),(0,r.Z)(O)),_={reading:F,want:X,finished:B},A={reading:F.length,want:X.length,finished:B.length};function J(e){var t=e.touches[0];I.current={x:t.clientX,y:t.clientY,time:Date.now()}}function U(e){var t=e.changedTouches[0],a=t.clientX-I.current.x,n=t.clientY-I.current.y,r=Date.now()-I.current.time;if(!(r<100)&&!(Math.abs(a)<50||Math.abs(n)>Math.abs(a))){var s=x.findIndex(function(e){return e.key===N});a<0&&s<x.length-1&&S(x[s+1].key),a>0&&s>0&&S(x[s-1].key)}}return(0,g.jsxs)(d.G7,{className:"books-page",onTouchStart:J,onTouchEnd:U,children:[(0,g.jsxs)(d.G7,{className:"page-header",children:[(0,g.jsx)(d.xv,{className:"page-title",children:"\u4e66\u5355"}),(0,g.jsxs)(d.xv,{className:"page-subtitle",children:["\u5171 ",a.length," \u672c\uff0c\u5728\u8bfb ",F.length," \u672c"]})]}),(0,g.jsx)(d.G7,{className:"tabs",children:x.map(function(e){return(0,g.jsxs)(d.G7,{className:"tab-item ".concat(N===e.key?"tab-active":""),onClick:function(){return S(e.key)},children:[(0,g.jsx)(d.xv,{children:e.label}),A[e.key]>0&&(0,g.jsx)(d.xv,{className:"tab-count",children:A[e.key]})]},e.key)})}),(0,g.jsxs)(d.G7,{className:"book-list-wrap",children:[(0,g.jsxs)(d.pf,{scrollY:!0,showScrollbar:!1,className:"book-list",children:[b&&(0,g.jsx)(d.G7,{className:"empty",children:(0,g.jsx)(d.xv,{children:"\u52a0\u8f7d\u4e2d..."})}),!b&&0===_[N].length&&(0,g.jsx)(d.G7,{className:"empty",children:(0,g.jsx)(d.xv,{children:"\u6682\u65e0\u4e66\u7c4d \ud83d\udcda"})}),!b&&_[N].map(function(e){var t,a=null!==(t=e.progressPercent)&&void 0!==t?t:0;return(0,g.jsx)(d.G7,{className:"book-card card",children:(0,g.jsxs)(d.G7,{className:"book-row",children:[e.cover?(0,g.jsx)(d.Ee,{className:"book-cover",src:e.cover,mode:"aspectFill"}):(0,g.jsx)(d.G7,{className:"book-cover book-cover-fallback",style:{background:e.accent||"#2d6a4f"},children:(0,g.jsx)(d.xv,{className:"book-cover-title",children:e.title.slice(0,4)})}),(0,g.jsxs)(d.G7,{className:"book-info",children:[(0,g.jsx)(d.xv,{className:"book-title",children:e.title}),e.author?(0,g.jsx)(d.xv,{className:"book-author",children:e.author}):null,e.readAt?(0,g.jsxs)(d.xv,{className:"book-date",children:["\u4e0a\u6b21 ",e.readAt]}):null,a>0&&(0,g.jsxs)(d.G7,{className:"progress-row",children:[(0,g.jsx)(d.G7,{className:"progress-bar",children:(0,g.jsx)(d.G7,{className:"progress-fill",style:{width:"".concat(Math.min(100,a),"%"),background:e.accent||"#2d6a4f"}})}),(0,g.jsxs)(d.xv,{className:"progress-text",children:[a,"%"]})]}),"reading"===N&&e.todayReadMinutes>0&&(0,g.jsxs)(d.xv,{className:"book-today-read",children:["\u4eca\u5929\u8bfb\u4e86 ",e.todayReadMinutes," \u5206\u949f"]})]})]})},W(e))}),!b&&"reading"===N&&(0,g.jsx)(y,{weekDaily:M,dailyReadTimes:Z,dayGoalMinutes:f})]},N),"reading"!==N&&(0,g.jsx)(d.G7,{className:"list-fade-bottom"})]})]})}var S={navigationBarTitleText:"\u4e66\u5355",navigationBarBackgroundColor:"#2d6a4f",navigationBarTextStyle:"white"};Page((0,n.createPageConfig)(N,"pages/books/index",{root:{cn:[]}},S||{}))}},function(e){var t=function(t){return e(e.s=t)};e.O(0,[107,216,592],function(){return t(8662)});e.O()}]);
+"use strict";
+
+const {
+  getData
+} = require('../../api/index');
+const {
+  createPageRefresh
+} = require('../../utils/page-refresh');
+const {
+  readCache,
+  writeCache
+} = require('../../utils/cache');
+const {
+  getTodayMinutes,
+  getStreakDays,
+  getStreakWeeks
+} = require('../../features/reading/model');
+const {
+  animateRing
+} = require('../../features/reading/ring');
+const KEY = 'books_cache_v2',
+  GOAL = 30;
+const TABS = [{
+  key: 'reading',
+  label: '在读'
+}, {
+  key: 'want',
+  label: '想读'
+}, {
+  key: 'finished',
+  label: '读完'
+}];
+Page({
+  data: {
+    tabs: TABS,
+    tab: 'reading',
+    books: [],
+    counts: {
+      reading: 0,
+      want: 0,
+      finished: 0
+    },
+    total: 0,
+    loading: true,
+    todayText: '0分钟',
+    streakDays: 0,
+    streakWeeks: 0,
+    goalMinutes: GOAL
+  },
+  onLoad() {
+    this._books = readCache(KEY, {}).books || [];
+    this._daily = {};
+    this._dailyTimes = [];
+    this.updateBooks();
+    this._refresh = createPageRefresh(() => this.loadData(), this);
+  },
+  onShow() {
+    this._visible = true;
+    this._refresh.start();
+    this.paintRing();
+  },
+  onReady() {
+    this.paintRing();
+  },
+  onHide() {
+    this._visible = false;
+    this._ringPaintVersion++;
+    this.stopRingAnimation();
+    this._refresh.stop();
+  },
+  onUnload() {
+    this._disposed = true;
+    this._ringPaintVersion++;
+    this.stopRingAnimation();
+    this._refresh.stop();
+  },
+  onResize() {
+    this.paintRing();
+  },
+  async loadData() {
+    try {
+      const data = await getData();
+      if (this._disposed) return false;
+      this._books = (data.books || []).filter(book => book.source === 'weread');
+      this._daily = data.weekReadDaily || {};
+      this._dailyTimes = (data.wereadStats || {}).dailyReadTimes || [];
+      writeCache(KEY, {
+        books: this._books
+      });
+      this.updateBooks();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (!this._disposed) this.setData({
+        loading: false
+      }, () => this.paintRing());
+    }
+  },
+  updateBooks() {
+    const key = book => book._bookId || book.id;
+    const finished = this._books.filter(book => book.status === 'finished' || (book.progressPercent || 0) >= 90);
+    const ids = new Set(finished.map(key));
+    const reading = this._books.filter(book => !ids.has(key(book)) && book.status === 'reading').sort((a, b) => (b.readTimestamp || b.sourceUpdatedTimestamp || 0) - (a.readTimestamp || a.sourceUpdatedTimestamp || 0));
+    const lists = {
+      finished,
+      reading: reading.slice(0, 3),
+      want: [...this._books.filter(book => !ids.has(key(book)) && book.status === 'want'), ...reading.slice(3)]
+    };
+    this._todayMinutes = getTodayMinutes(this._daily);
+    const hours = Math.floor(this._todayMinutes / 60),
+      minutes = this._todayMinutes % 60;
+    this.setData({
+      books: lists[this.data.tab].map(book => ({
+        ...book,
+        key: key(book),
+        coverTitle: (book.title || '').slice(0, 4),
+        accent: book.accent || '#4263a8',
+        pct: book.progressPercent || 0,
+        barPct: Math.min(100, book.progressPercent || 0)
+      })),
+      total: this._books.length,
+      counts: {
+        reading: lists.reading.length,
+        want: lists.want.length,
+        finished: lists.finished.length
+      },
+      todayText: hours > 0 ? `${hours}时${minutes}分` : `${minutes}分钟`,
+      streakDays: getStreakDays(this._dailyTimes, this._daily, GOAL),
+      streakWeeks: getStreakWeeks(this._dailyTimes, this._daily, GOAL)
+    }, () => this.paintRing());
+  },
+  selectTab(e) {
+    this.setData({
+      tab: e.currentTarget.dataset.key
+    });
+    this.updateBooks();
+  },
+  stopRingAnimation() {
+    if (this._stopRingAnimation) this._stopRingAnimation();
+    this._stopRingAnimation = null;
+  },
+  paintRing() {
+    this.stopRingAnimation();
+    const version = this._ringPaintVersion = (this._ringPaintVersion || 0) + 1;
+    const current = () => version === this._ringPaintVersion && !this._disposed && this._visible !== false && this.data.tab === 'reading';
+    if (!current()) return;
+    wx.nextTick(() => {
+      if (!current()) return;
+      wx.createSelectorQuery().in(this).select('#wr-ring').fields({
+        node: true,
+        size: true
+      }).exec(results => {
+        const res = results && results[0];
+        if (!current() || !res || !res.node || !(res.width > 0) || !(res.height > 0)) return;
+        const canvas = res.node,
+          context = canvas.getContext('2d');
+        if (!context) return;
+        const info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
+        const ratio = Number.isFinite(info.pixelRatio) && info.pixelRatio > 0 ? info.pixelRatio : 1;
+        const width = res.width,
+          height = res.height;
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        context.scale(ratio, ratio);
+        this._stopRingAnimation = animateRing({
+          canvas,
+          context,
+          width,
+          height,
+          fromMinutes: this._ringDisplayedMinutes,
+          minutes: this._todayMinutes || 0,
+          goal: GOAL,
+          isCurrent: current,
+          onFrame: value => {
+            this._ringDisplayedMinutes = value;
+          }
+        });
+      });
+    });
+  },
+  touchStart(e) {
+    const t = e.touches[0];
+    this._touch = {
+      x: t.clientX,
+      y: t.clientY
+    };
+  },
+  touchEnd(e) {
+    if (!this._touch) return;
+    const t = e.changedTouches[0],
+      dx = t.clientX - this._touch.x,
+      dy = t.clientY - this._touch.y;
+    if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return;
+    const index = TABS.findIndex(tab => tab.key === this.data.tab) + (dx < 0 ? 1 : -1);
+    if (TABS[index]) {
+      this.setData({
+        tab: TABS[index].key
+      });
+      this.updateBooks();
+    }
+  }
+});

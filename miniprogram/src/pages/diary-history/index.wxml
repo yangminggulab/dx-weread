@@ -1,0 +1,14 @@
+<view class="history-page">
+  <view class="history-tools">
+    <view class="history-search"><text class="search-symbol">⌕</text><input class="history-query" value="{{query}}" placeholder="搜索正文、日期或标签" placeholder-class="history-placeholder" bindinput="inputSearch" bindconfirm="search" confirm-type="search" /><button wx:if="{{query}}" class="history-clear" bindtap="clearSearch" aria-label="清除搜索">×</button></view>
+    <view class="history-filter"><text class="history-count">{{query || selectedDate ? count + ' 篇符合条件' : total + ' 篇日记'}}</text><view class="history-date-controls"><picker mode="date" value="{{selectedDate || endDate}}" end="{{endDate}}" bindchange="selectDate"><view class="history-date-button">{{dateTitle || '按日期查找'}}</view></picker><button wx:if="{{selectedDate}}" class="history-clear" bindtap="clearDate" aria-label="清除日期">×</button></view></view>
+  </view>
+  <view wx:if="{{syncError || failed}}" class="library-warning"><text>{{syncError || '暂时无法读取云端日记'}}</text><button bindtap="retry">重试</button></view>
+  <view wx:for="{{rows}}" wx:key="date" class="history-item">
+    <text wx:if="{{item.monthTitle}}" class="history-month">{{item.monthTitle}}</text>
+    <view class="history-entry" data-date="{{item.date}}" bindtap="openEntry"><view class="history-entry-top"><text class="history-entry-date">{{item.dateTitle}}</text><text class="history-weekday">{{item.weekday}}</text><text class="history-chevron">›</text></view><text class="history-excerpt">{{item.excerpt}}</text></view>
+  </view>
+  <view wx:if="{{!rows.length}}" class="history-empty"><text class="history-empty-title">{{loading ? '正在读取日记' : failed ? '稍后再试' : query || selectedDate ? '没有找到这篇日记' : '还没有日记'}}</text><text class="history-empty-subtitle">{{query || selectedDate ? '试试其他关键词，或查看全部记录。' : '写下的日常，会慢慢留在这里。'}}</text><button wx:if="{{query || selectedDate}}" bindtap="resetFilters">查看全部</button></view>
+  <button wx:if="{{hasMore}}" class="history-more" bindtap="loadMore">查看更多日记</button>
+  <text wx:elif="{{rows.length}}" class="history-end">已显示全部 {{count}} 篇</text>
+</view>

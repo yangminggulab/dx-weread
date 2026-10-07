@@ -1,0 +1,9 @@
+{
+  "desc": "Personal task workspace",
+  "rules": [
+    {
+      "action": "disallow",
+      "page": "*"
+    }
+  ]
+}

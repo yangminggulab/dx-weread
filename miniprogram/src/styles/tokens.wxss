@@ -1,0 +1,15 @@
+/* Maps Apple Shared/DesignSystem/WorkspaceStyle: exact light accent, canvas/paper, and secondary text. Imported by App and isolated diary editor. */
+page, :host {
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --surface-soft: #f8faff;
+  --ink: #27272a;
+  --body: #545861;
+  --muted: #747983;
+  --faint: #8e95a1;
+  --line: #e5e7ec;
+  --accent: #4263a8;
+  --accent-soft: #ecf0f6;
+  --warning: #98664a;
+  --warning-soft: #faf2eb;
+}

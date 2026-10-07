@@ -1,0 +1,11 @@
+<view class="reader-page">
+  <view class="reader-heading"><text class="reader-date">{{dateTitle}}</text><text class="reader-subtitle">{{dateSubtitle}}</text></view>
+  <view wx:if="{{syncError || failed}}" class="reader-warning"><text>{{syncError || '云端读取失败，已保留当前内容'}}</text><button bindtap="retry">重试</button></view>
+  <block wx:if="{{entry}}">
+    <text class="reader-body" user-select="{{true}}">{{entry.content}}</text>
+    <view wx:if="{{entry.tags.length}}" class="reader-tags"><text wx:for="{{entry.tags}}" wx:key="*this" class="reader-tag">{{item}}</text></view>
+    <text class="reader-count">{{count}} 字</text>
+    <view class="reader-actions"><button disabled="{{!canGoBack}}" bindtap="back">← 上一篇</button><button disabled="{{!canShuffle}}" bindtap="next">随机回顾 →</button></view>
+  </block>
+  <view wx:else class="reader-empty"><text>{{loading ? '正在读取这篇日记' : failed ? '暂时无法读取这篇日记' : '这一天没有日记'}}</text><button wx:if="{{failed}}" bindtap="retry">重新读取</button></view>
+</view>

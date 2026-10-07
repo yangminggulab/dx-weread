@@ -1,0 +1,30 @@
+page { height: auto; min-height: 100%; overflow: visible; background: var(--bg); }
+.history-page { box-sizing: border-box; padding: 24rpx 36rpx calc(40rpx + env(safe-area-inset-bottom)); }
+.history-tools { margin-bottom: 8rpx; }
+.history-search { display: flex; align-items: center; min-height: 88rpx; padding: 0 24rpx; border-radius: 20rpx; background: var(--surface); border: 1rpx solid var(--line); }
+.search-symbol { margin-right: 14rpx; font-size: 36rpx; color: var(--muted); }
+.history-query { flex: 1; min-width: 0; height: 88rpx; color: var(--ink); font-size: 30rpx; }
+.history-placeholder { color: var(--faint); }
+.history-clear { flex-shrink: 0; padding: 0 14rpx; margin: 0 -10rpx 0 0; min-height: 44px; line-height: 44px; color: var(--muted); background: transparent; font-size: 34rpx; }
+.history-filter { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0 20rpx; padding-top: 10rpx; }
+.history-count { font-size: 24rpx; color: var(--muted); }
+.history-date-controls { display: flex; align-items: center; }
+.history-date-button { min-height: 44px; line-height: 44px; font-size: 25rpx; color: var(--accent); }
+.history-month { display: block; padding: 30rpx 2rpx 16rpx; font-size: 24rpx; font-weight: 500; color: var(--muted); }
+.history-entry { padding: 24rpx 26rpx; margin-bottom: 14rpx; background: var(--surface); border: 1rpx solid var(--line); border-radius: 20rpx; }
+.history-entry-top { display: flex; align-items: center; gap: 14rpx; margin-bottom: 12rpx; }
+.history-entry-date { font-size: 29rpx; font-weight: 500; color: var(--ink); }
+.history-weekday { flex: 1; font-size: 23rpx; color: var(--muted); }
+.history-chevron { color: var(--faint); font-size: 34rpx; line-height: 1; }
+.history-excerpt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 27rpx; line-height: 1.7; color: var(--body); }
+.history-empty { padding: 100rpx 12rpx; text-align: center; }
+.history-empty-title { display: block; font-size: 30rpx; font-weight: 500; color: var(--ink); }
+.history-empty-subtitle { display: block; margin-top: 20rpx; font-size: 26rpx; line-height: 1.8; color: var(--muted); }
+.history-empty button, .history-more { color: var(--accent); background: transparent; font-size: 26rpx; min-height: 44px; line-height: 44px; }
+.history-empty button { margin-top: 20rpx; }
+.history-more { margin: 24rpx 0 0; }
+.history-end { display: block; padding: 28rpx 0; text-align: center; color: var(--faint); font-size: 23rpx; }
+.library-warning { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; padding: 12rpx 20rpx; border-radius: 16rpx; color: var(--warning); background: var(--warning-soft); font-size: 24rpx; }
+.library-warning button { margin: 0; color: var(--accent); background: transparent; font-size: 24rpx; }
+@media screen and (max-width: 360px) { .history-query { font-size: 16px; } .history-excerpt, .history-entry-date { font-size: 14px; } .history-count, .history-date-button, .history-month, .history-weekday, .history-end { font-size: 12px; } }
+@media screen and (min-width: 720px) { .history-page { max-width: 780px; margin: 0 auto; padding: 24px 28px; } .history-query { font-size: 16px; } .history-entry-date { font-size: 17px; } .history-excerpt { font-size: 16px; } .history-month, .history-count, .history-date-button, .history-weekday { font-size: 13px; } .history-entry { padding: 18px 20px; margin-bottom: 12px; border-radius: 12px; } .history-search { min-height: 48px; border-radius: 12px; padding: 0 16px; } .history-query { height: 48px; } .history-empty-title { font-size: 20px; } .history-empty-subtitle { font-size: 16px; } }

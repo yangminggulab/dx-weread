@@ -105,3 +105,24 @@ test('web restores raw version bodies after preserving both cloud and unsaved in
   assert.equal((await f.request('/api/diary')).today.content, '  original\n\n');
   await controller.loadVersions(); assert.ok(controller.state.versions.some(v => v.content === 'Unsaved'));
 });
+
+test('automatic web recovery saves an unuploaded older date and an explicit clear without navigating away', async () => {
+  const f = fixture(), timers = new Map(); let timerID = 0;
+  const controller = f.diary({ schedule: fn => { const id = ++timerID; timers.set(id, fn); return id; }, cancel: id => timers.delete(id) });
+  await controller.refresh(); controller.edit('Today must survive'); await controller.save();
+  const today = controller.state.entry.date;
+  const date = new Date(Date.parse(today + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
+  const draft = { entry: { date, content: 'Before 05:00 offline draft' }, baseContent: null, baseUpdatedAt: '', editID: 'offline-past' };
+  controller.repository.put(date, draft);
+  const restored = new DiaryController({ request: f.request, drafts: controller.repository,
+    schedule: fn => { const id = ++timerID; timers.set(id, fn); return id; }, cancel: id => timers.delete(id) });
+  await restored.refresh(); assert.equal(restored.date(), today);
+  const callbacks = [...timers.values()]; timers.clear(); await Promise.all(callbacks.map(fn => fn()));
+  let cloud = await f.request('/api/diary'); const past = cloud.archive.find(entry => entry.date === date);
+  assert.equal(past.content, 'Before 05:00 offline draft'); assert.equal(cloud.today.content, 'Today must survive');
+  restored.drafts[date] = { entry: { ...past, content: '' }, baseContent: past.content, baseUpdatedAt: past.updatedAt, editID: 'past-clear' };
+  restored.repository.put(date, restored.drafts[date]); await restored.refresh();
+  const clearing = [...timers.values()]; timers.clear(); await Promise.all(clearing.map(fn => fn()));
+  cloud = await f.request('/api/diary'); assert.equal(cloud.archive.find(entry => entry.date === date).content, '');
+  assert.equal(cloud.today.content, 'Today must survive'); assert.equal(restored.hasUnsaved(), false);
+});

@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "日记",
+  "navigationBarBackgroundColor": "#f3f4f6",
+  "navigationBarTextStyle": "black",
+  "usingComponents": {
+    "diary-editor": "/components/diary-editor/index"
+  }
+}

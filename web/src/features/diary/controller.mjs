@@ -38,12 +38,22 @@ export class DiaryController {
     const original = this.drafts[date] || { baseContent: entry.content, baseUpdatedAt: entryVersion(entry) };
     const draft = { ...original, entry: { ...entry, content }, editID: `${Date.now()}-${Math.random()}` };
     this.drafts[date] = draft;
+    this.cancel(this.retryTimers.get(date)); this.retryTimers.delete(date);
     this.storage(() => this.repository.put(date, draft));
     this.error = ''; this.publish(); this.scheduleSave();
   }
-  scheduleSave() {
+  scheduleSave(date = this.date()) {
     this.cancel(this.timer);
-    this.timer = this.schedule(() => { this.timer = null; this.save(); }, 1500);
+    this.timer = this.schedule(() => { this.timer = null; return this.save(date); }, 1500);
+  }
+  resumeSaves() {
+    if (this.disposed) return;
+    // Recovered drafts keep their own dates and retry timers. A current editor
+    // debounce or repeated foreground refresh must not starve another date.
+    for (const [date, draft] of Object.entries(this.drafts)) {
+      if (!this.validated.has(date) || this.conflicts[date] || this.pending.has(draft.editID) || this.retryTimers.has(date)) continue;
+      this.retryTimers.set(date, this.schedule(() => { this.retryTimers.delete(date); return this.save(date); }, 1500));
+    }
   }
   baselineKey(date, content, version) { return JSON.stringify([date, content, version]); }
   advanceBaseline(draft) {
@@ -114,7 +124,7 @@ export class DiaryController {
       this.pending.delete(captured.editID);
       if (!this.disposed && this.drafts[date] && !this.conflicts[date]) {
         this.cancel(this.retryTimers.get(date));
-        this.retryTimers.set(date, this.schedule(() => { this.retryTimers.delete(date); this.save(date); }, this.error ? 30000 : 1500));
+        this.retryTimers.set(date, this.schedule(() => { this.retryTimers.delete(date); return this.save(date); }, this.error ? 30000 : 1500));
       }
       this.publish();
     });
@@ -144,7 +154,7 @@ export class DiaryController {
         }
         this.validated.add(remote.today.date);
         this.error = ''; this.persistCache();
-        if (this.drafts[this.date()] && !this.conflicts[this.date()]) this.scheduleSave();
+        this.resumeSaves();
         return true;
       } catch { this.error = '日记刷新失败，当前内容已保留，会自动重试。'; return false; }
       finally { this.loading = false; this.refreshing = null; this.publish(); }
